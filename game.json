@@ -1,0 +1,20 @@
+{
+  "name": "Crescent City Kingpin",
+  "description": "Rise from a corner po-boy shop to kingpin of modern-day New Orleans. Drive the French Quarter, take over rival turf in gunfights, run import deliveries and grow your clubs, boats and casino empire, solo or with friends.",
+  "supportedDevices": [
+    "desktop"
+  ],
+  "maximumPlayers": 4,
+  "tags": [
+    "shooter",
+    "driving",
+    "management"
+  ],
+  "tips": [
+    "Press E at Mama Nola's to shop for guns and cars.",
+    "Beat a gang, then its boss, to take the district.",
+    "Press E by a parked car to hop in. Shift brakes hard.",
+    "Run import deliveries by car before the timer ends.",
+    "Hurt civilians or cops and the heat rises. Hide to cool off."
+  ]
+}
