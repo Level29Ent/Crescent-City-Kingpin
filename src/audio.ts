@@ -1,4 +1,4 @@
-import type { SfxName } from "./game.ts";
+import type { SfxName } from "./world.ts";
 
 export type Sound = { sfx(name: SfxName, gain?: number, pan?: number): void; engine(speed01: number | null): void; siren(on: boolean): void; start(): void };
 
