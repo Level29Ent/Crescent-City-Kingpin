@@ -1,4 +1,4 @@
- if (document.pointerLockElement !== renderer.domElement && !(mouseDown && playing)) return;
+// Crescent City Kingpin: standalone single-player game. Plain three.js, no engine, no server.
 import * as THREE from "three";
 import {
   BUSINESSES, CAR_ACC, CAR_MAX, DISTRICTS, DROPS, HQ, MAX_LEVEL, PARKED_CARS, SHOP, SPAWN, WEAPONS, BUILDINGS,
@@ -179,6 +179,7 @@ function updateHud() {
   const sp = P.car ? Math.round(Math.abs(P.car.speed) * 3.6) : 0;
   $("speed").textContent = P.car ? `${sp} km/h` : "";
 }
+
 // ───────── input ─────────
 const keys = new Set<string>();
 let mouseDown = false;
@@ -204,7 +205,7 @@ addEventListener("mouseup", (e) => {
 });
 addEventListener("contextmenu", (e) => e.preventDefault());
 addEventListener("mousemove", (e) => {
-  if (document.pointerLockElement !== renderer.domElement) return;
+  if (document.pointerLockElement !== renderer.domElement && !(mouseDown && playing)) return;
   yaw -= e.movementX * 0.0024;
   pitch = Math.max(-0.7, Math.min(0.45, pitch - e.movementY * 0.0022));
 });
@@ -467,6 +468,7 @@ function hasLOS(ax: number, az: number, bx: number, bz: number): boolean {
   if (d < 1) return true;
   return castWorld(ax, 1.4, az, (bx - ax) / d, 0, (bz - az) / d, d) >= d - 0.5;
 }
+
 // ───────── per-frame updates ─────────
 function updateFoes(dt: number) {
   const px = P.car ? P.car.x : P.x;
@@ -657,6 +659,7 @@ function updateEconomy(dt: number) {
     sfx("capture");
   }
 }
+
 function prompt() {
   let t = "";
   if (!P.car && P.deadT <= 0) {
