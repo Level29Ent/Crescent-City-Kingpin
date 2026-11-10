@@ -1,28 +1,8 @@
 {
+  "name": "crescent-city-kingpin-standalone",
   "private": true,
   "type": "module",
-  "scripts": {
-    "checks": "node_modules/.bin/tsrs --singleThreaded --incremental --tsBuildInfoFile \"$TMPDIR/tsrs.tsbuildinfo\" --project tsconfig.json && node node_modules/@trhs/wildwood/cli.js lint",
-    "test": "node_modules/.bin/vitest run --pool threads --maxWorkers 1 --testTimeout 15000 --passWithNoTests --fsModuleCachePath \"$TMPDIR/vitest\"",
-    "dev": "node node_modules/@trhs/wildwood/cli.js dev",
-    "build": "node node_modules/@trhs/wildwood/cli.js build",
-    "start": "node node_modules/@trhs/wildwood/cli.js start"
-  },
-  "treehouse": {
-    "platform": "node_modules/@trhs/wildwood/node_modules/@trhs/platform-v2"
-  },
-  "dependencies": {
-    "@trhs/wildwood": "85.0.7",
-    "koota": "0.6.6",
-    "oxlint": "1.91.0",
-    "react": "19.3.1",
-    "three": "0.187.0",
-    "zod": "4.6.7",
-    "@types/node": "26.6.6",
-    "@types/react": "19.3.0",
-    "@types/three": "0.187.0",
-    "tiny-invariant": "1.3.3",
-    "tsrs": "0.21.0-ts7.1.0-beta",
-    "vitest": "5.1.0"
-  }
+  "scripts": { "dev": "vite", "build": "vite build --base ./", "preview": "vite preview" },
+  "dependencies": { "three": "0.187.0" },
+  "devDependencies": { "vite": "^7.0.0", "typescript": "^5.6.0", "@types/three": "0.187.0" }
 }
