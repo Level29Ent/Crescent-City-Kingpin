@@ -1,4 +1,4 @@
-// Crescent City Kingpin: standalone single-player game. Plain three.js, no engine, no server.
+ if (document.pointerLockElement !== renderer.domElement && !(mouseDown && playing)) return;
 import * as THREE from "three";
 import {
   BUSINESSES, CAR_ACC, CAR_MAX, DISTRICTS, DROPS, HQ, MAX_LEVEL, PARKED_CARS, SHOP, SPAWN, WEAPONS, BUILDINGS,
