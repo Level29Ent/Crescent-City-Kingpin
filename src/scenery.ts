@@ -21,7 +21,7 @@ import {
   districtAt,
   type Building,
   type Prop,
-} from "./world";
+} from "./world.ts";
 
 export type Scenery = { update(time: number, focusX: number, focusZ: number): void; dispose(): void };
 
