@@ -214,17 +214,20 @@ let camDist = 6;
 function lock() {
   void renderer.domElement.requestPointerLock?.();
 }
+let locked = false;
+document.addEventListener("pointerlockchange", () => { locked = document.pointerLockElement === renderer.domElement || locked; });
 $("go").addEventListener("click", () => {
-  sound.start();
   $("start").style.display = "none";
   playing = true;
-  lock();
+  try { lock(); } catch { /* no pointer lock: drag the mouse to look */ }
+  try { sound.start(); } catch (err) { console.warn("audio unavailable", err); }
 });
 document.addEventListener("pointerlockchange", () => {
-  if (document.pointerLockElement !== renderer.domElement && playing && !shopOpen && !P.won) {
+  if (document.pointerLockElement !== renderer.domElement && locked && playing && !shopOpen && !P.won) {
     $("go").textContent = "RESUME";
     $("start").style.display = "flex";
     playing = false;
+    locked = false;
   }
 });
 
