@@ -112,7 +112,7 @@ export const SHOP: ShopItem[] = [
   { id: 1, name: "Shotgun", desc: "Devastating up close.", price: 5000 },
   { id: 2, name: "Body armor", desc: "Refills 50 armor points.", price: 1200 },
   { id: 3, name: "Sports car", desc: "A fast ride parked at the shop.", price: 8000 },
-  { id: 4, name: "Expand the empire", desc: "+25% income from every business (max 4).", price: 6000 },
+  { id: 4, name: "Front-business upgrade", desc: "+15% controlled corner revenue (max 5). Clean capital required.", price: 2000 },
   { id: 5, name: "Patch up", desc: "Heal to full health.", price: 200 },
 ];
 export const MAX_LEVEL = 4;

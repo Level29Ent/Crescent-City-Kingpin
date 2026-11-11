@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import type { Appearance } from "./campaign.ts";
 import { GLTFLoader, type GLTF } from "three/addons/loaders/GLTFLoader.js";
 import { clone as cloneModel } from "three/addons/utils/SkeletonUtils.js";
 
@@ -97,7 +98,7 @@ function buildGun(w: number): Gun {
   return { g, tip, len, two: w > 0 };
 }
 
-export function createPerson(kind: PersonKind, look: number): Person {
+export function createPerson(kind: PersonKind, look: number, appearance?: Appearance): Person {
   const r = rng(look + kind.length * 977);
   const boss = kind === "boss";
   const sc = boss ? 1.17 : 0.95 + r() * 0.1;
@@ -105,7 +106,7 @@ export function createPerson(kind: PersonKind, look: number): Person {
   const inner = new THREE.Group();
   root.add(inner);
   inner.scale.setScalar(sc);
-  const skin = lam(pick(r, SKIN));
+  const skin = lam(appearance ? SKIN[appearance.skin]! : pick(r, SKIN));
   let hair = lam(pick(r, HAIR));
   let top = lam(pick(r, GANG)), sleeve = top, pants = lam(0x2b3a55), shoe = lam(0x202020);
   let shortSleeve = false;
@@ -118,7 +119,12 @@ export function createPerson(kind: PersonKind, look: number): Person {
 
   switch (kind) {
     case "player":
-      top = lam(0xb0102a); sleeve = top; pants = lam(0x8a0e22); shoe = lam(0xf5ecd8); hair = lam(0x120e0c);
+      top = lam([0xb0102a, 0x173b48, 0x232533, 0xe4d0a5][appearance?.outfit ?? 0]!); sleeve = top;
+      pants = lam([0x8a0e22, 0x1d2c3b, 0x15151e, 0x483a33][appearance?.outfit ?? 0]!);
+      shoe = lam(0xf5ecd8); hair = lam(HAIR[appearance?.hair ?? 0]!);
+      // Gender presentation is cosmetic only; identity never changes gameplay stats.
+      if (appearance?.gender === 'Woman') { torso.scale.x *= .88; inner.scale.y *= .97; }
+      if (appearance?.gender === 'Nonbinary') torso.scale.x *= .95;
       extras.push(() => {
         part(box(), lam(0xf4ead2), 0.2, 0.4, 0.02, 0, 1.2, 0.15, inner); // linen shirt
         part(box(), emi(0x111111, 0.1), 0.26, 0.07, 0.04, 0, 0.14, 0.13, head); // shades
@@ -178,6 +184,7 @@ export function createPerson(kind: PersonKind, look: number): Person {
   part(box(), hair, 0.3, 0.12, 0.31, 0, 0.22, -0.02, head);
   part(box(), hair, 0.3, 0.2, 0.08, 0, 0.1, -0.13, head);
   void headM;
+  if (appearance?.gender === 'Woman') part(box(), hair, .32, .32, .09, 0, -.04, -.13, head);
   // face dots (eyes) skipped for budget
   for (const e of extras) e(0);
 

@@ -1,0 +1,51 @@
+[hidden] { display: none !important; }
+#app canvas { touch-action: none; }
+#dirty { color: #e6b96b; font-size: 17px; }
+#cash { font-size: 25px; }
+#goal { max-width: 235px; line-height: 1.6; }
+#toolbar { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 7; display: flex; gap: 8px; }
+#toolbar button { font-size: 12px; padding: 10px 14px; background: #14232ced; color: #f2cc83; border: 1px solid #d4b47888; }
+#toolbar .alert { color: white; background: #913c39; }
+#customize { margin-top: 12px; background: #233d48; color: #b9e3df; font-size: 12px; }
+#empire { z-index: 12; text-align: left; background: #06111bee; backdrop-filter: blur(5px); }
+.empire-shell { width: min(1000px, 94vw); height: 90dvh; display: flex; flex-direction: column; border: 1px solid #b9955d77; background: #101e2c; border-radius: 18px; padding: 24px; box-sizing: border-box; box-shadow: 0 20px 80px #000a; }
+.empire-shell header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.empire-shell header h1 { font-size: 30px; letter-spacing: 3px; }
+#empireSummary { color: #f2cc83; max-width: none; font-size: 13px; margin: 12px 0; }
+#empireTabs { display: flex; gap: 6px; flex-wrap: wrap; padding-bottom: 14px; border-bottom: 1px solid #d4b47833; }
+#empireTabs button { background: #233b49; color: #b9d2db; font-size: 13px; padding: 8px 12px; }
+#empireTabs button[aria-pressed=true] { color: #1b1820; background: #f2cc83; }
+#empireContent { overflow: auto; flex: 1; padding: 6px 6px 16px 0; overscroll-behavior: contain; }
+#empireContent h2 { margin: 14px 0 8px; color: #92dcd0; }
+#empireContent p { max-width: none; font-size: 14px; line-height: 1.5; }
+.empire-card { padding: 16px; margin: 12px 0; background: #182d3c; border: 1px solid #8dbdc733; border-radius: 10px; }
+.empire-card h3 { margin: 0 0 8px; color: #e6c995; font-size: 17px; }
+.empire-card button { font-size: 12px; margin: 4px 8px 4px 0; padding: 10px 14px; }
+.empire-card small { display: block; font-size: 12px; color: #a9c2cf; margin-top: 6px; }
+.field { display: flex; align-items: center; justify-content: space-between; max-width: 650px; padding: 12px 0; gap: 16px; font-size: 14px; }
+.field select, .field input:not([type=range]) { width: 250px; box-sizing: border-box; }
+.field input, .empire-card input { border: 1px solid #7a989b; background: #0c1c29; color: #fff; border-radius: 6px; padding: 9px; }
+.field input[type=range] { width: 240px; accent-color: #e6b96b; }
+.district-map { position: relative; height: 240px; border: 1px solid #75a1a344; border-radius: 8px; background: repeating-linear-gradient(0deg, transparent 0 47px, #80b0ae22 48px 50px), repeating-linear-gradient(90deg, #102330 0 47px, #80b0ae22 48px 50px); }
+.district-map button { position: absolute; transform: translate(-50%, -50%); background: #77587c; color: #fff; font-size: 12px; padding: 8px; border: 1px solid #ccb6dd; }
+.district-map button.owned { background: #246b5b; border-color: #98dfac; }
+#welcome { z-index: 15; }
+.welcome-panel { background: #162b3a; padding: 30px; border: 1px solid #e6b96b; border-radius: 16px; max-width: 550px; margin: 20px; }
+#touchControls { display: none; position: fixed; inset: 0; pointer-events: none; z-index: 6; }
+#touchControls button { pointer-events: auto; touch-action: none; user-select: none; background: #203c4ac9; color: white; border: 1px solid #b4d5d47d; padding: 14px; font-size: 12px; min-width: 44px; min-height: 44px; }
+#touchControls button:active { background: #9a7843; }
+.touchMove { position: absolute; bottom: 75px; left: 12px; text-align: center; }
+.touchMove div { display: flex; gap: 3px; margin-top: 3px; }
+.touchActions { position: absolute; right: 12px; bottom: 75px; display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+@media (pointer: coarse) { #touchControls { display: block; } #feed { bottom: 220px; } #mini { bottom: 225px; width: 110px; height: 110px; } #speed { bottom: 340px; } }
+@media (max-width: 760px) {
+  .empire-shell { height: 96dvh; width: 98vw; padding: 14px; border-radius: 10px; }
+  .empire-shell header h1 { font-size: 22px; }
+  #empireClose { padding: 10px; font-size: 12px; }
+  #empireTabs { gap: 4px; } #empireTabs button { font-size: 11px; padding: 8px; }
+  .field { font-size: 12px; } .field select, .field input:not([type=range]) { width: 175px; }
+  .district-map { height: 210px; } .district-map button { font-size: 10px; }
+  #toolbar { bottom: 12px; } #toolbar button { font-size: 10px; white-space: nowrap; padding: 10px; }
+  #cash { font-size: 19px; } #goal { max-width: 150px; font-size: 10px; } #heat { font-size: 13px; } #stats { font-size: 12px; }
+  #obj { top: 240px; } #start { overflow-y: auto; justify-content: safe center; } #start .features { margin: 8px 0; gap: 5px; } .features span { font-size: 10px; padding: 5px 8px; }
+}

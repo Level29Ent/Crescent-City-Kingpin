@@ -6,13 +6,21 @@ import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js"
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { cityClock, demandIndex, deliveryPay, deliveryBonus, updateReserve } from "./dynamics.ts";
 import {
-  BUSINESSES, CAR_ACC, CAR_MAX, DISTRICTS, DROPS, HQ, MAX_LEVEL, PARKED_CARS, SHOP, SPAWN, WEAPONS, BUILDINGS,
-  GOAL, MAX_HP, RESPAWN_SECONDS, castWorld, pushOut, walkable, type SfxName,
+  BUSINESSES, CAR_ACC, CAR_MAX, DISTRICTS, DROPS, HQ, PARKED_CARS, SHOP, SPAWN, WEAPONS, BUILDINGS,
+  GOAL, MAX_HP, RESPAWN_SECONDS, castWorld, pushOut, walkable, districtAt, type SfxName,
 } from "./world.ts";
 import { carColors, createCar, createPerson, loadCarModels, type Car, type Person, type PersonKind } from "./actors.ts";
 import { createScenery } from "./scenery.ts";
 import { createSound } from "./audio.ts";
 import { createImpacts } from "./effects.ts";
+import { BLOCKS, addHeat, bonus, captureBlock, failMission, newCampaign, offlineProgress, revenuePerMinute, resolveDefense, tickCampaign, unlock } from './campaign.ts';
+import { SaveStore } from './persistence.ts';
+import { createEmpireUI } from './empire-ui.ts';
+import './campaign.css';
+const store = new SaveStore();
+const loaded = await store.load();
+const C = loaded?.campaign ?? newCampaign();
+const offline = loaded ? offlineProgress(C, Math.max(0, (Date.now() - loaded.savedAt) / 1000)) : null;
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const rnd = (a: number, b: number) => a + Math.random() * (b - a);
@@ -52,21 +60,22 @@ resize();
 
 const abort = new AbortController();
 const sound = createSound(abort.signal);
+sound.configure(C.audio);
 const scenery = createScenery(scene);
 const impacts = createImpacts(scene);
 
 // ───────── game state ─────────
 type Foe = {
   kind: PersonKind; person: Person; x: number; z: number; heading: number; hp: number; district: number;
-  cd: number; aggro: boolean; dead: number; wx: number; wz: number; wt: number; flee: number; speed: number;
+  blockId?: string; cd: number; aggro: boolean; dead: number; wx: number; wz: number; wt: number; flee: number; speed: number;
 };
 type Vehicle = { rig: Car; style: number; x: number; z: number; h: number; speed: number; steer: number };
 
 const P = {
-  x: SPAWN.x, z: SPAWN.z, heading: SPAWN.heading, hp: MAX_HP, armor: 0, cash: 300, heat: 0, heatT: 0,
-  weapon: 0, owned: [true, false, false], level: 0, lastFire: -10, deadT: 0, car: null as Vehicle | null,
+  x: SPAWN.x, z: SPAWN.z, heading: SPAWN.heading, hp: MAX_HP, armor: 0, heat: 0,
+  weapon: 0, owned: [true, false, false], lastFire: -10, deadT: 0, car: null as Vehicle | null,
   captured: new Set<number>([0]), kills: new Map<number, number>(), bossOut: new Set<number>(),
-  job: null as null | { name: string; x: number; z: number; t: number; duration: number; pay: number; priority: boolean }, won: false, income: 0,
+  job: null as null | { name: string; x: number; z: number; t: number; duration: number; pay: number; priority: boolean }, won: false,
   streak: 0, stamina: { value: 100, exhausted: false }, boost: { value: 100, exhausted: false },
 };
 let yaw = SPAWN.heading;
@@ -74,11 +83,37 @@ let pitch = -0.15;
 let time = 0;
 let playing = false;
 let shopOpen = false;
+let managing = false;
+let pausedForHidden = false;
+let resetting = false;
+let target: null | { x: number; z: number; name: string } = null;
+let battle: null | { block: string; defending: boolean } = null;
+let roadblock: null | { vehicle: Vehicle; t: number } = null;
+const bounded = (v: unknown, fallback: number, low: number, high: number) => typeof v === 'number' && Number.isFinite(v) ? Math.max(low, Math.min(high, v)) : fallback;
+if (loaded) {
+  const p = loaded.player;
+  P.x = bounded(p.x, SPAWN.x, -238, 238); P.z = bounded(p.z, SPAWN.z, -238, 232);
+  if (!walkable(P.x, P.z) || pushOut(P.x, P.z, .5).hit) { P.x = SPAWN.x; P.z = SPAWN.z; }
+  P.heading = bounded(p.heading, SPAWN.heading, -Math.PI * 100, Math.PI * 100);
+  P.hp = bounded(p.hp, MAX_HP, 1, MAX_HP); P.armor = bounded(p.armor, 0, 0, 50);
+  P.owned = [true, p.owned?.[1] === true, p.owned?.[2] === true];
+  P.weapon = Math.floor(bounded(p.weapon, 0, 0, 2)); if (!P.owned[P.weapon]) P.weapon = 0;
+  P.captured = new Set([0, ...[1,2,3,4].filter(d => Array.isArray(p.captured) && p.captured.includes(d))]);
+  P.bossOut = new Set([1,2,3,4].filter(d => Array.isArray(p.bossOut) && p.bossOut.includes(d)));
+  P.streak = Math.floor(bounded(p.streak, 0, 0, 10000));
+  if (p.target && typeof p.target.name === 'string') target = { x: bounded(p.target.x, 30, -238, 238), z: bounded(p.target.z, 4, -238, 232), name: p.target.name.slice(0,80) };
+  if (p.battle && BLOCKS.some(b => b.id === p.battle.block)) battle = { block: p.battle.block, defending: p.battle.defending === true };
+  // Sessions resume safely on foot; timed deliveries are failed once rather than granting stale payouts.
+  if (p.jobActive) { failMission(C); P.streak = 0; }
+  yaw = P.heading; time = C.clock;
+}
 let boosting = false;
 const headlights = new THREE.SpotLight(0xc5e8ff, 0, 65, 0.6, 0.5, 1.3);
 scene.add(headlights, headlights.target);
 
-const player = createPerson("player", 5);
+let player = createPerson("player", 5, C.avatar);
+player.root.position.set(P.x, 0, P.z);
+player.root.rotation.y = P.heading;
 scene.add(player.root);
 const foes: Foe[] = [];
 const vehicles: Vehicle[] = [];
@@ -115,14 +150,23 @@ function freeSpot(cx: number, cz: number, spread: number): [number, number] {
   return [cx, cz];
 }
 
-// Rival gangs wait in their districts.
-for (const d of DISTRICTS) {
+// Restore combat progress, including active turf guards, without respawning defeated rivals.
+if (loaded && Array.isArray(loaded.player.foes)) {
+  for (const raw of loaded.player.foes.slice(0, 160)) {
+    if (!raw || !['boss','cop','civilian','gangster'].includes(raw.kind) || typeof raw.x !== 'number' || typeof raw.z !== 'number') continue;
+    const x = bounded(raw.x, 0, -238, 238), z = bounded(raw.z, 0, -238, 232);
+    const f = spawnFoe(raw.kind, x, z, Math.floor(bounded(raw.district, -1, -1, 4)));
+    f.hp = bounded(raw.hp, 55, 1, 260); f.aggro = raw.aggro === true;
+    if (BLOCKS.some(b => b.id === raw.blockId)) f.blockId = raw.blockId;
+  }
+} else for (const d of DISTRICTS) {
+  if (P.captured.has(d.id)) continue;
   for (let i = 0; i < d.need; i++) {
     const [x, z] = freeSpot(d.x, d.z, 38);
     spawnFoe("gangster", x, z, d.id);
   }
 }
-for (let i = 0; i < 18; i++) {
+for (let i = 0; i < (loaded ? 0 : 18); i++) {
   const [x, z] = freeSpot(rnd(-150, 150), rnd(-50, 150), 30);
   spawnFoe("civilian", x, z, -1);
 }
@@ -142,11 +186,7 @@ const sfx = (n: SfxName, g = 1) => sound.sfx(n, g);
 const mini = $<HTMLCanvasElement>("mini");
 const mg = mini.getContext("2d")!;
 
-function incomeRate(): number {
-  let s = 0;
-  for (const b of BUSINESSES) if (P.captured.has(b.district)) s += b.income;
-  return s * (1 + 0.25 * P.level);
-}
+function incomeRate(): number { return revenuePerMinute(C) / 60; }
 
 function drawMini() {
   const S = 0.45;
@@ -174,6 +214,8 @@ function drawMini() {
   for (const b of BUSINESSES) dot(b.x, b.z, P.captured.has(b.district) ? "#6cf06c" : "#ffd23a", 4);
   for (const f of foes) if (!f.dead && f.kind !== "civilian") dot(f.x, f.z, f.kind === "cop" ? "#4a8aff" : f.kind === "boss" ? "#ff40ff" : "#ff4040", f.kind === "boss" ? 4 : 2.5);
   if (P.job) dot(P.job.x, P.job.z, "#40f0ff", 4);
+  if (target) dot(target.x, target.z, '#ffffff', 5);
+  for (const b of BLOCKS) dot(b.x, b.z, C.owned.includes(b.id) ? '#8cf08c' : '#dd8bff', 3);
   mg.restore();
   mg.fillStyle = "#fff";
   mg.beginPath();
@@ -182,11 +224,14 @@ function drawMini() {
 }
 
 function updateHud() {
-  $("cash").textContent = `$${Math.floor(P.cash).toLocaleString()}`;
-  $("goal").textContent = `Goal $${GOAL.toLocaleString()} · income $${incomeRate().toFixed(0)}/s`;
+  $("cash").textContent = `$${Math.floor(C.clean).toLocaleString()} clean`;
+  $("dirty").textContent = `$${Math.floor(C.dirty).toLocaleString()} dirty`;
+  $("mute").textContent = C.audio.muted ? 'UNMUTE' : 'MUTE';
+  $("manage").classList.toggle('alert', !!C.defense);
+  $("goal").textContent = `Goal $${GOAL.toLocaleString()} clean · turf $${(incomeRate()*60).toFixed(0)}/min dirty`;
   ($("hp").firstElementChild as HTMLElement).style.width = `${Math.max(0, P.hp)}%`;
   ($("armor").firstElementChild as HTMLElement).style.width = `${P.armor * 2}%`;
-  $("heat").textContent = P.heat > 0 ? "★".repeat(P.heat) + "☆".repeat(5 - P.heat) : "";
+  $("heat").textContent = `HEAT ${Math.floor(C.heat)}/100 ${P.heat ? "★".repeat(P.heat) : ""}`;
   $("weapon").textContent = P.car ? "Driving" : `${WEAPONS[P.weapon]!.name}`;
   const clock = cityClock(time);
   const hours = Math.floor(clock.hour).toString().padStart(2, "0");
@@ -207,6 +252,9 @@ function updateHud() {
       obj = P.bossOut.has(open.id) ? `Take down ${open.boss} in ${open.name}!` : `Clear the ${open.gang} in ${open.name}: ${left} left`;
     }
   }
+  if (battle) obj = `${battle.defending ? 'DEFEND' : 'CAPTURE'} ${BLOCKS.find(b => b.id === battle!.block)!.name}: ${foes.filter(f => !f.dead && f.blockId === battle!.block).length} guards left`;
+  else if (target) obj = `${target.name} · ${Math.round(dist2(P.x, P.z, target.x, target.z))} m · follow white minimap marker`;
+  if (C.defense && !battle) obj = `TURF ATTACK: ${BLOCKS.find(b => b.id === C.defense!.block)!.name} · ${Math.ceil(C.defense.remaining)}s · M to respond`;
   $("obj").textContent = obj;
   $("obj").style.display = obj ? "block" : "none";
   const sp = P.car ? Math.round(Math.abs(P.car.speed) * 3.6) : 0;
@@ -218,6 +266,10 @@ const keys = new Set<string>();
 let mouseDown = false;
 let aimHeld = false;
 addEventListener("keydown", (e) => {
+  if ((e.target as HTMLElement)?.matches("input, select, textarea")) return;
+  if (e.code === "KeyM") { e.preventDefault(); if (!e.repeat) { if (empire.isOpen()) empire.close(); else empire.open(); } return; }
+  if (managing) return;
+  if (["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.code)) e.preventDefault();
   if (e.code === "Escape" && playing && !shopOpen) {
     playing = false;
     mouseDown = aimHeld = false;
@@ -229,7 +281,7 @@ addEventListener("keydown", (e) => {
   }
   if (e.repeat && e.code === "KeyE") return;
   keys.add(e.code);
-  if (!playing || shopOpen) return;
+  if (!playing || shopOpen || managing) return;
   if (e.code === "KeyE") interact();
   if (e.code === "Digit1" || e.code === "Digit2" || e.code === "Digit3") {
     const w = Number(e.code.slice(-1)) - 1;
@@ -239,7 +291,7 @@ addEventListener("keydown", (e) => {
 addEventListener("keyup", (e) => keys.delete(e.code));
 addEventListener("blur", () => { keys.clear(); mouseDown = aimHeld = false; });
 addEventListener("mousedown", (e) => {
-  if (!playing) return;
+  if (!playing || managing || shopOpen || e.target !== renderer.domElement) return;
   if (e.button === 0) mouseDown = true;
   if (e.button === 2) aimHeld = true;
 });
@@ -249,31 +301,36 @@ addEventListener("mouseup", (e) => {
 });
 addEventListener("contextmenu", (e) => e.preventDefault());
 addEventListener("mousemove", (e) => {
+  if (!playing || managing || shopOpen) return;
   if (document.pointerLockElement !== renderer.domElement && !(mouseDown && playing)) return;
   yaw -= e.movementX * 0.0024;
   pitch = Math.max(-0.7, Math.min(0.45, pitch - e.movementY * 0.0022));
 });
-addEventListener("wheel", (e) => { camDist = Math.max(3.5, Math.min(12, camDist + Math.sign(e.deltaY) * 0.6)); });
+addEventListener("wheel", (e) => { if (!playing || managing || shopOpen) return; camDist = Math.max(3.5, Math.min(12, camDist + Math.sign(e.deltaY) * 0.6)); });
 let camDist = 6;
 
 function lock() {
-  void renderer.domElement.requestPointerLock?.();
+  if (matchMedia('(pointer: coarse)').matches) return;
+  const request = renderer.domElement.requestPointerLock?.();
+  if (request) void request.catch(() => { /* drag-to-look fallback */ });
 }
 let locked = false;
 document.addEventListener("pointerlockchange", () => { locked = document.pointerLockElement === renderer.domElement || locked; });
 $("go").addEventListener("click", () => {
   $("start").style.display = "none";
   playing = true;
+  ($('go') as HTMLButtonElement).blur();
   keys.clear();
   mouseDown = aimHeld = false;
   try { lock(); } catch { /* no pointer lock: drag the mouse to look */ }
   try { sound.start(); } catch (err) { console.warn("audio unavailable", err); }
 });
 document.addEventListener("pointerlockchange", () => {
-  if (document.pointerLockElement !== renderer.domElement && locked && playing && !shopOpen && !P.won) {
+  if (document.pointerLockElement !== renderer.domElement && locked && playing && !shopOpen && !managing && !P.won) {
     $("go").textContent = "RESUME";
     $("start").style.display = "flex";
     playing = false;
+    keys.clear(); mouseDown = aimHeld = false;
     locked = false;
   }
 });
@@ -281,21 +338,21 @@ document.addEventListener("pointerlockchange", () => {
 // ───────── shop ─────────
 function crime(n: number) {
   if (n <= 0) return;
-  if (P.heat === 0) sfx("wanted");
-  P.heat = Math.min(5, Math.max(P.heat, P.heat + n));
-  P.heatT = 0;
+  if (C.heat === 0) sfx('wanted');
+  addHeat(C, n * 8);
 }
 
 function buy(id: number) {
   const it = SHOP[id]!;
-  if (P.cash < it.price) return sfx("deny");
+  if (C.clean < it.price) return sfx("deny");
   if (id === 0) { if (P.owned[1]) return sfx("deny"); P.owned[1] = true; P.weapon = 1; }
   else if (id === 1) { if (P.owned[2]) return sfx("deny"); P.owned[2] = true; P.weapon = 2; }
   else if (id === 2) P.armor = 50;
   else if (id === 3) addVehicle(2, 44, -8, Math.PI / 2, 0xc0392b);
-  else if (id === 4) { if (P.level >= MAX_LEVEL) return sfx("deny"); P.level++; }
+  else if (id === 4) { if (C.upgrades >= 5) return sfx("deny"); C.upgrades++; }
   else if (id === 5) P.hp = MAX_HP;
-  P.cash -= it.price;
+  C.clean -= it.price;
+  saveGame();
   sfx("buy");
   feed(`Bought: ${it.name}`);
   renderShop();
@@ -307,6 +364,7 @@ function startJob(priority = false) {
   const len = dist2(HQ.x, HQ.z, d.x, d.z);
   const duration = (30 + len / 9) * (priority ? 0.8 : 1);
   P.job = { name: d.name, x: d.x, z: d.z, t: duration, duration, priority, pay: deliveryPay(len, P.streak, priority) };
+  addHeat(C, 4);
   feed(`Import job: take the crates to ${d.name}.`);
   sfx("job");
   closeShop();
@@ -314,15 +372,15 @@ function startJob(priority = false) {
 
 function renderShop() {
   const panel = $("shop").firstElementChild as HTMLElement;
-  panel.innerHTML = `<h2 style="margin-top:0;color:#ffb347">Mama Nola's Back Room</h2><div>Cash: <b>$${Math.floor(P.cash).toLocaleString()}</b></div>`;
+  panel.innerHTML = `<h2 style="margin-top:0;color:#ffb347">Mama Nola's Back Room</h2><div>Clean capital: <b>$${Math.floor(C.clean).toLocaleString()}</b></div>`;
   for (const it of SHOP) {
     const row = document.createElement("div");
     row.className = "row";
-    const taken = (it.id === 0 && P.owned[1]) || (it.id === 1 && P.owned[2]) || (it.id === 4 && P.level >= MAX_LEVEL);
-    row.innerHTML = `<span>${it.name}${it.id === 4 ? ` (${P.level}/${MAX_LEVEL})` : ""}<small>${it.desc}</small></span>`;
+    const taken = (it.id === 0 && P.owned[1]) || (it.id === 1 && P.owned[2]) || (it.id === 4 && C.upgrades >= 5);
+    row.innerHTML = `<span>${it.name}${it.id === 4 ? ` (${C.upgrades}/5)` : ""}<small>${it.desc}</small></span>`;
     const b = document.createElement("button");
     b.textContent = taken ? "Owned" : `$${it.price.toLocaleString()}`;
-    b.disabled = taken || P.cash < it.price;
+    b.disabled = taken || C.clean < it.price;
     b.onclick = () => buy(it.id);
     row.appendChild(b);
     panel.appendChild(row);
@@ -349,6 +407,8 @@ function renderShop() {
 }
 function openShop() {
   shopOpen = true;
+  mouseDown = aimHeld = false; keys.clear();
+  sound.engine(null); sound.siren(false);
   document.exitPointerLock();
   renderShop();
   $("shop").style.display = "flex";
@@ -356,6 +416,7 @@ function openShop() {
 }
 function closeShop() {
   shopOpen = false;
+  keys.clear(); mouseDown = aimHeld = false;
   $("shop").style.display = "none";
   lock();
 }
@@ -363,6 +424,8 @@ function closeShop() {
 // ───────── interaction ─────────
 function interact() {
   if (P.deadT > 0) return;
+  const corner = BLOCKS.find(b => dist2(P.x, P.z, b.x, b.z) < 14 && (!C.owned.includes(b.id) || C.defense?.block === b.id));
+  if (!P.car && corner) { startBattle(corner.id); return; }
   if (P.car) {
     const c = P.car;
     P.x = c.x + Math.cos(c.h) * 2.4;
@@ -376,6 +439,7 @@ function interact() {
   let best: Vehicle | null = null;
   let bd = 4.5;
   for (const v of vehicles) {
+    if (roadblock?.vehicle === v) continue;
     const d = dist2(v.x, v.z, P.x, P.z);
     if (d < bd) { bd = d; best = v; }
   }
@@ -399,7 +463,7 @@ function hurt(dmg: number) {
   if (P.deadT > 0 || P.won) return;
   const soak = Math.min(P.armor, dmg * 0.6);
   P.armor -= soak;
-  P.hp -= dmg - soak;
+  P.hp -= (dmg - soak) * (bonus(C).muscle ? .85 : 1);
   $("hurt").style.opacity = "1";
   setTimeout(() => ($("hurt").style.opacity = "0"), 120);
   sfx("hurt", 0.6);
@@ -407,8 +471,10 @@ function hurt(dmg: number) {
     P.hp = 0;
     P.deadT = RESPAWN_SECONDS;
     P.car = null;
-    P.cash = Math.floor(P.cash * 0.9);
-    P.heat = 0;
+    C.clean = Math.floor(C.clean * 0.9);
+    C.heat = Math.max(0, C.heat - 20);
+    if (battle?.defending) resolveDefense(C, false); else failMission(C);
+    if (battle) clearBattle();
     P.job = null;
     P.streak = 0;
     boosting = false;
@@ -427,11 +493,12 @@ function damageFoe(f: Foe, dmg: number, byPlayer: boolean) {
   f.dead = 5;
   sfx("death", 0.4);
   if (!byPlayer) return;
-  if (f.kind === "cop") { crime(1); P.cash += 100; }
+  if (f.kind === "cop") { crime(1); }
   if (f.kind === "gangster") {
-    P.cash += 150;
+    C.dirty += 150;
+    if (f.blockId) return;
     const d = DISTRICTS[f.district]!;
-    const left = foes.filter((o) => o.district === f.district && o.kind === "gangster" && !o.dead).length;
+    const left = foes.filter((o) => o.district === f.district && !o.blockId && o.kind === "gangster" && !o.dead).length;
     if (left === 0 && !P.bossOut.has(f.district)) {
       P.bossOut.add(f.district);
       const [x, z] = freeSpot(d.x, d.z, 20);
@@ -443,8 +510,11 @@ function damageFoe(f: Foe, dmg: number, byPlayer: boolean) {
   if (f.kind === "boss") {
     const d = DISTRICTS[f.district]!;
     P.captured.add(f.district);
-    P.cash += 3000;
-    feed(`${d.name} is yours! +$3,000 and new income.`);
+    C.dirty += 3000;
+    addHeat(C, 15);
+    const corner = BLOCKS.find(b => b.district === f.district);
+    if (corner) captureBlock(C, corner.id);
+    feed(`${d.name} is yours! +$3,000 dirty and controlled turf income.`);
     sfx("capture");
   }
 }
@@ -515,6 +585,7 @@ function slide(o: { x: number; z: number }, dx: number, dz: number, r: number): 
     else if (walkable(o.x, nz)) nx = o.x;
     else return true;
   }
+  if (roadblock && dist2(nx, nz, roadblock.vehicle.x, roadblock.vehicle.z) < r + 2.2) return true;
   const p = pushOut(nx, nz, r);
   o.x = nx + p.x;
   o.z = nz + p.z;
@@ -596,11 +667,6 @@ function updateFoes(dt: number) {
     const [x, z] = freeSpot(px + Math.sin(a) * 55, pz + Math.cos(a) * 55, 6);
     if (dist2(x, z, px, pz) > 35) spawnFoe("cop", x, z, -1);
   }
-  // heat cools off while cops are far away
-  if (P.heat > 0) {
-    P.heatT += dt * (copsNear ? 0.15 : 1);
-    if (P.heatT > 18) { P.heat--; P.heatT = 0; if (P.heat === 0) feed("The heat is off."); }
-  }
   sound.siren(P.heat > 0 && copsNear);
 }
 
@@ -651,8 +717,8 @@ function updateDriving(dt: number) {
 function updateWalking(dt: number) {
   player.setVisible(true);
   sound.engine(null);
-  const f = (keys.has("KeyW") ? 1 : 0) - (keys.has("KeyS") ? 1 : 0);
-  const s = (keys.has("KeyD") ? 1 : 0) - (keys.has("KeyA") ? 1 : 0);
+  const f = (keys.has("KeyW") || keys.has("ArrowUp") ? 1 : 0) - (keys.has("KeyS") || keys.has("ArrowDown") ? 1 : 0);
+  const s = (keys.has("KeyD") || keys.has("ArrowRight") ? 1 : 0) - (keys.has("KeyA") || keys.has("ArrowLeft") ? 1 : 0);
   boosting = false;
   updateReserve(P.boost, false, dt, 30, 12);
   const run = updateReserve(P.stamina, (f !== 0 || s !== 0) && (keys.has("ShiftLeft") || keys.has("ShiftRight")), dt, 22, 16);
@@ -689,16 +755,21 @@ markerRing.visible = false;
 scene.add(markerRing);
 
 function updateEconomy(dt: number) {
-  P.income += incomeRate() * dt;
-  if (P.income >= 1) {
-    const n = Math.floor(P.income);
-    P.income -= n;
-    P.cash += n;
+  for (const msg of tickCampaign(C, dt)) { feed(msg); if (msg.includes('ATTACK') || msg.includes('RAID')) sfx('wanted'); }
+  P.heat = C.heat < 30 ? 0 : Math.min(5, Math.ceil(C.heat / 20));
+  if (battle && (battle.defending && C.defense?.block !== battle.block)) clearBattle();
+  if (battle && !foes.some(f => !f.dead && f.blockId === battle!.block)) {
+    if (battle.defending) resolveDefense(C, true); else captureBlock(C, battle.block);
+    feed(`${BLOCKS.find(b => b.id === battle!.block)!.name} secured! Controlled turf earns dirty cash.`);
+    for (const a of unlock(C)) feed(`Achievement: ${a}`);
+    battle = null; target = null; saveGame();
   }
+  updateRoadblock(dt);
   // heal at HQ
   if (dist2(P.x, P.z, HQ.x, HQ.z) < HQ.r && P.hp < MAX_HP && P.deadT <= 0) P.hp = Math.min(MAX_HP, P.hp + 6 * dt);
   const j = P.job;
-  markerRing.visible = !!j;
+  markerRing.visible = !!j || !!target;
+  if (!j && target) markerRing.position.set(target.x, 40, target.z);
   if (j) {
     j.t -= dt;
     markerRing.position.set(j.x, 40, j.z);
@@ -706,23 +777,25 @@ function updateEconomy(dt: number) {
     (markerRing.material as THREE.MeshBasicMaterial).color.setHex(j.priority ? 0xffb347 : 0x40f0ff);
     if (dist2(P.x, P.z, j.x, j.z) < 6) {
       const bonus = deliveryBonus(j.pay, j.t, j.duration);
-      P.cash += j.pay + bonus;
+      C.dirty += Math.round((j.pay + bonus) * (1 + crewPayout()));
       P.streak++;
       feed(`Delivery #${P.streak}: +$${j.pay} + $${bonus} speed bonus!`);
       sfx("cash");
       P.job = null;
     } else if (j.t <= 0) {
       P.streak = 0;
+      failMission(C);
       feed("Too late. The buyer walked. Delivery streak reset.");
       sfx("deny");
       P.job = null;
     }
   }
-  if (P.cash >= GOAL && !P.won) {
+  if (C.clean >= GOAL && !P.won) {
     P.won = true;
     document.exitPointerLock();
     $("endTitle").textContent = "KINGPIN OF NEW ORLEANS";
-    $("endText").textContent = `You reached $${GOAL.toLocaleString()}. The whole city is yours.`;
+    $("endText").textContent = `You reached $${GOAL.toLocaleString()} clean capital. Your empire has arrived.`;
+    playing = false; saveGame();
     $("end").style.display = "flex";
     sfx("capture");
   }
@@ -731,12 +804,15 @@ function updateEconomy(dt: number) {
 function prompt() {
   let t = "";
   if (!P.car && P.deadT <= 0) {
+    const corner = BLOCKS.find(b => dist2(P.x, P.z, b.x, b.z) < 14 && (!C.owned.includes(b.id) || C.defense?.block === b.id));
+    if (corner && !battle) t = `E: ${C.defense?.block === corner.id ? 'defend' : 'fight for'} ${corner.name}`;
+    else
     if (vehicles.some((v) => dist2(v.x, v.z, P.x, P.z) < 4.5)) t = "E: get in car";
     else if (dist2(P.x, P.z, HQ.x, HQ.z) < HQ.r) t = "E: open the back room";
   } else if (P.car) t = "E: get out";
   const el = $("prompt");
   el.textContent = t;
-  el.style.display = t && playing ? "block" : "none";
+  el.style.display = t && playing && !managing && !shopOpen ? "block" : "none";
 }
 
 const camPos = new THREE.Vector3();
@@ -767,6 +843,133 @@ function updateCamera(dt: number) {
   camera.updateProjectionMatrix();
 }
 
+// ───────── empire, controls and persistence ─────────
+function crewPayout() { return bonus(C).payout; }
+function clearBattle() {
+  if (!battle) return;
+  // Mark for the existing cleanup loop instead of mutating its array mid-combat.
+  for (const f of foes) if (f.blockId === battle.block) f.dead = .01;
+  battle = null;
+}
+function startBattle(id: string) {
+  const block = BLOCKS.find(b => b.id === id);
+  if (!block || P.car || P.deadT > 0) return;
+  if (dist2(P.x, P.z, block.x, block.z) >= 14) { target = { ...block }; feed('Travel to the marked corner to fight.'); return; }
+  if (battle) { feed('Finish your current turf fight first.'); return; }
+  if (C.owned.includes(id) && C.defense?.block !== id) { feed('You already control this corner.'); return; }
+  battle = { block: id, defending: C.defense?.block === id };
+  target = { x: block.x, z: block.z, name: block.name };
+  for (let i = 0; i < 3; i++) {
+    const [x, z] = freeSpot(block.x + (i - 1) * 5, block.z + 6, 4);
+    const f = spawnFoe('gangster', x, z, block.district); f.blockId = id; f.aggro = true;
+  }
+  addHeat(C, 5); feed(`Turf battle: defeat the three rival guards at ${block.name}.`); sfx('wanted'); saveGame();
+}
+function updateRoadblock(dt: number) {
+  if (roadblock) {
+    roadblock.t -= dt;
+    if (C.heat < 30 || roadblock.t <= 0) {
+      const v = roadblock.vehicle;
+      if (P.car === v) P.car = null;
+      v.rig.root.removeFromParent(); v.rig.dispose(); vehicles.splice(vehicles.indexOf(v), 1); roadblock = null;
+    }
+  } else if (C.intervention === 'Patrol roadblock' && C.heat >= 60) {
+    const [x, z] = freeSpot(P.x + Math.sin(yaw) * 22, P.z + Math.cos(yaw) * 22, 8);
+    if (dist2(x, z, P.x, P.z) < 8) return;
+    const v = addVehicle(3, x, z, yaw + Math.PI / 2, 0x15335c);
+    roadblock = { vehicle: v, t: 75 };
+    spawnFoe('cop', x + 3, z, -1); spawnFoe('cop', x - 3, z, -1);
+  }
+}
+function snapshotPlayer() {
+  return { x: P.x, z: P.z, heading: P.heading, hp: P.hp, armor: P.armor, owned: P.owned, weapon: P.weapon,
+    captured: [...P.captured], bossOut: [...P.bossOut], streak: P.streak, jobActive: !!P.job,
+    target, battle, foes: foes.filter(f => !f.dead).map(f => ({ kind: f.kind, x: f.x, z: f.z, hp: f.hp, district: f.district, aggro: f.aggro, blockId: f.blockId })) };
+}
+function saveGame(manual = false) {
+  if (resetting) return;
+  const result = store.save(C, snapshotPlayer());
+  if (manual) void result.mirrored.then(mirrored => feed(result.local && mirrored ? 'Game saved to localStorage and IndexedDB.' : result.local || mirrored ? 'Game saved to one storage copy; backup unavailable.' : 'Save failed: browser storage is unavailable.'));
+}
+let wasPlaying = false;
+const empire = createEmpireUI({
+  campaign: C,
+  pause(open) {
+    if (open) { wasPlaying = playing; managing = true; keys.clear(); mouseDown = aimHeld = false; document.exitPointerLock(); }
+    else { managing = false; playing = wasPlaying; if (playing) { $('start').style.display = 'none'; lock(); } }
+  },
+  changed() { if (battle?.defending && C.defense?.block !== battle.block) clearBattle(); for (const a of unlock(C)) feed(`Achievement: ${a}`); updateHud(); saveGame(); sfx('click'); },
+  notice: feed, location: () => ({ x: P.x, z: P.z, district: districtAt(P.x, P.z) }),
+  attack: startBattle,
+  waypoint(x, z, name) { target = { x, z, name }; feed(`Route marked: ${name}. White dot on minimap.`); },
+  appearance() {
+    player.root.removeFromParent(); player.dispose(); player = createPerson('player', 5, C.avatar);
+    player.root.position.set(P.x, 0, P.z); player.root.rotation.y = P.heading; scene.add(player.root);
+  },
+  save: () => saveGame(true),
+  async reset() {
+    resetting = true;
+    try { await store.reset(); location.reload(); } catch { resetting = false; feed('Unable to reset: browser storage is blocked.'); }
+  },
+  audio() { sound.start(); sound.configure(C.audio); $('mute').textContent = C.audio.muted ? 'UNMUTE' : 'MUTE'; },
+});
+let hiddenSince: number | null = null;
+setInterval(() => { if (!document.hidden) saveGame(); }, 30000);
+addEventListener('pagehide', () => { if (hiddenSince === null) saveGame(); });
+addEventListener('beforeunload', () => { if (hiddenSince === null) saveGame(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    saveGame(); hiddenSince = Date.now(); keys.clear(); mouseDown = aimHeld = false;
+    if (playing && !managing && !shopOpen) {
+      pausedForHidden = true; playing = false; $('go').textContent = 'RESUME'; $('start').style.display = 'flex';
+    }
+    sound.engine(null); sound.siren(false);
+  } else {
+    if (hiddenSince !== null) {
+      const earnings = offlineProgress(C, (Date.now() - hiddenSince) / 1000); hiddenSince = null;
+      if (earnings.seconds > 60) showWelcome(earnings);
+      saveGame(); updateHud();
+    }
+    if (pausedForHidden) pausedForHidden = false; // Explicit Resume prevents surprise combat.
+  }
+});
+// Touch controls use held pointer state, not one-shot clicks. Drag the right side to look.
+for (const element of Array.from(document.querySelectorAll<HTMLElement>('[data-control]'))) {
+  const code = element.dataset.control!;
+  const release = () => { if (code === 'fire') mouseDown = false; else if (code === 'aim') aimHeld = false; else keys.delete(code); };
+  element.addEventListener('pointerdown', e => {
+    e.preventDefault(); if (!playing || managing || shopOpen) return;
+    element.setPointerCapture(e.pointerId);
+    if (code === 'fire') mouseDown = true;
+    else if (code === 'aim') aimHeld = true;
+    else if (code === 'weapon') { for (let i = 1; i <= 3; i++) { const next = (P.weapon + i) % 3; if (P.owned[next]) { P.weapon = next; break; } } }
+    else if (code === 'KeyE') interact();
+    else keys.add(code);
+  });
+  element.addEventListener('pointerup', release); element.addEventListener('pointercancel', release);
+  element.addEventListener('lostpointercapture', release);
+}
+let touchLook: { id: number; x: number; y: number } | null = null;
+renderer.domElement.addEventListener('pointerdown', e => {
+  if (e.pointerType !== 'touch' || !playing || managing || shopOpen) return;
+  e.preventDefault();
+  touchLook = { id: e.pointerId, x: e.clientX, y: e.clientY }; renderer.domElement.setPointerCapture(e.pointerId);
+});
+renderer.domElement.addEventListener('pointermove', e => {
+  if (!touchLook || e.pointerId !== touchLook.id) return;
+  yaw -= (e.clientX - touchLook.x) * .004; pitch = Math.max(-.7, Math.min(.45, pitch - (e.clientY - touchLook.y) * .004));
+  touchLook.x = e.clientX; touchLook.y = e.clientY;
+});
+renderer.domElement.addEventListener('pointerup', () => touchLook = null);
+renderer.domElement.addEventListener('pointercancel', () => touchLook = null);
+function showWelcome(earnings: { seconds: number; income: number; heat: number }) {
+  const modal = $('welcome'); modal.hidden = false;
+  $('offlineReport').textContent = `Away ${Math.floor(earnings.seconds / 60)} minutes (24h cap). Your controlled corners earned $${earnings.income.toLocaleString()} dirty cash at 35% rate and accumulated ${earnings.heat} heat. Daily wages were processed where due. No turf means no passive income.`;
+  $('welcomeClose').onclick = () => modal.hidden = true;
+}
+if (offline && offline.seconds > 60) showWelcome(offline);
+saveGame(); // Claim offline earnings immediately so a reload cannot award them twice.
+
 // ───────── main loop ─────────
 const clock = new THREE.Clock();
 let hudT = 0;
@@ -774,7 +977,7 @@ let miniT = 0;
 function frame() {
   requestAnimationFrame(frame);
   const dt = Math.min(0.05, clock.getDelta());
-  if (playing && !shopOpen && !P.won) {
+  if (playing && !shopOpen && !managing && !P.won && !document.hidden) {
     time += dt;
     if (P.deadT > 0) {
       P.deadT -= dt;
@@ -809,6 +1012,8 @@ function frame() {
     miniT -= dt;
     if (miniT <= 0) { miniT = 0.15; drawMini(); }
   }
+  if (!playing || managing || shopOpen || P.deadT > 0) { sound.engine(null); sound.siren(false); }
+  sound.environment(P.x > 60 && P.z < -60);
   updateCamera(dt);
   scenery.update(time, P.x, P.z);
   const night = 1 - cityClock(time).daylight;
@@ -821,7 +1026,8 @@ function frame() {
   else renderer.render(scene, camera);
 }
 
-feed("Welcome to New Orleans. Walk to the gold ring at Mama Nola's.");
+feed("No free idle income: capture corners via Empire / M. Mama Nola's is your safehouse.");
+if (loaded?.player.jobActive) feed('Interrupted delivery failed. Crew loyalty fell; your other progress is restored.');
 updateHud();
 drawMini();
 frame();
