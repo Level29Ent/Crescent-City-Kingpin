@@ -11,11 +11,13 @@ function parse(value: unknown): Save | null {
 }
 function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
+    let timedOut = false;
+    const timeout = setTimeout(() => { timedOut = true; reject(new Error('Save database timed out')); }, 3000);
     const request = indexedDB.open('crescent-city-kingpin', 1);
     request.onupgradeneeded = () => request.result.createObjectStore('saves');
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-    request.onblocked = () => reject(new Error('Save database blocked'));
+    request.onsuccess = () => { clearTimeout(timeout); if (timedOut) request.result.close(); else resolve(request.result); };
+    request.onerror = () => { clearTimeout(timeout); reject(request.error); };
+    request.onblocked = () => { timedOut = true; clearTimeout(timeout); reject(new Error('Save database blocked')); };
   });
 }
 async function database(write?: Save): Promise<unknown> {

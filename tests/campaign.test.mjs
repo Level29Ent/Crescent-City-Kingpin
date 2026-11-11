@@ -78,3 +78,9 @@ test('save restoration rejects invalid values, deduplicates ownership and retain
   assert.equal(restored.clean, 300); assert.equal(restored.dirty, 0); assert.deepEqual(restored.owned, ['skidrow']); assert.deepEqual(restored.crew, []); assert.equal(restored.avatar.skin, 5);
   assert.equal(restoreCampaign(null), null);
 });
+
+test('smuggler passive turf cooling is applied once, independently of action cooling', () => {
+  const c = newCampaign(); c.clean = 1000; hire(c, 'smuggler'); captureBlock(c, 'skidrow');
+  const before = c.heat; tickCampaign(c, 60, () => 0);
+  assert.ok(Math.abs(c.heat - before - .15) < .00001); // 1.5 * .5 - .6 natural cooling
+});

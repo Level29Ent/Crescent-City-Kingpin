@@ -45,8 +45,8 @@ export function revenuePerMinute(c: Campaign): number {
   const base = BLOCKS.filter(b => c.owned.includes(b.id) && c.defense?.block !== b.id).reduce((v, b) => v + b.rate, 0);
   return base * (1 + c.upgrades * 0.15 + bonus(c).payout + (c.achievements.includes('cleaner') ? 0.05 : 0));
 }
-export function addHeat(c: Campaign, amount: number) {
-  c.heat = clamp(c.heat + amount * (amount > 0 && bonus(c).cooling ? 0.7 : 1));
+export function addHeat(c: Campaign, amount: number, action = true) {
+  c.heat = clamp(c.heat + amount * (action && amount > 0 && bonus(c).cooling ? 0.7 : 1));
   c.stats.maxHeat = Math.max(c.stats.maxHeat, c.heat);
 }
 export function failMission(c: Campaign) { for (const m of c.crew) m.loyalty = clamp(m.loyalty - 12); }
@@ -136,7 +136,7 @@ export function tickCampaign(c: Campaign, dt: number, random = Math.random): str
   const rate = revenuePerMinute(c);
   c.dirty += rate * dt / 60;
   const risk = BLOCKS.filter(b => c.owned.includes(b.id)).reduce((v, b) => v + b.risk, 0);
-  addHeat(c, (risk * (1 - bonus(c).cooling) / 60 - (c.owned.length ? 0.01 : 0.035)) * dt);
+  addHeat(c, (risk * (1 - bonus(c).cooling) / 60 - (c.owned.length ? 0.01 : 0.035)) * dt, false);
   if (c.defense) {
     c.defense.remaining -= dt;
     if (c.defense.remaining <= 0) { resolveDefense(c, false); messages.push('A rival crew reclaimed a corner. Crew loyalty fell.'); }
@@ -160,7 +160,7 @@ export function offlineProgress(c: Campaign, elapsed: number) {
   const oldHeat = c.heat;
   c.dirty += income;
   const risk = BLOCKS.filter(b => c.owned.includes(b.id)).reduce((v, b) => v + b.risk, 0);
-  addHeat(c, risk * seconds / 60 * 0.1 * (1 - bonus(c).cooling));
+  addHeat(c, risk * seconds / 60 * 0.1 * (1 - bonus(c).cooling), false);
   c.wageClock += seconds;
   const days = Math.floor(c.wageClock / 86400); if (days) { wages(c, days); c.wageClock %= 86400; }
   c.cooldown = Math.max(0, c.cooldown - seconds); c.heistCooldown = Math.max(0, c.heistCooldown - seconds);
