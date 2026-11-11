@@ -53,7 +53,7 @@ export class AudioController {
     this.master.gain.setTargetAtTime(settings.muted ? 0 : .8, this.ctx.currentTime, .05);
     for (const key of ['music', 'ambient', 'sfx'] as const) this.buses[key].gain.setTargetAtTime(Math.max(0, Math.min(1, settings[key])), this.ctx.currentTime, .05);
   }
-  environment(bayou: boolean) { if (this.ctx && this.ambience) this.ambience.frequency.setTargetAtTime(bayou ? 1000 : 450, this.ctx.currentTime, 1); }
+  environment(bayou: boolean, rain = false) { if (this.ctx && this.ambience) this.ambience.frequency.setTargetAtTime(rain ? 1800 : bayou ? 1000 : 450, this.ctx.currentTime, 1); }
   engine(speed: number | null) {
     if (!this.ctx) return;
     this.engineGain.gain.setTargetAtTime(speed === null ? 0 : .04 + Math.min(1, speed) * .1, this.ctx.currentTime, .12);

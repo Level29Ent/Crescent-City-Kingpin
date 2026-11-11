@@ -84,7 +84,7 @@
         <div id="reserveLabel">STAMINA · SHIFT</div><div class="bar" id="reserve"><i style="width:100%"></i></div>
         <div id="streak">Delivery streak 0</div>
       </div>
-      <div id="city"><div id="cityTime">18:00 · GOLDEN HOUR</div><div id="demand"></div></div>
+      <div id="city"><div id="weather">CLEAR</div><div id="cityTime">18:00 · GOLDEN HOUR</div><div id="demand"></div></div>
       <div id="obj"></div>
       <div id="feed"></div>
       <canvas id="mini" width="180" height="180"></canvas>
@@ -96,7 +96,7 @@
     <nav id="toolbar" aria-label="Game controls"><button id="manage">EMPIRE / MAP · M</button><button id="mute" aria-label="Toggle mute">MUTE</button></nav>
     <div id="touchControls" aria-label="Touch game controls">
       <div class="touchMove"><button data-control="KeyW" aria-label="Move forward">▲</button><div><button data-control="KeyA" aria-label="Move left">◀</button><button data-control="KeyS" aria-label="Move backward">▼</button><button data-control="KeyD" aria-label="Move right">▶</button></div></div>
-      <div class="touchActions"><button data-control="ShiftLeft">SPRINT / NITRO</button><button data-control="Space">BRAKE</button><button data-control="KeyE">INTERACT</button><button data-control="fire">FIRE</button><button data-control="aim">AIM</button><button data-control="weapon">WEAPON</button></div>
+      <div class="touchActions"><button data-control="ShiftLeft">SPRINT / NITRO</button><button data-control="Space">BRAKE</button><button data-control="KeyE">INTERACT</button><button data-control="fire">FIRE</button><button data-control="aim">AIM</button><button data-control="weapon">WEAPON</button><button data-control="reload">RELOAD</button></div>
     </div>
     <section id="empire" class="overlay" role="dialog" aria-modal="true" aria-label="Empire management" hidden>
       <div class="empire-shell"><header><h1>YOUR EMPIRE</h1><button id="empireClose">Return to city</button></header><p id="empireSummary"></p><nav id="empireTabs" aria-label="Empire sections"></nav><div id="empireContent"></div></div>
@@ -108,11 +108,11 @@
       <h1>CRESCENT CITY KINGPIN</h1>
       <div class="features"><span>Living day / night</span><span>Neon-lit streets</span><span>Nitro getaways</span><span>Priority contracts</span></div>
       <p>Rise from a corner po-boy shop to kingpin of New Orleans. Beat each gang, then its boss, to take the district and its business. Capture corners, manage your crew and launder dirty cash into <b>$250,000 clean capital</b>. No turf means no passive income.</p>
-      <p><b>WASD</b> move · <b>Mouse</b> look · <b>Click</b> shoot · <b>Shift</b> sprint (uses stamina) · <b>E</b> car / shop / deliver · <b>1 2 3</b> weapons<br />In a car: <b>W S</b> gas and reverse · <b>A D</b> steer · <b>Space</b> brake · <b>Shift + W</b> nitro · <b>E</b> get out<br />Shop and import jobs are at Mama Nola's (the gold ring). Chain deliveries for bigger pay; priority contracts rotate every 90 seconds. Esc pauses. Arrow keys also move. <b>M</b> opens your empire. On touch: hold movement/actions and drag the city to look.</p>
-      <button id="go">ENTER THE CITY</button><button id="customize">CHOOSE CHARACTER & OUTFIT</button>
+      <p><b>WASD</b> move · <b>Mouse</b> look · <b>Click</b> shoot · <b>Shift</b> sprint (uses stamina) · <b>E</b> car / shop / deliver · <b>1–5</b> weapons · <b>R</b> reload<br />In a car: <b>W S</b> gas and reverse · <b>A D</b> steer · <b>Space</b> brake · <b>Shift + W</b> nitro · <b>E</b> get out<br />Shop and import jobs are at Mama Nola's (the gold ring). Chain deliveries for bigger pay; priority contracts rotate every 90 seconds. Esc pauses. Arrow keys also move. <b>M</b> opens your empire. On touch: hold movement/actions and drag the city to look.</p>
+      <button id="go">ENTER THE CITY</button><button id="festivalLaunch">MARDI GRAS / MISSIONS</button><button id="customize">CHOOSE CHARACTER & OUTFIT</button>
       <label class="quality" for="quality">Graphics<select id="quality"><option value="balanced">Balanced · neon bloom</option><option value="cinematic">Cinematic · sharper bloom</option><option value="performance">Performance · no bloom</option></select></label>
     </div>
-    <div id="end" class="overlay" style="display:none"><h1 id="endTitle"></h1><p id="endText"></p><button onclick="location.reload()">PLAY AGAIN</button></div>
+    <div id="end" class="overlay" style="display:none"><h1 id="endTitle"></h1><p id="endText"></p><button onclick="location.reload()">KEEP BUILDING</button></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
