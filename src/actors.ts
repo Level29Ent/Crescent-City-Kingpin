@@ -119,8 +119,8 @@ export function createPerson(kind: PersonKind, look: number, appearance?: Appear
 
   switch (kind) {
     case "player":
-      top = lam([0xb0102a, 0x173b48, 0x232533, 0xe4d0a5][appearance?.outfit ?? 0]!); sleeve = top;
-      pants = lam([0x8a0e22, 0x1d2c3b, 0x15151e, 0x483a33][appearance?.outfit ?? 0]!);
+      top = lam([0xb0102a, 0x173b48, 0x232533, 0xe4d0a5, 0x6b23b5, 0xf0c238][appearance?.outfit ?? 0]!); sleeve = top;
+      pants = lam([0x8a0e22, 0x1d2c3b, 0x15151e, 0x483a33, 0x1e7d4d, 0x76259e][appearance?.outfit ?? 0]!);
       shoe = lam(0xf5ecd8); hair = lam(HAIR[appearance?.hair ?? 0]!);
       // Gender presentation is cosmetic only; identity never changes gameplay stats.
       if (appearance?.gender === 'Woman') { torso.scale.x *= .88; inner.scale.y *= .97; }
@@ -316,13 +316,23 @@ export function createCar(style: number, color: number): Car {
   const body = new THREE.Group(); root.add(body);
   const paint = lam(police ? 0x14161b : color);
   const white = lam(0xf2f2f2), glass = lam(0x1d2c3a), dark = lam(0x1a1a1a), chrome = lam(0xc8ccd2);
-  const len = sports ? 4.4 : 4.6, w = 2;
-  const h0 = sports ? 0.38 : 0.45, ch = sports ? 0.42 : 0.55;
+  const van = style === 4, truck = style === 1;
+  const len = van ? 5.5 : sports ? 4.4 : 4.6, w = van ? 2.4 : 2;
+  const h0 = sports ? 0.38 : 0.45, ch = van ? 1.2 : sports ? 0.42 : 0.55;
   part(box(), paint, w, ch, len, 0, h0 + ch / 2, 0, body); // chassis
   const cabH = sports ? 0.5 : 0.62, cabLen = sports ? 1.9 : 2.3;
-  const cabZ = sports ? -0.25 : -0.2;
+  const cabZ = truck ? 1 : sports ? -0.25 : -0.2;
   part(box(), glass, w - 0.2, cabH, cabLen, 0, h0 + ch + cabH / 2, cabZ, body);
   part(box(), police ? white : paint, w - 0.1, 0.07, cabLen - 0.5, 0, h0 + ch + cabH + 0.03, cabZ, body); // roof
+  if(truck){
+    part(box(),dark,w-.2,.15,2.3,0,h0+ch,-1.1,body);
+    for(const side of [-1,1])part(box(),paint,.12,.55,2.5,side*(w/2-.06),h0+ch+.25,-1.1,body);
+    for(let i=0;i<3;i++)part(box(),lam(0x876645),.75,.65,.65,(i%2-.5)*.8,h0+ch+.4,-.7-Math.floor(i/2)*.8,body);
+  }
+  if(van){
+    part(box(),paint,w-.1,1.2,3.4,0,h0+ch+.5,-.9,body);
+    for(const side of [-1,1])part(box(),dark,.06,.5,2.5,side*w/2,h0+ch+.55,-.9,body);
+  }
   if (police) {
     part(box(), white, w + 0.02, 0.22, 1.5, 0, h0 + 0.2, 0.2, body); // doors livery
   }
@@ -363,7 +373,7 @@ export function createCar(style: number, color: number): Car {
     wheels.push({ pivot, spin, front: fz > 0 });
   }
   const src = carModels[police ? 0 : sports ? 1 : [0, 2, 3, 0][Math.max(0, COLORS.indexOf(color)) % 4]!];
-  if (src) {
+  if (src && !van && !truck) {
     const m = cloneModel(src.scene);
     const bb = new THREE.Box3().setFromObject(m);
     const k = len / (bb.max.z - bb.min.z);

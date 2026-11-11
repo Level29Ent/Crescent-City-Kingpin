@@ -72,7 +72,7 @@ test('offline earnings cap at 24h, award 35% dirty income, accumulate heat and p
 });
 test('save restoration rejects invalid values, deduplicates ownership and retains appearance/inventory/crew', () => {
   const c = newCampaign(); captureBlock(c, 'skidrow'); hire(c, 'muscle'); c.avatar = { gender: 'Woman', heritage: 'Mixed heritage', skin: 5, outfit: 3, hair: 5 };
-  c.inventory = [1, 2, 3]; c.defense = { block: 'skidrow', remaining: 40 }; c.intervention = 'Informant';
+  c.inventory = [1, 2, 3, 0]; c.defense = { block: 'skidrow', remaining: 40 }; c.intervention = 'Informant';
   assert.deepEqual(restoreCampaign(JSON.parse(JSON.stringify(c))), c);
   const restored = restoreCampaign({ clean: Infinity, dirty: -500, owned: ['skidrow','skidrow','hacked'], crew: [{id:'hacked'}], avatar: {skin:99}, stats: {cleaned: NaN} });
   assert.equal(restored.clean, 300); assert.equal(restored.dirty, 0); assert.deepEqual(restored.owned, ['skidrow']); assert.deepEqual(restored.crew, []); assert.equal(restored.avatar.skin, 5);

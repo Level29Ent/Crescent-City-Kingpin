@@ -17,6 +17,9 @@ import { BLOCKS, addHeat, bonus, captureBlock, failMission, newCampaign, offline
 import { SaveStore } from './persistence.ts';
 import { createEmpireUI } from './empire-ui.ts';
 import './campaign.css';
+import { conditions, VEHICLES, MISSIONS, missionInteract, tickExpansion, inventoryCap, cashCap, furnished } from './expansion.ts';
+import { createFestival } from './festival.ts';
+import { createWeather } from './weather.ts';
 const store = new SaveStore();
 const loaded = await store.load();
 const C = loaded?.campaign ?? newCampaign();
@@ -63,17 +66,20 @@ const sound = createSound(abort.signal);
 sound.configure(C.audio);
 const scenery = createScenery(scene);
 const impacts = createImpacts(scene);
+const festival = createFestival(scene);
+const weather = createWeather(scene);
+const shotLight = new THREE.PointLight(0xffb760,0,8);scene.add(shotLight);
 
 // ───────── game state ─────────
 type Foe = {
   kind: PersonKind; person: Person; x: number; z: number; heading: number; hp: number; district: number;
-  blockId?: string; cd: number; aggro: boolean; dead: number; wx: number; wz: number; wt: number; flee: number; speed: number;
+  blockId?: string; mugged?: boolean; cd: number; aggro: boolean; dead: number; wx: number; wz: number; wt: number; flee: number; speed: number;
 };
-type Vehicle = { rig: Car; style: number; x: number; z: number; h: number; speed: number; steer: number };
+type Vehicle = { rig: Car; style: number; x: number; z: number; h: number; speed: number; steer: number; garage?: number };
 
 const P = {
   x: SPAWN.x, z: SPAWN.z, heading: SPAWN.heading, hp: MAX_HP, armor: 0, heat: 0,
-  weapon: 0, owned: [true, false, false], lastFire: -10, deadT: 0, car: null as Vehicle | null,
+  weapon: 0, owned: [true, false, false, false, false], lastFire: -10, deadT: 0, car: null as Vehicle | null,
   captured: new Set<number>([0]), kills: new Map<number, number>(), bossOut: new Set<number>(),
   job: null as null | { name: string; x: number; z: number; t: number; duration: number; pay: number; priority: boolean }, won: false,
   streak: 0, stamina: { value: 100, exhausted: false }, boost: { value: 100, exhausted: false },
@@ -96,8 +102,8 @@ if (loaded) {
   if (!walkable(P.x, P.z) || pushOut(P.x, P.z, .5).hit) { P.x = SPAWN.x; P.z = SPAWN.z; }
   P.heading = bounded(p.heading, SPAWN.heading, -Math.PI * 100, Math.PI * 100);
   P.hp = bounded(p.hp, MAX_HP, 1, MAX_HP); P.armor = bounded(p.armor, 0, 0, 50);
-  P.owned = [true, p.owned?.[1] === true, p.owned?.[2] === true];
-  P.weapon = Math.floor(bounded(p.weapon, 0, 0, 2)); if (!P.owned[P.weapon]) P.weapon = 0;
+  P.owned = WEAPONS.map((_,i) => i === 0 || p.owned?.[i] === true);
+  P.weapon = Math.floor(bounded(p.weapon, 0, 0, WEAPONS.length-1)); if (!P.owned[P.weapon]) P.weapon = 0;
   P.captured = new Set([0, ...[1,2,3,4].filter(d => Array.isArray(p.captured) && p.captured.includes(d))]);
   P.bossOut = new Set([1,2,3,4].filter(d => Array.isArray(p.bossOut) && p.bossOut.includes(d)));
   P.streak = Math.floor(bounded(p.streak, 0, 0, 10000));
@@ -156,6 +162,7 @@ if (loaded && Array.isArray(loaded.player.foes)) {
     if (!raw || !['boss','cop','civilian','gangster'].includes(raw.kind) || typeof raw.x !== 'number' || typeof raw.z !== 'number') continue;
     const x = bounded(raw.x, 0, -238, 238), z = bounded(raw.z, 0, -238, 232);
     const f = spawnFoe(raw.kind, x, z, Math.floor(bounded(raw.district, -1, -1, 4)));
+    f.mugged = raw.mugged === true;
     f.hp = bounded(raw.hp, 55, 1, 260); f.aggro = raw.aggro === true;
     if (BLOCKS.some(b => b.id === raw.blockId)) f.blockId = raw.blockId;
   }
@@ -215,6 +222,7 @@ function drawMini() {
   for (const f of foes) if (!f.dead && f.kind !== "civilian") dot(f.x, f.z, f.kind === "cop" ? "#4a8aff" : f.kind === "boss" ? "#ff40ff" : "#ff4040", f.kind === "boss" ? 4 : 2.5);
   if (P.job) dot(P.job.x, P.job.z, "#40f0ff", 4);
   if (target) dot(target.x, target.z, '#ffffff', 5);
+  for(const p of pickups)dot(p.x,p.z,p.kind===0?'#f5c34a':p.kind===1?'#9c52e0':'#47d7c1',2);
   for (const b of BLOCKS) dot(b.x, b.z, C.owned.includes(b.id) ? '#8cf08c' : '#dd8bff', 3);
   mg.restore();
   mg.fillStyle = "#fff";
@@ -232,7 +240,8 @@ function updateHud() {
   ($("hp").firstElementChild as HTMLElement).style.width = `${Math.max(0, P.hp)}%`;
   ($("armor").firstElementChild as HTMLElement).style.width = `${P.armor * 2}%`;
   $("heat").textContent = `HEAT ${Math.floor(C.heat)}/100 ${P.heat ? "★".repeat(P.heat) : ""}`;
-  $("weapon").textContent = P.car ? "Driving" : `${WEAPONS[P.weapon]!.name}`;
+  $("weapon").textContent = P.car ? "Driving" : `${WEAPONS[P.weapon]!.name} · ${reloading > 0 ? "RELOADING" : `${ammo[P.weapon]}/${MAGAZINES[P.weapon]}`} · R` ;
+  $("weather").textContent = `${conditions(C.clock).weather.toUpperCase()}${conditions(C.clock).night ? " · NIGHT BONUS" : ""}`;
   const clock = cityClock(time);
   const hours = Math.floor(clock.hour).toString().padStart(2, "0");
   const minutes = Math.floor((clock.hour % 1) * 60).toString().padStart(2, "0");
@@ -254,7 +263,9 @@ function updateHud() {
   }
   if (battle) obj = `${battle.defending ? 'DEFEND' : 'CAPTURE'} ${BLOCKS.find(b => b.id === battle!.block)!.name}: ${foes.filter(f => !f.dead && f.blockId === battle!.block).length} guards left`;
   else if (target) obj = `${target.name} · ${Math.round(dist2(P.x, P.z, target.x, target.z))} m · follow white minimap marker`;
-  if (C.defense && !battle) obj = `TURF ATTACK: ${BLOCKS.find(b => b.id === C.defense!.block)!.name} · ${Math.ceil(C.defense.remaining)}s · M to respond`;
+  const mission = C.expansion.mission;
+  if (mission) { const def = MISSIONS.find(m=>m.id===mission.id)!; obj = `${def.name} · ${def.steps[mission.step]!.name} · ${Math.ceil(mission.remaining)}s · E to interact`; }
+  if (C.defense && !battle && !mission) obj = `TURF ATTACK: ${BLOCKS.find(b => b.id === C.defense!.block)!.name} · ${Math.ceil(C.defense.remaining)}s · M to respond`;
   $("obj").textContent = obj;
   $("obj").style.display = obj ? "block" : "none";
   const sp = P.car ? Math.round(Math.abs(P.car.speed) * 3.6) : 0;
@@ -283,9 +294,10 @@ addEventListener("keydown", (e) => {
   keys.add(e.code);
   if (!playing || shopOpen || managing) return;
   if (e.code === "KeyE") interact();
-  if (e.code === "Digit1" || e.code === "Digit2" || e.code === "Digit3") {
+  if (e.code === "KeyR") reloadWeapon();
+  if (/^Digit[1-5]$/.test(e.code)) {
     const w = Number(e.code.slice(-1)) - 1;
-    if (P.owned[w]) P.weapon = w;
+    if (P.owned[w]) { P.weapon = w; reloading = 0; }
   }
 });
 addEventListener("keyup", (e) => keys.delete(e.code));
@@ -424,6 +436,10 @@ function closeShop() {
 // ───────── interaction ─────────
 function interact() {
   if (P.deadT > 0) return;
+  const advanced = missionInteract(C,P.x,P.z);
+  if(advanced) {feed(advanced); sfx('cash'); saveGame(); return;}
+  const rival = foes.find(f=>f.kind==='gangster'&&!f.dead&&!f.mugged&&dist2(P.x,P.z,f.x,f.z)<2.5);
+  if(!P.car&&rival){rival.mugged=true;rival.aggro=true;const pay=conditions(C.clock).night?125:100;C.dirty=Math.min(cashCap(C),C.dirty+pay);addHeat(C,8);feed(`Rival courier shaken down: +$${pay} dirty. Crew alerted!`);sfx('cash');saveGame();return;}
   const corner = BLOCKS.find(b => dist2(P.x, P.z, b.x, b.z) < 14 && (!C.owned.includes(b.id) || C.defense?.block === b.id));
   if (!P.car && corner) { startBattle(corner.id); return; }
   if (P.car) {
@@ -439,7 +455,7 @@ function interact() {
   let best: Vehicle | null = null;
   let bd = 4.5;
   for (const v of vehicles) {
-    if (roadblock?.vehicle === v) continue;
+    if (roadblock?.vehicle === v || (v.garage !== undefined && C.expansion.runs.some(r=>r.car===v.garage))) continue;
     const d = dist2(v.x, v.z, P.x, P.z);
     if (d < bd) { bd = d; best = v; }
   }
@@ -452,7 +468,7 @@ const tracers: { line: THREE.Line; t: number }[] = [];
 function tracer(a: THREE.Vector3, b: THREE.Vector3, color: number) {
   const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([a, b]), new THREE.LineBasicMaterial({ color, transparent: true }));
   scene.add(line);
-  tracers.push({ line, t: 0.08 });
+  tracers.push({ line, t: 0.045 });
 }
 const _o = new THREE.Vector3();
 const _d = new THREE.Vector3();
@@ -463,7 +479,9 @@ function hurt(dmg: number) {
   if (P.deadT > 0 || P.won) return;
   const soak = Math.min(P.armor, dmg * 0.6);
   P.armor -= soak;
-  P.hp -= (dmg - soak) * (bonus(C).muscle ? .85 : 1);
+  const stored = P.car?.garage !== undefined ? C.expansion.cars[P.car.garage] : null;
+  const armor = stored ? VEHICLES.find(v=>v.id===stored.id)!.armor + stored.armor*.07 : 0;
+  P.hp -= (dmg - soak) * (bonus(C).muscle ? .85 : 1) * (C.expansion.gear.includes('Royal Flush Armor') ? .85 : 1) * (P.car ? (1-Math.min(.85,armor)) * (C.expansion.gear.includes('Ghost Transport Plating') ? .85 : 1) : 1);
   $("hurt").style.opacity = "1";
   setTimeout(() => ($("hurt").style.opacity = "0"), 120);
   sfx("hurt", 0.6);
@@ -540,36 +558,48 @@ function rayHit(ox: number, oy: number, oz: number, dx: number, dy: number, dz: 
   return { foe: best, t: bt, head };
 }
 
+const MAGAZINES = [12,30,6,24,5];
+const ammo = [...MAGAZINES];
+let reloading = 0;
+let recoil = 0;
+const walkVelocity = new THREE.Vector2();
+function reloadWeapon() { if(P.car || reloading>0 || ammo[P.weapon] === MAGAZINES[P.weapon]) return; reloading=P.weapon===2?2.2:1.6; sfx('click'); }
 function fire() {
   const w = WEAPONS[P.weapon]!;
-  if (time - P.lastFire < w.cd) return;
+  if (reloading > 0 || time - P.lastFire < w.cd) return;
+  if (ammo[P.weapon]! <= 0) {reloadWeapon();return;}
+  ammo[P.weapon]!--;
   P.lastFire = time;
-  sfx(P.weapon === 0 ? "pistol" : P.weapon === 1 ? "smg" : "shotgun");
+  sfx(P.weapon === 2 ? "shotgun" : P.weapon === 1 || P.weapon===3 ? "smg" : "pistol");
   // aim point from the camera's centre ray
   camera.getWorldDirection(_d);
-  const cw = castWorld(camera.position.x, camera.position.y, camera.position.z, _d.x, _d.y, _d.z, 120);
-  _e.copy(camera.position).addScaledVector(_d, Math.min(cw, 120));
+  const aim = rayHit(camera.position.x, camera.position.y, camera.position.z, _d.x, _d.y, _d.z, w.range);
+  _e.copy(camera.position).addScaledVector(_d, Math.min(aim.t, w.range));
   _o.set(P.x, 1.45, P.z);
   player.root.updateMatrixWorld(true);
   player.muzzle(_o);
   const base = new THREE.Vector3().subVectors(_e, _o).normalize();
+  const spread = w.spread * (aimHeld ? .4 : 1) * (C.expansion.gear.includes("Crescent Precision Barrel") ? .75 : 1);
   for (let i = 0; i < w.pellets; i++) {
     const dir = base.clone();
-    dir.x += rnd(-w.spread, w.spread);
-    dir.y += rnd(-w.spread, w.spread);
-    dir.z += rnd(-w.spread, w.spread);
+    dir.x += rnd(-spread, spread);
+    dir.y += rnd(-spread, spread);
+    dir.z += rnd(-spread, spread);
     dir.normalize();
     const r = rayHit(_o.x, _o.y, _o.z, dir.x, dir.y, dir.z, w.range);
     tracer(_o.clone(), _o.clone().addScaledVector(dir, r.t), 0xffe9a0);
     if (r.t < w.range) impacts.burst(_o.x + dir.x * r.t, _o.y + dir.y * r.t, _o.z + dir.z * r.t);
     if (r.foe) {
-      damageFoe(r.foe, w.dmg * (r.head ? 2 : 1), true);
+      damageFoe(r.foe, w.dmg * (1+C.expansion.weaponLevel*.08+(furnished(C,"locker")?.1:0)) * (r.head ? 2 : 1), true);
       hitFlash = 0.12;
       sfx(r.head ? "headshot" : "hit", 0.6);
     }
   }
   if (P.weapon > 0) crimeNoise();
   player.flash(1);
+  recoil = Math.min(.045, recoil + (P.weapon===2?.025:.009));
+  pitch = Math.max(-.7, Math.min(.45, pitch + recoil));
+  if(C.expansion.mission?.id==='parade' && Math.abs(P.x)<12) {addHeat(C,3);feed('Keep the parade safe — firing draws police attention.');}
 }
 function crimeNoise() {
   // loud guns near civilians draw attention
@@ -638,15 +668,16 @@ function updateFoes(dt: number) {
         if (dd > 1) { f.heading = Math.atan2(f.wx - f.x, f.wz - f.z); moving = 1.6; }
       }
     } else if (alive) {
-      const los = d < 60 && hasLOS(f.x, f.z, px, pz);
-      if (!f.aggro && los && d < 40) f.aggro = true;
+      const sight = f.kind === "cop" ? conditions(C.clock).visibility : 1;
+      const los = d < 60*sight && hasLOS(f.x, f.z, px, pz);
+      if (!f.aggro && los && d < 40*sight) f.aggro = true;
       if (f.aggro && d > 90) f.aggro = f.kind === "cop";
       if (f.aggro) {
         f.heading = Math.atan2(px - f.x, pz - f.z);
         aiming = true;
         if (d > 13 || !los) moving = f.speed;
         f.cd -= dt;
-        if (f.cd <= 0 && los && d < 42) {
+        if (f.cd <= 0 && los && d < 42*sight) {
           f.cd = f.kind === "boss" ? rnd(0.6, 1) : rnd(1, 1.7);
           sfx("enemyShot", Math.max(0.1, 1 - d / 50));
           const sx = f.x + Math.sin(f.heading) * 0.7;
@@ -680,12 +711,15 @@ function updateDriving(dt: number) {
   const left = keys.has("KeyA") || keys.has("ArrowLeft");
   const right = keys.has("KeyD") || keys.has("ArrowRight");
   boosting = updateReserve(P.boost, fwd && !brake && (keys.has("ShiftLeft") || keys.has("ShiftRight")), dt, 30, 12);
+  const stored = c.garage !== undefined ? C.expansion.cars[c.garage] : null;
+  const model = stored ? VEHICLES.find(v=>v.id===stored.id)! : null;
+  const performance = model ? model.speed + stored!.engine*.1 : 1;
   if (boosting) c.speed += CAR_ACC[k]! * 1.3 * dt;
   if (fwd) c.speed += (c.speed < 0 ? CAR_ACC[k]! * 2.5 : CAR_ACC[k]!) * dt;
   else if (back) c.speed -= (c.speed > 0 ? CAR_ACC[k]! * 2.5 : CAR_ACC[k]! * 0.6) * dt;
   else c.speed *= Math.exp(-0.5 * dt);
   if (brake) c.speed -= Math.sign(c.speed) * Math.min(Math.abs(c.speed), 45 * dt);
-  c.speed = Math.max(-9, Math.min(CAR_MAX[k]! * (boosting ? 1.35 : 1), c.speed));
+  c.speed = Math.max(-9, Math.min(CAR_MAX[k]! * performance * (boosting ? 1.35 : 1), c.speed));
   const want = (left ? 1 : 0) - (right ? 1 : 0);
   c.steer += (want - c.steer) * Math.min(1, dt * 8);
   const turn = Math.max(-1, Math.min(1, c.speed / 7)) * (1 - Math.min(0.6, Math.abs(c.speed) / 70));
@@ -721,7 +755,7 @@ function updateWalking(dt: number) {
   const s = (keys.has("KeyD") || keys.has("ArrowRight") ? 1 : 0) - (keys.has("KeyA") || keys.has("ArrowLeft") ? 1 : 0);
   boosting = false;
   updateReserve(P.boost, false, dt, 30, 12);
-  const run = updateReserve(P.stamina, (f !== 0 || s !== 0) && (keys.has("ShiftLeft") || keys.has("ShiftRight")), dt, 22, 16);
+  const run = updateReserve(P.stamina, (f !== 0 || s !== 0) && (keys.has("ShiftLeft") || keys.has("ShiftRight")), dt, 22 * conditions(C.clock).stamina, 16);
   const shooting = time - P.lastFire < 0.7 || aimHeld;
   let moving = 0;
   if (f !== 0 || s !== 0) {
@@ -732,7 +766,9 @@ function updateWalking(dt: number) {
     dx /= m;
     dz /= m;
     moving = run ? 8.2 : 5;
-    slide(P, dx * moving * dt, dz * moving * dt, 0.5);
+    walkVelocity.x+=(dx*moving-walkVelocity.x)*(1-Math.exp(-14*dt));
+    walkVelocity.y+=(dz*moving-walkVelocity.y)*(1-Math.exp(-14*dt));
+    slide(P, walkVelocity.x * dt, walkVelocity.y * dt, 0.5);
     if (!shooting) {
       const target = Math.atan2(dx, dz);
       let diff = target - P.heading;
@@ -740,10 +776,11 @@ function updateWalking(dt: number) {
       P.heading += diff * Math.min(1, dt * 14);
     }
   }
+  if(f===0 && s===0) { walkVelocity.multiplyScalar(Math.exp(-18*dt)); slide(P,walkVelocity.x*dt,walkVelocity.y*dt,.5); }
   if (shooting) P.heading = yaw;
   player.root.position.set(P.x, 0, P.z);
   player.root.rotation.y = P.heading;
-  player.pose(shooting ? "aim" : moving > 6 ? "run" : moving > 0 ? "walk" : "idle", moving, time, P.weapon, dt);
+  player.pose(shooting ? "aim" : moving > 6 ? "run" : moving > 0 ? "walk" : "idle", moving, time, Math.min(2,P.weapon===3||P.weapon===4?1:P.weapon), dt);
   if (mouseDown && playing) fire();
 }
 
@@ -764,7 +801,20 @@ function updateEconomy(dt: number) {
     for (const a of unlock(C)) feed(`Achievement: ${a}`);
     battle = null; target = null; saveGame();
   }
+  for(const msg of tickExpansion(C,dt)){feed(msg);if(msg.includes('WARNING')||msg.includes('SHOWDOWN'))sfx('wanted');}
+  if (P.car?.garage !== undefined && C.expansion.runs.some(r=>r.car===P.car!.garage)) {P.car=null;player.setVisible(true);}
   updateRoadblock(dt);
+  updatePickups(dt);
+  if(C.expansion.mission) {
+    const def=MISSIONS.find(m=>m.id===C.expansion.mission!.id)!;
+    const step=def.steps[C.expansion.mission.step]!;
+    target={x:step.x,z:step.z,name:step.name};
+    if(def.id==='parade'&&C.expansion.mission.step===4) {
+      const escort=C.expansion.mission.escort??0;
+      if(dist2(P.x,P.z,0,42+Math.min(40,escort)*1.5)<18)C.expansion.mission.escort=escort+dt;
+      target={x:0,z:42+Math.min(40,C.expansion.mission.escort??0)*1.5,name:`Escort jester float ${Math.floor(Math.min(40,C.expansion.mission.escort??0))}/40s`};
+    }
+  }
   // heal at HQ
   if (dist2(P.x, P.z, HQ.x, HQ.z) < HQ.r && P.hp < MAX_HP && P.deadT <= 0) P.hp = Math.min(MAX_HP, P.hp + 6 * dt);
   const j = P.job;
@@ -777,7 +827,7 @@ function updateEconomy(dt: number) {
     (markerRing.material as THREE.MeshBasicMaterial).color.setHex(j.priority ? 0xffb347 : 0x40f0ff);
     if (dist2(P.x, P.z, j.x, j.z) < 6) {
       const bonus = deliveryBonus(j.pay, j.t, j.duration);
-      C.dirty += Math.round((j.pay + bonus) * (1 + crewPayout()));
+      C.dirty += Math.round((j.pay + bonus) * (1 + crewPayout()) * (conditions(C.clock).night ? 1.3 : 1));
       P.streak++;
       feed(`Delivery #${P.streak}: +$${j.pay} + $${bonus} speed bonus!`);
       sfx("cash");
@@ -790,7 +840,8 @@ function updateEconomy(dt: number) {
       P.job = null;
     }
   }
-  if (C.clean >= GOAL && !P.won) {
+  if (C.clean >= GOAL && !P.won && !C.expansion.completed.includes("kingpin")) {
+    C.expansion.completed.push("kingpin");
     P.won = true;
     document.exitPointerLock();
     $("endTitle").textContent = "KINGPIN OF NEW ORLEANS";
@@ -805,7 +856,8 @@ function prompt() {
   let t = "";
   if (!P.car && P.deadT <= 0) {
     const corner = BLOCKS.find(b => dist2(P.x, P.z, b.x, b.z) < 14 && (!C.owned.includes(b.id) || C.defense?.block === b.id));
-    if (corner && !battle) t = `E: ${C.defense?.block === corner.id ? 'defend' : 'fight for'} ${corner.name}`;
+    if(foes.some(f=>f.kind==='gangster'&&!f.dead&&!f.mugged&&dist2(P.x,P.z,f.x,f.z)<2.5))t='E: shake down rival courier (raises heat)';
+    else if (corner && !battle) t = `E: ${C.defense?.block === corner.id ? 'defend' : 'fight for'} ${corner.name}`;
     else
     if (vehicles.some((v) => dist2(v.x, v.z, P.x, P.z) < 4.5)) t = "E: get in car";
     else if (dist2(P.x, P.z, HQ.x, HQ.z) < HQ.r) t = "E: open the back room";
@@ -836,11 +888,40 @@ function updateCamera(dt: number) {
   const use = Math.max(1, Math.min(dist, free - 0.4));
   camPos.set(tx - dx * use, Math.max(0.6, ty - dy * use), tz - dz * use);
   camLook.set(tx + dx * 30, ty + dy * 30, tz + dz * 30);
-  camera.position.copy(camPos);
+  camera.position.lerp(camPos,1-Math.exp(-18*dt));
   camera.lookAt(camLook);
   const targetFov = driving ? 68 + Math.min(14, Math.abs(P.car!.speed) * 0.4) + (boosting ? 6 : 0) : aimHeld ? 52 : 62;
   camera.fov += (targetFov - camera.fov) * Math.min(1, dt * 5);
   camera.updateProjectionMatrix();
+}
+
+// Dynamic arena loot is finite, spatial and earned by moving to it.
+const pickupGeo = new THREE.BoxGeometry(.85,.7,.85);
+const pickupMaterials=[0xf5c34a,0x9c52e0,0x47d7c1].map(color=>new THREE.MeshStandardMaterial({color,emissive:color,emissiveIntensity:.45,roughness:.45}));
+const pickups:{mesh:THREE.Mesh;kind:number;x:number;z:number;life:number}[]=[];
+let pickupClock=18;
+function updatePickups(dt:number){
+  pickupClock+=dt;
+  if(pickupClock>=22&&pickups.length<12){
+    pickupClock=0;
+    for(let trial=0;trial<12;trial++){
+      const a=rnd(0,Math.PI*2),distance=rnd(12,45);
+      const x=P.x+Math.sin(a)*distance,z=P.z+Math.cos(a)*distance;
+      if(!walkable(x,z)||pushOut(x,z,1).hit||dist2(x,z,SPAWN.x,SPAWN.z)<12)continue;
+      const kind=Math.floor(rnd(0,3));const mesh=new THREE.Mesh(pickupGeo,pickupMaterials[kind]);mesh.position.set(x,.7,z);scene.add(mesh);
+      pickups.push({mesh,kind,x,z,life:180});break;
+    }
+  }
+  for(let i=pickups.length-1;i>=0;i--){const p=pickups[i]!;p.life-=dt;p.mesh.rotation.y+=dt;p.mesh.position.y=.7+Math.sin(time*3+i)*.12;
+    let collected=false;
+    if(!P.car&&P.deadT<=0&&dist2(P.x,P.z,p.x,p.z)<1.8){
+      if(p.kind===0){C.dirty=Math.min(cashCap(C),C.dirty+80);feed('Stash recovered: +$80 dirty');collected=true;}
+      else if(p.kind===2){C.expansion.parts++;feed('Mechanical part recovered');collected=true;}
+      else if(C.inventory.reduce((a,b)=>a+b,0)<inventoryCap(C)){C.inventory[Math.floor(rnd(0,C.inventory.length))]!++;feed('Contraband box recovered');collected=true;}
+      if(collected){C.expansion.pickupCount++;sfx('cash');}
+    }
+    if(collected||p.life<=0){p.mesh.removeFromParent();pickups.splice(i,1);}
+  }
 }
 
 // ───────── empire, controls and persistence ─────────
@@ -884,7 +965,7 @@ function updateRoadblock(dt: number) {
 function snapshotPlayer() {
   return { x: P.x, z: P.z, heading: P.heading, hp: P.hp, armor: P.armor, owned: P.owned, weapon: P.weapon,
     captured: [...P.captured], bossOut: [...P.bossOut], streak: P.streak, jobActive: !!P.job,
-    target, battle, foes: foes.filter(f => !f.dead).map(f => ({ kind: f.kind, x: f.x, z: f.z, hp: f.hp, district: f.district, aggro: f.aggro, blockId: f.blockId })) };
+    target, battle, foes: foes.filter(f => !f.dead).map(f => ({ kind: f.kind, x: f.x, z: f.z, hp: f.hp, district: f.district, aggro: f.aggro, mugged: f.mugged, blockId: f.blockId })) };
 }
 function saveGame(manual = false) {
   if (resetting) return;
@@ -893,6 +974,21 @@ function saveGame(manual = false) {
 }
 let wasPlaying = false;
 const empire = createEmpireUI({
+  deploy(index) {
+    if(dist2(P.x,P.z,HQ.x,HQ.z)>35) {feed('Return within 35m of Mama Nola’s garage to deploy a stored vehicle.');return;}
+    const stored=C.expansion.cars[index]; if(!stored || C.expansion.runs.some(r=>r.car===index))return;
+    if(P.car?.garage===index) {feed('Exit this vehicle before redeploying it.');return;}
+    for(let i=vehicles.length-1;i>=0;i--)if(vehicles[i]!.garage===index){vehicles[i]!.rig.dispose();vehicles[i]!.rig.root.removeFromParent();vehicles.splice(i,1);}
+    const model=VEHICLES.find(v=>v.id===stored.id)!;
+    const v=addVehicle(model.style,44,-8,Math.PI/2,stored.color);v.garage=index;
+    feed(`${model.name} deployed at garage marker. E to enter.`);target={x:44,z:-8,name:'Your garage vehicle'};
+  },
+  gearOwned: weapon => P.owned[weapon]===true,
+  armory(weapon) {
+    const prices=[0,2500,5000,6500,9000];if(!WEAPONS[weapon])return;
+    if(!P.owned[weapon]){if(C.clean<prices[weapon]!)return;C.clean-=prices[weapon]!;P.owned[weapon]=true;}
+    P.weapon=weapon;reloading=0;feed(`${WEAPONS[weapon]!.name} equipped.`);
+  },
   campaign: C,
   pause(open) {
     if (open) { wasPlaying = playing; managing = true; keys.clear(); mouseDown = aimHeld = false; document.exitPointerLock(); }
@@ -901,7 +997,7 @@ const empire = createEmpireUI({
   changed() { if (battle?.defending && C.defense?.block !== battle.block) clearBattle(); for (const a of unlock(C)) feed(`Achievement: ${a}`); updateHud(); saveGame(); sfx('click'); },
   notice: feed, location: () => ({ x: P.x, z: P.z, district: districtAt(P.x, P.z) }),
   attack: startBattle,
-  waypoint(x, z, name) { target = { x, z, name }; feed(`Route marked: ${name}. White dot on minimap.`); },
+  waypoint(x, z, name) { target = { x, z, name }; yaw=Math.atan2(x-P.x,z-P.z); feed(`Route marked: ${name}. White dot on minimap.`); },
   appearance() {
     player.root.removeFromParent(); player.dispose(); player = createPerson('player', 5, C.avatar);
     player.root.position.set(P.x, 0, P.z); player.root.rotation.y = P.heading; scene.add(player.root);
@@ -942,7 +1038,8 @@ for (const element of Array.from(document.querySelectorAll<HTMLElement>('[data-c
     element.setPointerCapture(e.pointerId);
     if (code === 'fire') mouseDown = true;
     else if (code === 'aim') aimHeld = true;
-    else if (code === 'weapon') { for (let i = 1; i <= 3; i++) { const next = (P.weapon + i) % 3; if (P.owned[next]) { P.weapon = next; break; } } }
+    else if (code === 'reload') reloadWeapon();
+    else if (code === 'weapon') { for (let i = 1; i <= WEAPONS.length; i++) { const next = (P.weapon + i) % WEAPONS.length; if (P.owned[next]) { P.weapon = next; reloading=0; break; } } }
     else if (code === 'KeyE') interact();
     else keys.add(code);
   });
@@ -979,6 +1076,9 @@ function frame() {
   const dt = Math.min(0.05, clock.getDelta());
   if (playing && !shopOpen && !managing && !P.won && !document.hidden) {
     time += dt;
+    if(reloading>0){reloading-=dt;if(reloading<=0)ammo[P.weapon]=MAGAZINES[P.weapon]!;}
+    recoil*=Math.exp(-10*dt);
+    player.flash(Math.max(0,1-(time-P.lastFire)*16));
     if (P.deadT > 0) {
       P.deadT -= dt;
       player.pose("down", 0, time, 0, dt);
@@ -1013,9 +1113,14 @@ function frame() {
     if (miniT <= 0) { miniT = 0.15; drawMini(); }
   }
   if (!playing || managing || shopOpen || P.deadT > 0) { sound.engine(null); sound.siren(false); }
-  sound.environment(P.x > 60 && P.z < -60);
   updateCamera(dt);
   scenery.update(time, P.x, P.z);
+  const weatherState=weather.update(time,playing&&!managing&&!shopOpen?dt:0,P.x,P.z);
+  const parade=C.expansion.mission?.id==='parade';
+  festival.update(time,playing&&!managing&&!shopOpen?dt:0,parade,parade&&C.expansion.mission?.step===4?(C.expansion.mission.escort??0):null);
+  sound.environment(P.x>60&&P.z<-60,weatherState.weather==='Rainstorm');
+  shotLight.intensity=Math.max(0,1-(time-P.lastFire)*18)*12;
+  shotLight.position.set(P.x+Math.sin(P.heading)*.8,1.4,P.z+Math.cos(P.heading)*.8);
   const night = 1 - cityClock(time).daylight;
   headlights.intensity = P.car && night > 0.5 ? 32 : 0;
   if (P.car) {

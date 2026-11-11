@@ -49,3 +49,13 @@
   #cash { font-size: 19px; } #goal { max-width: 150px; font-size: 10px; } #heat { font-size: 13px; } #stats { font-size: 12px; }
   #obj { top: 240px; } #start { overflow-y: auto; justify-content: safe center; } #start .features { margin: 8px 0; gap: 5px; } .features span { font-size: 10px; padding: 5px 8px; }
 }
+
+#weather { font-size: 12px; color: #94dfd7; letter-spacing: 1px; margin-bottom: 8px; }
+#festivalLaunch { margin-top: 10px; background: linear-gradient(100deg,#6b28aa,#208559); color: #ffdf74; border: 1px solid #e1b441; font-size: 13px; }
+#empireTabs { flex-shrink: 0; }
+#empireTabs button { font-size: 11px; padding: 7px 9px; }
+.safehouse-room { display: grid; grid-template-columns: repeat(3,1fr); gap: 7px; padding: 20px; min-height: 180px; background: repeating-linear-gradient(90deg,#352e29 0 18px,#42382f 18px 20px); border: 6px solid #708b8c; border-radius: 10px; }
+.room-slot { display: grid; place-items: center; text-align: center; padding: 10px; border: 1px dashed #a1ccc888; background: #102c34c9; color: #f5d58c; font-size: 13px; }
+.mission-report { color: #ffdf81; padding: 12px; background: #59412666; border-left: 3px solid #ffdf81; }
+progress { width: min(100%,450px); height: 16px; accent-color: #bd74dc; display: block; margin: 10px 0; }
+@media (max-width:760px) { #empireTabs { max-height: 110px; overflow-y:auto; } #empireTabs button { font-size: 10px; padding: 6px 8px; } .safehouse-room { padding:8px; } .room-slot { font-size:10px; padding:5px; } #start p { font-size: 11px; margin:8px 0; } #start .overlay h1 { font-size:27px; } }
