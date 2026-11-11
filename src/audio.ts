@@ -1,191 +1,89 @@
-import type { SfxName } from "./world.ts";
-
-export type Sound = { sfx(name: SfxName, gain?: number, pan?: number): void; engine(speed01: number | null): void; siren(on: boolean): void; start(): void };
-
-const url = (n: string) => new URL(`./assets/${n}.mp3`, import.meta.url).href;
-
-export function createSound(signal: AbortSignal): Sound {
-  let ctx: AudioContext | null = null;
-  let master: GainNode;
-  let noise: AudioBuffer;
-  const bufs: Record<string, AudioBuffer | undefined> = {};
-  let sirenGain: GainNode | null = null;
-  let sirenWanted = false;
-  let sirenSrc: AudioBufferSourceNode | null = null;
-  let engOsc: OscillatorNode | null = null, engOsc2: OscillatorNode | null = null, engGain: GainNode | null = null, engLp: BiquadFilterNode | null = null;
-  let engineTarget: number | null = null;
-
-  const loop = (name: string, gain: number): AudioBufferSourceNode | null => {
-    const b = bufs[name];
-    if (!ctx || !b) return null;
-    const s = ctx.createBufferSource();
-    s.buffer = b;
-    s.loop = true;
-    const g = ctx.createGain();
-    g.gain.value = gain;
-    s.connect(g).connect(master);
-    s.start();
-    return s;
-  };
-
-  const startSiren = () => {
-    if (!ctx || !bufs.siren || sirenSrc) return;
-    sirenGain = ctx.createGain();
-    sirenGain.gain.value = 0;
-    sirenSrc = ctx.createBufferSource();
-    sirenSrc.buffer = bufs.siren;
-    sirenSrc.loop = true;
-    sirenSrc.connect(sirenGain).connect(master);
-    sirenSrc.start();
-  };
-  const applySiren = () => {
-    if (!ctx) return;
-    if (sirenWanted) startSiren();
-    sirenGain?.gain.setTargetAtTime(sirenWanted ? 0.3 : 0, ctx.currentTime, 0.4);
-  };
-
-  const load = async (name: string, after?: () => void) => {
-    try {
-      const r = await fetch(url(name));
-      if (!r.ok || !ctx) return;
-      bufs[name] = await ctx.decodeAudioData(await r.arrayBuffer());
-      after?.();
-    } catch { /* missing clip: stay silent */ }
-  };
-
-  const ensureEngine = () => {
-    if (!ctx || engOsc) return;
-    engOsc = ctx.createOscillator(); engOsc.type = "sawtooth";
-    engOsc2 = ctx.createOscillator(); engOsc2.type = "square";
-    engLp = ctx.createBiquadFilter(); engLp.type = "lowpass"; engLp.frequency.value = 400;
-    engGain = ctx.createGain(); engGain.gain.value = 0;
-    const g2 = ctx.createGain(); g2.gain.value = 0.4;
-    engOsc.connect(engLp); engOsc2.connect(g2).connect(engLp);
-    engLp.connect(engGain).connect(master);
-    engOsc.start(); engOsc2.start();
-  };
-  const applyEngine = () => {
-    if (!ctx) return;
-    ensureEngine();
-    const t = ctx.currentTime;
-    const s = engineTarget;
-    if (s === null) { engGain!.gain.setTargetAtTime(0, t, 0.15); return; }
-    const f = 38 + s * 110;
-    engOsc!.frequency.setTargetAtTime(f, t, 0.08);
-    engOsc2!.frequency.setTargetAtTime(f * 0.5, t, 0.08);
-    engLp!.frequency.setTargetAtTime(250 + s * 900, t, 0.1);
-    engGain!.gain.setTargetAtTime(0.1 + s * 0.14, t, 0.1);
-  };
-
-  const init = () => {
-    if (ctx) { if (ctx.state === "suspended") void ctx.resume(); return; }
-    try {
-      ctx = new AudioContext();
-    } catch { return; }
-    const comp = ctx.createDynamicsCompressor();
-    master = ctx.createGain();
-    master.gain.value = 0.8;
-    master.connect(comp).connect(ctx.destination);
-    noise = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
-    const d = noise.getChannelData(0);
-    let seed = 12345; // deterministic cosmetic noise
-    for (let i = 0; i < d.length; i++) { seed = (seed * 1664525 + 1013904223) >>> 0; d[i] = seed / 2147483648 - 1; }
-    void ctx.resume();
-    void load("music-jazz", () => loop("music-jazz", 0.25));
-    void load("ambience-street", () => loop("ambience-street", 0.35));
-    void load("siren", applySiren);
-    void load("cash");
-    applyEngine();
-  };
-
-  const target = (pan: number) => {
-    const c = ctx!;
-    const out: AudioNode = master;
-    if (!pan || !c.createStereoPanner) return out;
-    const p = c.createStereoPanner();
-    p.pan.value = Math.max(-1, Math.min(1, pan));
-    p.connect(master);
-    return p;
-  };
-
-  const nz = (out: AudioNode, t: number, dur: number, gain: number, type: BiquadFilterType, f0: number, f1: number) => {
-    const c = ctx!;
-    const s = c.createBufferSource(); s.buffer = noise;
-    const flt = c.createBiquadFilter(); flt.type = type;
-    flt.frequency.setValueAtTime(f0, t); flt.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur);
-    const g = c.createGain();
-    g.gain.setValueAtTime(gain, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    s.connect(flt).connect(g).connect(out);
-    s.start(t, 0, dur + 0.05);
-  };
-  const tone = (out: AudioNode, t: number, dur: number, gain: number, type: OscillatorType, f0: number, f1: number) => {
-    const c = ctx!;
-    const o = c.createOscillator(); o.type = type;
-    o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur);
-    const g = c.createGain();
-    g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(gain, t + 0.008); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    o.connect(g).connect(out);
-    o.start(t); o.stop(t + dur + 0.05);
-  };
-  const clip = (out: AudioNode, name: string, t: number, rate: number, gain: number) => {
-    const b = bufs[name];
-    if (!b) return false;
-    const s = ctx!.createBufferSource(); s.buffer = b; s.playbackRate.value = rate;
-    const g = ctx!.createGain(); g.gain.value = gain;
-    s.connect(g).connect(out);
-    s.start(t, 0, Math.min(1.6, b.duration));
-    return true;
-  };
-
-  const sfx = (name: SfxName, gain = 1, pan = 0) => {
-    if (!ctx) return;
-    if (ctx.state === "suspended") void ctx.resume();
-    const t = ctx.currentTime;
-    const gg = ctx.createGain();
-    gg.gain.value = Math.min(1.5, Math.max(0, gain));
-    gg.connect(target(pan));
-    const o: AudioNode = gg;
-    switch (name) {
-      case "pistol": nz(o, t, 0.16, 0.7, "highpass", 3000, 600); tone(o, t, 0.1, 0.4, "square", 300, 60); break;
-      case "smg": nz(o, t, 0.08, 0.5, "bandpass", 4500, 1500); tone(o, t, 0.05, 0.25, "square", 420, 120); break;
-      case "shotgun": nz(o, t, 0.7, 0.95, "lowpass", 5000, 150); tone(o, t, 0.4, 0.7, "sine", 120, 35); break;
-      case "enemyShot": nz(o, t, 0.2, 0.25, "lowpass", 1400, 300); break;
-      case "hit": tone(o, t, 0.05, 0.25, "square", 900, 700); break;
-      case "headshot": tone(o, t, 0.25, 0.3, "sine", 1800, 2400); tone(o, t + 0.04, 0.2, 0.2, "sine", 2700, 3200); break;
-      case "hurt": tone(o, t, 0.2, 0.6, "sine", 160, 50); nz(o, t, 0.1, 0.3, "lowpass", 800, 200); break;
-      case "cash": if (!clip(o, "cash", t, 1, 0.8)) { tone(o, t, 0.15, 0.3, "triangle", 1200, 1200); tone(o, t + 0.08, 0.2, 0.3, "triangle", 1700, 1700); } break;
-      case "buy": if (!clip(o, "cash", t, 0.85, 0.8)) tone(o, t, 0.25, 0.3, "triangle", 900, 1400); break;
-      case "job": if (!clip(o, "cash", t, 1.2, 0.8)) tone(o, t, 0.3, 0.3, "triangle", 700, 1600); break;
-      case "capture": if (!clip(o, "cash", t, 0.7, 0.8)) tone(o, t, 0.5, 0.3, "triangle", 500, 1000); break;
-      case "click": tone(o, t, 0.04, 0.2, "square", 1500, 1200); break;
-      case "bump": nz(o, t, 0.35, 0.8, "lowpass", 900, 80); tone(o, t, 0.3, 0.7, "sine", 90, 30); break;
-      case "door": nz(o, t, 0.08, 0.4, "bandpass", 900, 400); tone(o, t + 0.09, 0.1, 0.4, "sine", 140, 70); break;
-      case "wanted": tone(o, t, 0.25, 0.3, "square", 660, 660); tone(o, t + 0.28, 0.25, 0.3, "square", 880, 880); tone(o, t + 0.56, 0.25, 0.3, "square", 660, 660); break;
-      case "deny": tone(o, t, 0.22, 0.3, "sawtooth", 110, 90); break;
-      case "death": tone(o, t, 1.2, 0.4, "sawtooth", 400, 40); nz(o, t, 0.3, 0.3, "lowpass", 1000, 100); break;
+import type { SfxName } from './world.ts';
+export type AudioSettings = { music: number; ambient: number; sfx: number; muted: boolean };
+// Procedural audio: no unavailable external clips, one context and three independent volume buses.
+export class AudioController {
+  private ctx: AudioContext | null = null;
+  private master!: GainNode;
+  private buses!: Record<'music' | 'ambient' | 'sfx', GainNode>;
+  private settings: AudioSettings = { music: .35, ambient: .35, sfx: .7, muted: false };
+  private noise!: AudioBuffer;
+  private engineOsc!: OscillatorNode;
+  private engineGain!: GainNode;
+  private ambience!: BiquadFilterNode;
+  private sirenWanted = false;
+  private beat = 0;
+  private timer: ReturnType<typeof setInterval> | undefined;
+  constructor(signal: AbortSignal) { signal.addEventListener('abort', () => this.dispose(), { once: true }); }
+  start() {
+    if (this.ctx) { void this.ctx.resume(); return; }
+    try { this.ctx = new AudioContext(); } catch { return; }
+    const c = this.ctx;
+    const limiter = c.createDynamicsCompressor();
+    this.master = c.createGain(); this.master.connect(limiter).connect(c.destination);
+    this.buses = { music: c.createGain(), ambient: c.createGain(), sfx: c.createGain() };
+    Object.values(this.buses).forEach(g => g.connect(this.master));
+    this.configure(this.settings);
+    this.noise = c.createBuffer(1, c.sampleRate * 2, c.sampleRate);
+    const data = this.noise.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+    const street = c.createBufferSource(); street.buffer = this.noise; street.loop = true;
+    this.ambience = c.createBiquadFilter(); this.ambience.type = 'lowpass'; this.ambience.frequency.value = 450;
+    const ambientGain = c.createGain(); ambientGain.gain.value = .09;
+    street.connect(this.ambience).connect(ambientGain).connect(this.buses.ambient); street.start();
+    this.engineOsc = c.createOscillator(); this.engineOsc.type = 'sawtooth';
+    this.engineGain = c.createGain(); this.engineGain.gain.value = 0;
+    const filter = c.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.value = 450;
+    this.engineOsc.connect(filter).connect(this.engineGain).connect(this.buses.sfx); this.engineOsc.start();
+    // Sparse jazz-like bass and chord voicings; interval is disposed on page teardown.
+    this.timer = setInterval(() => {
+      if (!this.ctx || this.ctx.state !== 'running') return;
+      const notes = [130.81, 155.56, 196, 233.08, 174.61, 207.65, 261.63, 311.13];
+      const root = notes[this.beat % notes.length]!;
+      this.tone(this.buses.music, root / 2, root / 2, .32, .12, 'triangle');
+      if (this.beat % 2 === 0) [1, 1.25, 1.5].forEach(v => this.tone(this.buses.music, root * v, root * v, .65, .025, 'sine'));
+      if (this.sirenWanted) this.tone(this.buses.sfx, this.beat % 2 ? 660 : 880, this.beat % 2 ? 880 : 660, .35, .1, 'sine');
+      if (this.beat % 8 === 0 && this.ambience.frequency.value > 700) this.tone(this.buses.ambient, 1800, 1200, .15, .025, 'sine');
+      this.beat++;
+    }, 450);
+    void c.resume();
+  }
+  configure(settings: AudioSettings) {
+    this.settings = { ...settings };
+    if (!this.ctx) return;
+    this.master.gain.setTargetAtTime(settings.muted ? 0 : .8, this.ctx.currentTime, .05);
+    for (const key of ['music', 'ambient', 'sfx'] as const) this.buses[key].gain.setTargetAtTime(Math.max(0, Math.min(1, settings[key])), this.ctx.currentTime, .05);
+  }
+  environment(bayou: boolean) { if (this.ctx && this.ambience) this.ambience.frequency.setTargetAtTime(bayou ? 1000 : 450, this.ctx.currentTime, 1); }
+  engine(speed: number | null) {
+    if (!this.ctx) return;
+    this.engineGain.gain.setTargetAtTime(speed === null ? 0 : .04 + Math.min(1, speed) * .1, this.ctx.currentTime, .12);
+    this.engineOsc.frequency.setTargetAtTime(38 + (speed ?? 0) * 110, this.ctx.currentTime, .1);
+  }
+  siren(on: boolean) { this.sirenWanted = on; }
+  private tone(out: AudioNode, from: number, to: number, duration: number, volume: number, shape: OscillatorType) {
+    const c = this.ctx!; const t = c.currentTime;
+    const oscillator = c.createOscillator(); oscillator.type = shape;
+    oscillator.frequency.setValueAtTime(from, t); oscillator.frequency.exponentialRampToValueAtTime(Math.max(20, to), t + duration);
+    const gain = c.createGain(); gain.gain.setValueAtTime(.0001, t); gain.gain.linearRampToValueAtTime(volume, t + .008); gain.gain.exponentialRampToValueAtTime(.0001, t + duration);
+    oscillator.connect(gain).connect(out); oscillator.start(); oscillator.stop(t + duration + .03);
+    oscillator.onended = () => { oscillator.disconnect(); gain.disconnect(); };
+  }
+  sfx(name: SfxName, volume = 1) {
+    if (!this.ctx) return;
+    const bus = this.buses.sfx;
+    const combat = ['pistol', 'smg', 'shotgun', 'enemyShot', 'bump'].includes(name);
+    if (combat) {
+      const c = this.ctx; const source = c.createBufferSource(); source.buffer = this.noise;
+      const filter = c.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.value = name === 'shotgun' ? 1800 : 3200;
+      const gain = c.createGain(); gain.gain.setValueAtTime(.3 * volume, c.currentTime); gain.gain.exponentialRampToValueAtTime(.0001, c.currentTime + .18);
+      source.connect(filter).connect(gain).connect(bus); source.start(0, 0, .2);
+      source.onended = () => { source.disconnect(); filter.disconnect(); gain.disconnect(); };
+      this.tone(bus, 140, 40, .13, .2 * volume, 'sine'); return;
     }
-    // release panner/gain nodes automatically once sources end
-  };
-
-  const events = ["pointerdown", "keydown"] as const;
-  const onGesture = () => init();
-  for (const e of events) addEventListener(e, onGesture, { signal, capture: true });
-  signal.addEventListener("abort", () => {
-    const c = ctx;
-    ctx = null;
-    void c?.close().catch(() => {});
-  });
-
-  return {
-    sfx,
-    start: init,
-    engine(s) {
-      engineTarget = s === null ? null : Math.max(0, Math.min(1, s));
-      if (ctx) applyEngine();
-    },
-    siren(on) {
-      sirenWanted = on;
-      applySiren();
-    },
-  };
+    const bad = ['hurt', 'death', 'deny', 'wanted'].includes(name);
+    const cash = ['cash', 'buy', 'capture', 'job'].includes(name);
+    this.tone(bus, bad ? 220 : cash ? 660 : 950, bad ? 80 : cash ? 1320 : 700, name === 'click' ? .04 : .22, .15 * volume, bad ? 'sawtooth' : 'triangle');
+  }
+  dispose() { if (this.timer) clearInterval(this.timer); void this.ctx?.close(); this.ctx = null; }
 }
+export const createSound = (signal: AbortSignal) => new AudioController(signal);
