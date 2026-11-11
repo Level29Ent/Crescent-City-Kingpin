@@ -1,3 +1,4 @@
+import { cityClock } from "./dynamics.ts";
 // Crescent City Kingpin: the drawn world. Stylized low-poly golden-hour New Orleans.
 // Everything static is merged into per-chunk vertex-coloured meshes; repeated organic bits are instanced.
 // Colliders live in game.ts; this file only draws (visual slabs stay <= 0.12 high).
@@ -396,7 +397,7 @@ export function createScenery(scene: THREE.Scene): Scenery {
   const hemi = new THREE.HemisphereLight(0xbfd6f0, 0x6e6558, 1.1);
   const sun = new THREE.DirectionalLight(0xffe2b8, 3.2);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(4096, 4096);
+  sun.shadow.mapSize.set(2048, 2048);
   sun.shadow.camera.left = -70;
   sun.shadow.camera.right = 70;
   sun.shadow.camera.top = 70;
@@ -2017,7 +2018,22 @@ export function createScenery(scene: THREE.Scene): Scenery {
   const tmpV = new THREE.Vector3();
   const TEX = 140 / 2048;
 
+  const nightSky = new THREE.Color(0x263956);
+  const daySky = new THREE.Color(0xffffff);
+  const duskSky = new THREE.Color(0xf7ab84);
+  const nightFog = new THREE.Color(0x182839);
+  const dayFog = new THREE.Color(0xcdd7da);
+  const duskFog = new THREE.Color(0xa87672);
+  const moonColor = new THREE.Color(0x98bbff);
+  const sunColor = new THREE.Color(0xffe2b8);
   const update = (time: number, focusX: number, focusZ: number) => {
+    const { daylight, dusk } = cityClock(time);
+    skyMat.color.copy(nightSky).lerp(daySky, daylight).lerp(duskSky, dusk * 0.65);
+    (scene.fog as THREE.Fog).color.copy(nightFog).lerp(dayFog, daylight).lerp(duskFog, dusk * 0.6);
+    hemi.intensity = 0.65 + daylight * 0.65;
+    sun.intensity = 0.45 + daylight * 2.75 + dusk * 0.6;
+    sun.color.copy(moonColor).lerp(sunColor, Math.max(daylight, dusk));
+    sunDisc.material.opacity = Math.max(daylight, dusk);
     // sky follows the camera focus
     skyGroup.position.set(focusX, 0, focusZ);
     skyGroup.rotation.y = 0;

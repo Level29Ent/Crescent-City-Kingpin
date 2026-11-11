@@ -35,6 +35,25 @@
       #shop { display: none; } #shop .panel { background: #241a30; border: 2px solid #e9a23a; border-radius: 10px; padding: 18px 22px; width: 480px; text-align: left; }
       #shop .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 8px 0; }
       #shop .row small { display: block; opacity: 0.7; }
+      #stats { padding: 14px 18px; background: linear-gradient(135deg, #101c26ed, #171626c9); border: 1px solid #d4b47855; border-radius: 12px; box-shadow: 0 8px 40px #0004; }
+      #city { right: 16px; top: 16px; text-align: right; max-width: 260px; background: #101c26dc; padding: 12px 16px; border-right: 3px solid #d4b478; border-radius: 6px; }
+      #cityTime { color: #f2cc83; font-size: 13px; letter-spacing: 1.5px; }
+      #demand { font-size: 12px; margin-top: 8px; color: #86dcd7; }
+      #streak, #reserveLabel { font-size: 11px; margin-top: 9px; color: #b7c8d5; }
+      #reserve i { background: linear-gradient(90deg, #46b9ae, #b0ffe6); transition: width .1s linear; }
+      #obj { top: 20px; max-width: calc(100vw - 640px); border: 1px solid #d4b47844; background: #101c26de; line-height: 1.5; }
+      #mini { border-radius: 50%; border-color: #d4b478aa; box-shadow: 0 4px 30px #0008; }
+      #start { background: radial-gradient(ellipse at 50% 30%, #243447b8, #080d17f2); padding: 24px; box-sizing: border-box; }
+      .eyebrow { color: #8ddad4; letter-spacing: 5px; font-size: 12px; margin-bottom: 16px; }
+      .overlay h1 { font-size: clamp(30px, 5vw, 64px); max-width: 850px; line-height: 1.05; color: #f1ce8f; text-shadow: 0 3px 25px #0009; }
+      .features { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin: 18px 0; }
+      .features span { border: 1px solid #88c9c54d; padding: 8px 12px; border-radius: 20px; font-size: 12px; color: #b9e3df; background: #14232caa; }
+      #go { min-width: 220px; letter-spacing: 2px; background: linear-gradient(110deg, #d9a65a, #f5d49b); }
+      .quality { margin-top: 18px; font-size: 12px; color: #b7c8d5; }
+      select { margin-left: 8px; font: inherit; padding: 6px; background: #14232c; color: #fff; border: 1px solid #88c9c566; border-radius: 4px; }
+      .priority { width: 100%; font-size: 13px; background: #86dcd7; }
+      #shop .panel { max-width: calc(100vw - 64px); max-height: 85vh; overflow: auto; }
+      @media (max-width: 760px) { #stats { padding: 8px; left: 8px; top: 8px; } .bar { width: 140px; } #cash { font-size: 24px; } #city { right: 8px; top: 8px; max-width: 150px; padding: 8px; } #obj { top: 220px; max-width: 80vw; width: 80vw; font-size: 12px; } #mini { width: 125px; height: 125px; } #speed { bottom: 155px; } #feed { max-width: 52vw; font-size: 11px; } .overlay p { font-size: 13px; } }
     </style>
   <script id="level29-google-tag-manager">
 (function(w,d){
@@ -62,7 +81,10 @@
         <div id="cash">$0</div><div id="goal"></div>
         <div class="bar" id="hp"><i></i></div><div class="bar" id="armor"><i></i></div>
         <div id="heat"></div><div id="weapon"></div>
+        <div id="reserveLabel">STAMINA · SHIFT</div><div class="bar" id="reserve"><i style="width:100%"></i></div>
+        <div id="streak">Delivery streak 0</div>
       </div>
+      <div id="city"><div id="cityTime">18:00 · GOLDEN HOUR</div><div id="demand"></div></div>
       <div id="obj"></div>
       <div id="feed"></div>
       <canvas id="mini" width="180" height="180"></canvas>
@@ -73,10 +95,13 @@
     </div>
     <div id="shop" class="overlay"><div class="panel"></div></div>
     <div id="start" class="overlay">
+      <div class="eyebrow">NEW ORLEANS · AFTER HOURS</div>
       <h1>CRESCENT CITY KINGPIN</h1>
+      <div class="features"><span>Living day / night</span><span>Neon-lit streets</span><span>Nitro getaways</span><span>Priority contracts</span></div>
       <p>Rise from a corner po-boy shop to kingpin of New Orleans. Beat each gang, then its boss, to take the district and its business. Reach <b>$250,000</b>.</p>
-      <p><b>WASD</b> move · <b>Mouse</b> look · <b>Click</b> shoot · <b>Shift</b> run · <b>E</b> car / shop / deliver · <b>1 2 3</b> weapons<br />In a car: <b>W S</b> gas and reverse · <b>A D</b> steer · <b>Space</b> brake · <b>E</b> get out<br />Shop and import jobs are at Mama Nola's (the gold ring).</p>
-      <button id="go">CLICK TO PLAY</button>
+      <p><b>WASD</b> move · <b>Mouse</b> look · <b>Click</b> shoot · <b>Shift</b> sprint (uses stamina) · <b>E</b> car / shop / deliver · <b>1 2 3</b> weapons<br />In a car: <b>W S</b> gas and reverse · <b>A D</b> steer · <b>Space</b> brake · <b>Shift + W</b> nitro · <b>E</b> get out<br />Shop and import jobs are at Mama Nola's (the gold ring). Chain deliveries for bigger pay; priority contracts rotate every 90 seconds. Esc pauses. Desktop keyboard + mouse required.</p>
+      <button id="go">ENTER THE CITY</button>
+      <label class="quality" for="quality">Graphics<select id="quality"><option value="balanced">Balanced · neon bloom</option><option value="cinematic">Cinematic · sharper bloom</option><option value="performance">Performance · no bloom</option></select></label>
     </div>
     <div id="end" class="overlay" style="display:none"><h1 id="endTitle"></h1><p id="endText"></p><button onclick="location.reload()">PLAY AGAIN</button></div>
     <script type="module" src="/src/main.ts"></script>

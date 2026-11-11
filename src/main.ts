@@ -1,5 +1,10 @@
 // Crescent City Kingpin: standalone single-player game. Plain three.js, no engine, no server.
 import * as THREE from "three";
+import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
+import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
+import { cityClock, demandIndex, deliveryPay, deliveryBonus, updateReserve } from "./dynamics.ts";
 import {
   BUSINESSES, CAR_ACC, CAR_MAX, DISTRICTS, DROPS, HQ, MAX_LEVEL, PARKED_CARS, SHOP, SPAWN, WEAPONS, BUILDINGS,
   GOAL, MAX_HP, RESPAWN_SECONDS, castWorld, pushOut, walkable, type SfxName,
@@ -7,6 +12,7 @@ import {
 import { carColors, createCar, createPerson, loadCarModels, type Car, type Person, type PersonKind } from "./actors.ts";
 import { createScenery } from "./scenery.ts";
 import { createSound } from "./audio.ts";
+import { createImpacts } from "./effects.ts";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const rnd = (a: number, b: number) => a + Math.random() * (b - a);
@@ -23,8 +29,21 @@ $("app").appendChild(renderer.domElement);
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(62, 1, 0.2, 1400);
 scene.add(camera);
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.35, 0.45, 0.9);
+composer.addPass(bloom);
+composer.addPass(new OutputPass());
+const quality = $<HTMLSelectElement>("quality");
+quality.addEventListener("change", () => {
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, quality.value === "cinematic" ? 1.5 : 1));
+  resize();
+});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1));
 const resize = () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
+  composer.setPixelRatio(renderer.getPixelRatio());
+  composer.setSize(window.innerWidth, window.innerHeight);
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
 };
@@ -34,6 +53,7 @@ resize();
 const abort = new AbortController();
 const sound = createSound(abort.signal);
 const scenery = createScenery(scene);
+const impacts = createImpacts(scene);
 
 // ───────── game state ─────────
 type Foe = {
@@ -46,13 +66,17 @@ const P = {
   x: SPAWN.x, z: SPAWN.z, heading: SPAWN.heading, hp: MAX_HP, armor: 0, cash: 300, heat: 0, heatT: 0,
   weapon: 0, owned: [true, false, false], level: 0, lastFire: -10, deadT: 0, car: null as Vehicle | null,
   captured: new Set<number>([0]), kills: new Map<number, number>(), bossOut: new Set<number>(),
-  job: null as null | { name: string; x: number; z: number; t: number; pay: number }, won: false, income: 0,
+  job: null as null | { name: string; x: number; z: number; t: number; duration: number; pay: number; priority: boolean }, won: false, income: 0,
+  streak: 0, stamina: { value: 100, exhausted: false }, boost: { value: 100, exhausted: false },
 };
 let yaw = SPAWN.heading;
 let pitch = -0.15;
 let time = 0;
 let playing = false;
 let shopOpen = false;
+let boosting = false;
+const headlights = new THREE.SpotLight(0xc5e8ff, 0, 65, 0.6, 0.5, 1.3);
+scene.add(headlights, headlights.target);
 
 const player = createPerson("player", 5);
 scene.add(player.root);
@@ -164,9 +188,18 @@ function updateHud() {
   ($("armor").firstElementChild as HTMLElement).style.width = `${P.armor * 2}%`;
   $("heat").textContent = P.heat > 0 ? "★".repeat(P.heat) + "☆".repeat(5 - P.heat) : "";
   $("weapon").textContent = P.car ? "Driving" : `${WEAPONS[P.weapon]!.name}`;
+  const clock = cityClock(time);
+  const hours = Math.floor(clock.hour).toString().padStart(2, "0");
+  const minutes = Math.floor((clock.hour % 1) * 60).toString().padStart(2, "0");
+  $("cityTime").textContent = `${hours}:${minutes} · ${clock.label}`;
+  $("demand").textContent = `HOT DROP · ${DROPS[demandIndex(time, DROPS.length)]!.name}`;
+  $("streak").textContent = `Delivery streak ${P.streak} · +${Math.min(5, P.streak) * 10}% contract pay`;
+  const reserve = P.car ? P.boost : P.stamina;
+  $("reserveLabel").textContent = `${P.car ? "NITRO" : "STAMINA"} · ${reserve.exhausted ? "RECOVERING" : "SHIFT"}`;
+  ($("reserve").firstElementChild as HTMLElement).style.width = `${reserve.value}%`;
   // objective line
   let obj = "";
-  if (P.job) obj = `Delivery to ${P.job.name} · ${Math.max(0, Math.ceil(P.job.t))}s · $${P.job.pay}`;
+  if (P.job) obj = `${P.job.priority ? "Priority" : "Delivery"} to ${P.job.name} · ${Math.max(0, Math.ceil(P.job.t))}s · $${P.job.pay}`;
   else {
     const open = DISTRICTS.find((d) => d.id !== 0 && !P.captured.has(d.id));
     if (open) {
@@ -185,6 +218,16 @@ const keys = new Set<string>();
 let mouseDown = false;
 let aimHeld = false;
 addEventListener("keydown", (e) => {
+  if (e.code === "Escape" && playing && !shopOpen) {
+    playing = false;
+    mouseDown = aimHeld = false;
+    keys.clear();
+    $("go").textContent = "RESUME";
+    $("start").style.display = "flex";
+    document.exitPointerLock();
+    return;
+  }
+  if (e.repeat && e.code === "KeyE") return;
   keys.add(e.code);
   if (!playing || shopOpen) return;
   if (e.code === "KeyE") interact();
@@ -194,6 +237,7 @@ addEventListener("keydown", (e) => {
   }
 });
 addEventListener("keyup", (e) => keys.delete(e.code));
+addEventListener("blur", () => { keys.clear(); mouseDown = aimHeld = false; });
 addEventListener("mousedown", (e) => {
   if (!playing) return;
   if (e.button === 0) mouseDown = true;
@@ -220,6 +264,8 @@ document.addEventListener("pointerlockchange", () => { locked = document.pointer
 $("go").addEventListener("click", () => {
   $("start").style.display = "none";
   playing = true;
+  keys.clear();
+  mouseDown = aimHeld = false;
   try { lock(); } catch { /* no pointer lock: drag the mouse to look */ }
   try { sound.start(); } catch (err) { console.warn("audio unavailable", err); }
 });
@@ -255,11 +301,12 @@ function buy(id: number) {
   renderShop();
 }
 
-function startJob() {
+function startJob(priority = false) {
   if (P.job) return;
-  const d = DROPS[Math.floor(Math.random() * DROPS.length)]!;
+  const d = DROPS[priority ? demandIndex(time, DROPS.length) : Math.floor(Math.random() * DROPS.length)]!;
   const len = dist2(HQ.x, HQ.z, d.x, d.z);
-  P.job = { name: d.name, x: d.x, z: d.z, t: 30 + len / 9, pay: Math.round(500 + len * 6) };
+  const duration = (30 + len / 9) * (priority ? 0.8 : 1);
+  P.job = { name: d.name, x: d.x, z: d.z, t: duration, duration, priority, pay: deliveryPay(len, P.streak, priority) };
   feed(`Import job: take the crates to ${d.name}.`);
   sfx("job");
   closeShop();
@@ -285,11 +332,19 @@ function renderShop() {
   const jb = document.createElement("button");
   jb.textContent = P.job ? "Job running" : "Take an import job";
   jb.disabled = !!P.job;
-  jb.onclick = startJob;
+  jb.onclick = () => startJob();
   const cb = document.createElement("button");
   cb.textContent = "Close";
   cb.onclick = closeShop;
   row.append(jb, cb);
+  const priority = document.createElement("button");
+  priority.className = "priority";
+  priority.textContent = `Priority: ${DROPS[demandIndex(time, DROPS.length)]!.name} · 1.5× pay / 20% less time`;
+  priority.disabled = !!P.job;
+  priority.onclick = () => startJob(true);
+  const info = document.createElement("p");
+  info.textContent = `Streak ${P.streak}: +${Math.min(5, P.streak) * 10}% pay. Finish early for up to 25% extra. A missed job or death resets the streak.`;
+  panel.append(info, priority);
   panel.appendChild(row);
 }
 function openShop() {
@@ -355,6 +410,8 @@ function hurt(dmg: number) {
     P.cash = Math.floor(P.cash * 0.9);
     P.heat = 0;
     P.job = null;
+    P.streak = 0;
+    boosting = false;
     feed("Wasted. You lost 10% of your cash.");
     sfx("death");
   }
@@ -434,6 +491,7 @@ function fire() {
     dir.normalize();
     const r = rayHit(_o.x, _o.y, _o.z, dir.x, dir.y, dir.z, w.range);
     tracer(_o.clone(), _o.clone().addScaledVector(dir, r.t), 0xffe9a0);
+    if (r.t < w.range) impacts.burst(_o.x + dir.x * r.t, _o.y + dir.y * r.t, _o.z + dir.z * r.t);
     if (r.foe) {
       damageFoe(r.foe, w.dmg * (r.head ? 2 : 1), true);
       hitFlash = 0.12;
@@ -548,17 +606,20 @@ function updateFoes(dt: number) {
 
 function updateDriving(dt: number) {
   const c = P.car!;
+  updateReserve(P.stamina, false, dt, 22, 16);
   const k = c.style === 2 ? 2 : 1;
   const fwd = keys.has("KeyW") || keys.has("ArrowUp");
   const back = keys.has("KeyS") || keys.has("ArrowDown");
   const brake = keys.has("Space");
   const left = keys.has("KeyA") || keys.has("ArrowLeft");
   const right = keys.has("KeyD") || keys.has("ArrowRight");
+  boosting = updateReserve(P.boost, fwd && !brake && (keys.has("ShiftLeft") || keys.has("ShiftRight")), dt, 30, 12);
+  if (boosting) c.speed += CAR_ACC[k]! * 1.3 * dt;
   if (fwd) c.speed += (c.speed < 0 ? CAR_ACC[k]! * 2.5 : CAR_ACC[k]!) * dt;
   else if (back) c.speed -= (c.speed > 0 ? CAR_ACC[k]! * 2.5 : CAR_ACC[k]! * 0.6) * dt;
   else c.speed *= Math.exp(-0.5 * dt);
   if (brake) c.speed -= Math.sign(c.speed) * Math.min(Math.abs(c.speed), 45 * dt);
-  c.speed = Math.max(-9, Math.min(CAR_MAX[k]!, c.speed));
+  c.speed = Math.max(-9, Math.min(CAR_MAX[k]! * (boosting ? 1.35 : 1), c.speed));
   const want = (left ? 1 : 0) - (right ? 1 : 0);
   c.steer += (want - c.steer) * Math.min(1, dt * 8);
   const turn = Math.max(-1, Math.min(1, c.speed / 7)) * (1 - Math.min(0.6, Math.abs(c.speed) / 70));
@@ -592,7 +653,9 @@ function updateWalking(dt: number) {
   sound.engine(null);
   const f = (keys.has("KeyW") ? 1 : 0) - (keys.has("KeyS") ? 1 : 0);
   const s = (keys.has("KeyD") ? 1 : 0) - (keys.has("KeyA") ? 1 : 0);
-  const run = keys.has("ShiftLeft") || keys.has("ShiftRight");
+  boosting = false;
+  updateReserve(P.boost, false, dt, 30, 12);
+  const run = updateReserve(P.stamina, (f !== 0 || s !== 0) && (keys.has("ShiftLeft") || keys.has("ShiftRight")), dt, 22, 16);
   const shooting = time - P.lastFire < 0.7 || aimHeld;
   let moving = 0;
   if (f !== 0 || s !== 0) {
@@ -639,13 +702,18 @@ function updateEconomy(dt: number) {
   if (j) {
     j.t -= dt;
     markerRing.position.set(j.x, 40, j.z);
+    markerRing.rotation.y = time * 0.6;
+    (markerRing.material as THREE.MeshBasicMaterial).color.setHex(j.priority ? 0xffb347 : 0x40f0ff);
     if (dist2(P.x, P.z, j.x, j.z) < 6) {
-      P.cash += j.pay;
-      feed(`Delivery done: +$${j.pay}`);
+      const bonus = deliveryBonus(j.pay, j.t, j.duration);
+      P.cash += j.pay + bonus;
+      P.streak++;
+      feed(`Delivery #${P.streak}: +$${j.pay} + $${bonus} speed bonus!`);
       sfx("cash");
       P.job = null;
     } else if (j.t <= 0) {
-      feed("Too late. The buyer walked.");
+      P.streak = 0;
+      feed("Too late. The buyer walked. Delivery streak reset.");
       sfx("deny");
       P.job = null;
     }
@@ -694,7 +762,7 @@ function updateCamera(dt: number) {
   camLook.set(tx + dx * 30, ty + dy * 30, tz + dz * 30);
   camera.position.copy(camPos);
   camera.lookAt(camLook);
-  const targetFov = driving ? 68 + Math.min(14, Math.abs(P.car!.speed) * 0.4) : aimHeld ? 52 : 62;
+  const targetFov = driving ? 68 + Math.min(14, Math.abs(P.car!.speed) * 0.4) + (boosting ? 6 : 0) : aimHeld ? 52 : 62;
   camera.fov += (targetFov - camera.fov) * Math.min(1, dt * 5);
   camera.updateProjectionMatrix();
 }
@@ -706,7 +774,7 @@ let miniT = 0;
 function frame() {
   requestAnimationFrame(frame);
   const dt = Math.min(0.05, clock.getDelta());
-  if (playing || shopOpen) {
+  if (playing && !shopOpen && !P.won) {
     time += dt;
     if (P.deadT > 0) {
       P.deadT -= dt;
@@ -727,6 +795,7 @@ function frame() {
     for (const v of vehicles) if (v !== P.car) { v.rig.root.position.set(v.x, 0, v.z); v.rig.root.rotation.y = v.h; v.rig.motion(0, 0, false, time); }
     updateFoes(dt);
     updateEconomy(dt);
+    impacts.update(dt);
     if (hitFlash > 0) hitFlash -= dt;
     $("cross").classList.toggle("hit", hitFlash > 0);
     for (let i = tracers.length - 1; i >= 0; i--) {
@@ -742,8 +811,17 @@ function frame() {
   }
   updateCamera(dt);
   scenery.update(time, P.x, P.z);
-  renderer.render(scene, camera);
+  const night = 1 - cityClock(time).daylight;
+  headlights.intensity = P.car && night > 0.5 ? 32 : 0;
+  if (P.car) {
+    headlights.position.set(P.x + Math.sin(P.car.h) * 2, 1.2, P.z + Math.cos(P.car.h) * 2);
+    headlights.target.position.set(P.x + Math.sin(P.car.h) * 25, 0, P.z + Math.cos(P.car.h) * 25);
+  }
+  if (quality.value !== "performance") composer.render();
+  else renderer.render(scene, camera);
 }
 
 feed("Welcome to New Orleans. Walk to the gold ring at Mama Nola's.");
+updateHud();
+drawMini();
 frame();
