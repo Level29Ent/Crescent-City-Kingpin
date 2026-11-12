@@ -1,7 +1,9 @@
+import { mountShowroom } from './showroom.ts';
+import { banknoteCanvas } from './money.ts';
 import type { Campaign } from './campaign.ts';
 import { BLOCKS } from './campaign.ts';
 import { VEHICLES, FURNITURE, PROPERTIES, HEISTS, HEIST_CHOICES, MISSIONS, RIVALS, DISTRICT_NAMES, conditions, owns, furnished, loyal, plan, recon, assemble, execute, startMission, frontLaunder, buyProperty, buyVehicle, upgradeVehicle, startRun, upgradeDistrict, inventoryCap, playPoker } from './expansion.ts';
-export const EXPANSION_TABS = ['Missions','Garage','Heists','Properties','Interior','Rivals','Armory'];
+export const EXPANSION_TABS = ['Missions','Garage','Heists','Properties','Interior','Rivals','Armory','Cash'];
 type Hooks = { location():{x:number;z:number;district:number}; waypoint(x:number,z:number,name:string):void; close():void; notice(text:string):void;
   deploy(index:number):void; armory(weapon:number):void; gearOwned(weapon:number):boolean; reload():void; };
 export function renderExpansion(tab:string,c:Campaign,container:HTMLElement,h:Hooks):boolean {
@@ -21,6 +23,11 @@ export function renderExpansion(tab:string,c:Campaign,container:HTMLElement,h:Ho
     container.append(text('p','Dynamic pickup stashes and contraband boxes appear near traversable streets every 22 seconds (maximum 12). Walk within 1.8m to collect; they never pay you for simply waiting at spawn. Purple = goods, gold = cash, teal = mechanical parts.'));
   }else if(tab==='Garage'){
     container.append(text('p',`Stored vehicles ${e.cars.length}/8 · Parts ${e.parts}. Buy a vehicle, deploy it at the HQ garage, or send it on an automated contraband run. Runs consume unmarked crates upfront, carry roadblock risk, and pay dirty cash only after completion. You cannot drive a vehicle while it is dispatched.`));
+    const preview=card('Vehicle showroom','Inspect every vehicle before buying. Drag the preview to rotate. Viewing never spends money.');
+    const choices=document.createElement('select');choices.setAttribute('aria-label','Preview vehicle');
+    VEHICLES.forEach(v=>{const option=document.createElement('option');option.value=v.id;option.textContent=v.name;choices.append(option);});
+    choices.value='bike';preview.append(choices);const stage=document.createElement('div');preview.append(stage);mountShowroom(stage,6);
+    choices.onchange=()=>{stage.replaceChildren();const model=VEHICLES.find(v=>v.id===choices.value)!;mountShowroom(stage,model.style,model.id==='taxi'?0xf4be26:0x355e64);};
     for(const model of VEHICLES){const item=card(model.name,`$${model.price} clean · capacity ${model.capacity} crates · speed ${model.speed}× · armor ${Math.round(model.armor*100)}%.`);button(item,'Buy & store',()=>{buyVehicle(c,model.id);},c.clean<model.price||e.cars.length>=8);}
     e.cars.forEach((car,i)=>{const model=VEHICLES.find(v=>v.id===car.id)!;const run=e.runs.find(r=>r.car===i);const item=card(`Garage bay ${i+1} · ${model.name}`,`Engine ${car.engine}/3 · armor ${car.armor}/3${run?` · delivering ${Math.ceil(run.remaining)}s / ${Math.round(run.risk*100)}% intercept risk`:''}`);
       button(item,'Deploy at HQ',()=>{h.deploy(i);},!!run);
@@ -29,6 +36,12 @@ export function renderExpansion(tab:string,c:Campaign,container:HTMLElement,h:Ho
       button(item,`Auto delivery · ${model.capacity} crates`,()=>{startRun(c,i);},!!run||c.inventory[0]!<model.capacity);
       for(const [label,color]of [['Purple',0x682db5],['Gold',0xe7b449],['Green',0x237c60],['Black',0x17202a]] as const)button(item,label,()=>{car.color=color;});
     });
+  }else if(tab==='Cash'){
+    container.append(text('p','Detailed paper money with engraved-style borders, serial numbers, a cathedral vignette, note edges and currency straps. These are fictional Crescent Reserve game props, not real legal tender. Viewing this display never awards money.'));
+    const wallet=card('Your cash ledger',`$${Math.floor(c.clean).toLocaleString()} clean capital · $${Math.floor(c.dirty).toLocaleString()} dirty cash. Arena cash stashes contain four $20 notes and still pay exactly $80 once when collected.`);
+    mountShowroom(wallet,'cash');
+    const note=banknoteCanvas();note.className='banknote-preview';note.setAttribute('aria-label','Twenty Crescent game banknote design');container.append(note);
+    container.append(text('p','Cash comes from missions, recovered stashes and owned revenue assets. There is no free standing payout. The displayed bundle is illustrative; the ledger above is your spendable balance.'));
   }else if(tab==='Heists'){
     container.append(text('p','Every major heist has three phases: visit the landmark for Recon → assign paid, loyal specialists → make three tactical Execution choices. Clean planning fees are charged once, and every attempt has a 10-minute cooldown. Quiet choices improve—not guarantee—success. The Mint requires front-business level 3.'));
     for(const target of HEISTS){const p=plan(c,target.id);const loc=h.location();const near=Math.hypot(loc.x-target.x,loc.z-target.z)<14;

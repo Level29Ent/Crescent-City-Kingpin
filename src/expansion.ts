@@ -12,6 +12,12 @@ export const VEHICLES = [
   { id: 'coupe', name: 'Getaway Coupe', price: 2500, style: 2, capacity: 3, speed: 1.3, armor: .1 },
   { id: 'truck', name: 'Smuggling Truck', price: 4000, style: 1, capacity: 8, speed: .8, armor: .2 },
   { id: 'van', name: 'Armored Van', price: 8500, style: 4, capacity: 6, speed: .85, armor: .6 },
+  { id: 'bike', name: 'Quarter Runner Motorcycle', price: 900, style: 6, capacity: 1, speed: 1.45, armor: 0 },
+  { id: 'muscle', name: 'Bayou V8 Muscle Car', price: 3200, style: 7, capacity: 3, speed: 1.25, armor: .15 },
+  { id: 'suv', name: 'Levee 4×4 SUV', price: 4800, style: 5, capacity: 5, speed: 1.05, armor: .3 },
+  { id: 'taxi', name: 'Crescent City Taxi', price: 1400, style: 10, capacity: 3, speed: 1, armor: .05 },
+  { id: 'boxtruck', name: 'Port Hauler Box Truck', price: 6500, style: 8, capacity: 12, speed: .65, armor: .25 },
+  { id: 'minibus', name: 'Krewe Shuttle Minibus', price: 5200, style: 9, capacity: 7, speed: .75, armor: .2 },
 ] as const;
 export const FURNITURE = [
   { id: 'camera', name: 'Security camera grid', price: 600, effect: 'Raid warnings 20 seconds early; +30s defense response window' },

@@ -19,6 +19,7 @@ import { createEmpireUI } from './empire-ui.ts';
 import './campaign.css';
 import { conditions, VEHICLES, MISSIONS, missionInteract, tickExpansion, inventoryCap, cashCap, furnished } from './expansion.ts';
 import { createFestival } from './festival.ts';
+import { createMoneyBundle } from './money.ts';
 import { createWeather } from './weather.ts';
 const store = new SaveStore();
 const loaded = await store.load();
@@ -725,9 +726,10 @@ function updateDriving(dt: number) {
   c.speed = Math.max(-9, Math.min(CAR_MAX[k]! * performance * (boosting ? 1.35 : 1), c.speed));
   const want = (left ? 1 : 0) - (right ? 1 : 0);
   c.steer += (want - c.steer) * Math.min(1, dt * 8);
+  const handling = c.style===6?1.25:c.style===8||c.style===9?.7:1;
   const turn = Math.max(-1, Math.min(1, c.speed / 7)) * (1 - Math.min(0.6, Math.abs(c.speed) / 70));
-  c.h += c.steer * 1.9 * turn * dt;
-  const hit = slide(c, Math.sin(c.h) * c.speed * dt, Math.cos(c.h) * c.speed * dt, 1.5);
+  c.h += c.steer * 1.9 * handling * turn * dt;
+  const hit = slide(c, Math.sin(c.h) * c.speed * dt, Math.cos(c.h) * c.speed * dt, c.style===6?.55:c.style===8||c.style===9?1.8:1.5);
   if (hit && Math.abs(c.speed) > 6) {
     if (Math.abs(c.speed) > 14) hurt(Math.abs(c.speed) * 0.4);
     c.speed *= -0.25;
@@ -748,7 +750,8 @@ function updateDriving(dt: number) {
   sound.engine(Math.min(1, Math.abs(c.speed) / CAR_MAX[k]!));
   P.x = c.x;
   P.z = c.z;
-  player.setVisible(false);
+  player.setVisible(c.style===6);
+  if(c.style===6){player.root.position.set(c.x-Math.sin(c.h)*.15,.12,c.z-Math.cos(c.h)*.15);player.root.rotation.y=c.h;player.pose('ride',0,time,0,dt);}
 }
 
 function updateWalking(dt: number) {
@@ -903,7 +906,7 @@ function updateCamera(dt: number) {
 // Dynamic arena loot is finite, spatial and earned by moving to it.
 const pickupGeo = new THREE.BoxGeometry(.85,.7,.85);
 const pickupMaterials=[0xf5c34a,0x9c52e0,0x47d7c1].map(color=>new THREE.MeshStandardMaterial({color,emissive:color,emissiveIntensity:.45,roughness:.45}));
-const pickups:{mesh:THREE.Mesh;kind:number;x:number;z:number;life:number}[]=[];
+const pickups:{mesh:THREE.Object3D;kind:number;x:number;z:number;life:number}[]=[];
 let pickupClock=18;
 function updatePickups(dt:number){
   pickupClock+=dt;
@@ -913,11 +916,11 @@ function updatePickups(dt:number){
       const a=rnd(0,Math.PI*2),distance=rnd(12,45);
       const x=P.x+Math.sin(a)*distance,z=P.z+Math.cos(a)*distance;
       if(!walkable(x,z)||pushOut(x,z,1).hit||dist2(x,z,SPAWN.x,SPAWN.z)<12)continue;
-      const kind=Math.floor(rnd(0,3));const mesh=new THREE.Mesh(pickupGeo,pickupMaterials[kind]);mesh.position.set(x,.7,z);scene.add(mesh);
+      const kind=Math.floor(rnd(0,3));const mesh=kind===0?createMoneyBundle():new THREE.Mesh(pickupGeo,pickupMaterials[kind]);mesh.position.set(x,kind===0?.16:.7,z);scene.add(mesh);
       pickups.push({mesh,kind,x,z,life:180});break;
     }
   }
-  for(let i=pickups.length-1;i>=0;i--){const p=pickups[i]!;p.life-=dt;p.mesh.rotation.y+=dt;p.mesh.position.y=.7+Math.sin(time*3+i)*.12;
+  for(let i=pickups.length-1;i>=0;i--){const p=pickups[i]!;p.life-=dt;if(p.kind!==0){p.mesh.rotation.y+=dt;p.mesh.position.y=.7+Math.sin(time*3+i)*.12;}
     let collected=false;
     if(!P.car&&P.deadT<=0&&dist2(P.x,P.z,p.x,p.z)<1.8){
       if(p.kind===0){C.dirty=Math.min(cashCap(C),C.dirty+80);feed('Stash recovered: +$80 dirty');collected=true;}

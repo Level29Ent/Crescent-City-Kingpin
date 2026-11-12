@@ -53,3 +53,12 @@ The existing version-2 campaign save accepts older saves and fills the new expan
 The previously implemented global leaderboard is unchanged and still needs its shared database connection/owner terms acceptance; there is no local list labeled global. Local achievements retain one-time rewards. No new paid infrastructure is provisioned by this code change.
 
 Run `npm test`, `npm run typecheck`, and `npm run build`. Tests cover old campaign behavior plus weather, zero idle income, property eligibility, front capacities/fees, district levels, one-time vehicle delivery settlement, phased heists, rival showdowns, spatial parade objectives/escort, night rewards, migration and poker ranks. Long-duration play balance, actual touch gestures, live leaderboard storage and complete combat progression require further playtesting.
+
+
+## Extended vehicle roster & cash props
+
+The garage now offers ten vehicle types. The original sedan, coupe, smuggling truck and armored van keep their saved IDs and stats. Added: Quarter Runner motorcycle (one crate, 1.45× speed, no armor), Bayou V8 muscle car (three crates), Levee 4×4 SUV (five crates), Crescent City Taxi (three crates), Port Hauler box truck (12 crates, slow bulk transport), and Krewe Shuttle minibus (seven crates). Each can be bought, stored, painted, upgraded, deployed and dispatched with the existing rules. The eight-vehicle ownership limit is unchanged. Motorcycles have two wheels and a visible riding pose; SUV, muscle car, taxi, truck and minibus have distinct procedural body details. Motorcycle handling/collision width and heavy-vehicle steering/collision differ from ordinary cars.
+
+**Garage → Vehicle showroom** provides a free drag-to-rotate 3D preview before purchasing. It does not grant vehicles. Only a static frame and user rotation/resize redraws are rendered; preview WebGL resources are released when changing previews/tabs or closing management.
+
+**Empire → Cash** shows original engraved-style fictional Crescent Reserve notes and banded stacks. They have serials, ornate borders, a cathedral vignette, paper grain and visible layered edges, clearly labeled GAME PROP / NOT LEGAL TENDER. The display is decorative; the clean/dirty ledger is authoritative. Arena cash stashes replace gold cubes with four layered $20 game notes and still award $80 exactly once on collection. Their placement remains spatial and never under the standing player. No income rates, cash balances or reward amounts were increased by the visual redesign.
