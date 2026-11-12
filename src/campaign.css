@@ -59,3 +59,8 @@
 .mission-report { color: #ffdf81; padding: 12px; background: #59412666; border-left: 3px solid #ffdf81; }
 progress { width: min(100%,450px); height: 16px; accent-color: #bd74dc; display: block; margin: 10px 0; }
 @media (max-width:760px) { #empireTabs { max-height: 110px; overflow-y:auto; } #empireTabs button { font-size: 10px; padding: 6px 8px; } .safehouse-room { padding:8px; } .room-slot { font-size:10px; padding:5px; } #start p { font-size: 11px; margin:8px 0; } #start .overlay h1 { font-size:27px; } }
+
+.garage-preview { width: 100%; height: 240px; display: block; border: 1px solid #779ca54d; border-radius: 10px; margin-top: 12px; touch-action: none; cursor: grab; }
+.garage-preview:active { cursor: grabbing; }
+.banknote-preview { width: min(100%,760px); height: auto; margin: 12px auto; border-radius: 4px; box-shadow: 0 8px 25px #0007; }
+@media (max-width:760px) { .garage-preview { height:190px; } }

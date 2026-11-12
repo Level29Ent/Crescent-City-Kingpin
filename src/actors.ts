@@ -4,7 +4,7 @@ import { GLTFLoader, type GLTF } from "three/addons/loaders/GLTFLoader.js";
 import { clone as cloneModel } from "three/addons/utils/SkeletonUtils.js";
 
 export type PersonKind = "player" | "gangster" | "civilian" | "cop" | "boss";
-export type PersonMode = "idle" | "walk" | "run" | "aim" | "down";
+export type PersonMode = "idle" | "walk" | "run" | "aim" | "ride" | "down";
 export type Person = {
   root: THREE.Group;
   pose(mode: PersonMode, speed: number, time: number, weapon: number, dt: number): void;
@@ -74,6 +74,7 @@ type Gun = { g: THREE.Group; tip: THREE.Object3D; len: number; two: boolean };
 
 function buildGun(w: number): Gun {
   const g = new THREE.Group();
+  g.name=`weapon-${w}`;
   const metal = lam(0x25262b), wood = lam(0x7a4a24);
   const tip = new THREE.Object3D();
   let len = 0.3;
@@ -248,6 +249,7 @@ export function createPerson(kind: PersonKind, look: number, appearance?: Appear
       const holdGun = guns.length > 0;
       if (holdGun) setW(Math.max(0, Math.min(2, weapon | 0)));
       const w = curW < 0 ? 0 : curW;
+      guns.forEach((g,i)=>g.g.visible=mode!=="ride" && i===w);
       const spread = mode === "aim" ? 0.12 : 0;
       legL.rotation.set(s * (1 - blend * 0.6), 0, -spread);
       legR.rotation.set(-s * (1 - blend * 0.6), 0, spread);
@@ -267,9 +269,13 @@ export function createPerson(kind: PersonKind, look: number, appearance?: Appear
       torso.position.y = 1.14 + breathe;
       head.position.y = 1.58 + breathe + (moving ? Math.abs(Math.sin(time * freq)) * 0.03 : 0);
       inner.position.y = 0;
+      if(mode==='ride'){
+        armL.rotation.set(-1.15,0,.08);armR.rotation.set(-1.15,0,-.08);
+        legL.rotation.set(-.9,0,.25);legR.rotation.set(-.9,0,-.25);
+      }
       // down: lie on back
       const t = down;
-      inner.rotation.x = -t * (Math.PI / 2);
+      inner.rotation.x = mode==='ride'?.12:-t * (Math.PI / 2);
       inner.position.y = t * 0.2 * sc;
       inner.position.z = t * -0.1;
       if (twitch > 0) { inner.rotation.z = Math.sin(time * 40) * 0.05 * (twitch / 0.5); } else inner.rotation.z = 0;
@@ -311,17 +317,18 @@ export async function loadCarModels(): Promise<void> {
 export function carColors(): number[] { return COLORS.slice(); }
 
 export function createCar(style: number, color: number): Car {
+  if(style === 6) return createMotorcycle(color);
   const police = style === 3, sports = style === 2;
   const root = new THREE.Group();
   const body = new THREE.Group(); root.add(body);
   const paint = lam(police ? 0x14161b : color);
   const white = lam(0xf2f2f2), glass = lam(0x1d2c3a), dark = lam(0x1a1a1a), chrome = lam(0xc8ccd2);
-  const van = style === 4, truck = style === 1;
-  const len = van ? 5.5 : sports ? 4.4 : 4.6, w = van ? 2.4 : 2;
-  const h0 = sports ? 0.38 : 0.45, ch = van ? 1.2 : sports ? 0.42 : 0.55;
+  const van = style === 4, truck = style === 1, suv = style === 5, muscle = style === 7, freight = style === 8, bus = style === 9, taxi = style === 10;
+  const len = freight ? 7.2 : bus ? 6.7 : van ? 5.5 : muscle ? 5.1 : sports ? 4.4 : 4.6, w = freight || bus || van ? 2.4 : suv ? 2.2 : 2;
+  const h0 = sports ? 0.38 : 0.45, ch = van || suv || freight || bus ? .85 : sports ? .42 : .55;
   part(box(), paint, w, ch, len, 0, h0 + ch / 2, 0, body); // chassis
-  const cabH = sports ? 0.5 : 0.62, cabLen = sports ? 1.9 : 2.3;
-  const cabZ = truck ? 1 : sports ? -0.25 : -0.2;
+  const cabH = freight || bus ? 1.1 : suv ? .85 : sports ? .5 : .62, cabLen = bus ? 4.9 : suv ? 3 : sports ? 1.9 : 2.3;
+  const cabZ = freight ? 2.1 : truck ? 1 : sports ? -.25 : -.2;
   part(box(), glass, w - 0.2, cabH, cabLen, 0, h0 + ch + cabH / 2, cabZ, body);
   part(box(), police ? white : paint, w - 0.1, 0.07, cabLen - 0.5, 0, h0 + ch + cabH + 0.03, cabZ, body); // roof
   if(truck){
@@ -332,6 +339,33 @@ export function createCar(style: number, color: number): Car {
   if(van){
     part(box(),paint,w-.1,1.2,3.4,0,h0+ch+.5,-.9,body);
     for(const side of [-1,1])part(box(),dark,.06,.5,2.5,side*w/2,h0+ch+.55,-.9,body);
+  }
+  if(freight){
+    part(box(),lam(0xd8d8c9),w,2.45,4.7,0,2.05,-1,body);
+    for(const side of [-1,1])for(let z=-3;z<1.4;z+=.3)part(box(),chrome,.035,2.15,.035,side*(w/2+.01),2.08,z,body);
+    part(box(),dark,w-.1,.1,.05,0,3.15,-3.38,body);
+    for(const side of [-1,1])part(box(),chrome,.04,1.8,.08,side*.18,1.95,-3.4,body);
+  }
+  if(bus){
+    for(const side of [-1,1]){
+      part(box(),paint,.08,.18,5.3,side*(w/2-.03),1.55,-.2,body);
+      for(let z=-2.4;z<2.3;z+=.7)part(box(),paint,.09,1.2,.09,side*(w/2-.1),1.8,z,body);
+    }
+    part(box(),paint,w-.1,.1,5.3,0,2.42,-.2,body);
+  }
+  if(suv){
+    part(box(),dark,w+.05,.12,2.4,0,2.25,-.2,body);
+    for(const side of [-1,1])part(box(),chrome,.08,.12,2.5,side*.85,2.35,-.2,body);
+    const spare=part(cyl(),dark,.9,.24,.9,0,1.3,-len/2-.15,body);spare.rotation.x=Math.PI/2;
+  }
+  if(muscle){
+    for(const side of [-1,1])part(box(),dark,.24,.025,len-1,side*.35,h0+ch+.02,0,body);
+    part(box(),dark,.7,.22,.85,0,h0+ch+.1,1.35,body);
+    for(let x=-.6;x<=.6;x+=.4)part(box(),chrome,.08,.18,.06,x,h0+.24,len/2+.14,body);
+  }
+  if(taxi){
+    part(box(),lam(0xf0c435),.75,.23,.35,0,h0+ch+cabH+.2,0,body);
+    for(const side of [-1,1])for(let z=-.9;z<=.9;z+=.2)part(box(),Math.round(z*10)%2===0?dark:white,.025,.12,.2,side*(w/2+.015),h0+ch-.1,z,body);
   }
   if (police) {
     part(box(), white, w + 0.02, 0.22, 1.5, 0, h0 + 0.2, 0.2, body); // doors livery
@@ -362,7 +396,7 @@ export function createCar(style: number, color: number): Car {
     barMeshes.push(part(box(), barB, 0.6, 0.14, 0.3, 0.35, y, cabZ, body));
   }
   const wheels: { pivot: THREE.Group; spin: THREE.Group; front: boolean }[] = [];
-  const wr = 0.38;
+  const wr = suv || freight ? .46 : .38;
   for (const sx of [-1, 1]) for (const fz of [1, -1]) {
     const pivot = new THREE.Group();
     pivot.position.set(sx * (w / 2 - 0.1), wr, fz * (len / 2 - 0.85));
@@ -373,7 +407,7 @@ export function createCar(style: number, color: number): Car {
     wheels.push({ pivot, spin, front: fz > 0 });
   }
   const src = carModels[police ? 0 : sports ? 1 : [0, 2, 3, 0][Math.max(0, COLORS.indexOf(color)) % 4]!];
-  if (src && !van && !truck) {
+  if (src && style <= 3 && !truck) {
     const m = cloneModel(src.scene);
     const bb = new THREE.Box3().setFromObject(m);
     const k = len / (bb.max.z - bb.min.z);
@@ -426,4 +460,34 @@ export function createCar(style: number, color: number): Car {
     },
   };
   return car;
+}
+
+// Narrow two-wheel chassis with its own steering, wheel spin and cornering lean.
+function createMotorcycle(color: number): Car {
+  const root=new THREE.Group(), body=new THREE.Group();root.add(body);
+  const paint=lam(color),dark=lam(0x171b20),metal=lam(0x9da7ac),rubber=lam(0x101215);
+  part(box(),metal,.18,.28,1.5,0,.58,0,body);
+  part(sph(),paint,.65,.55,.9,0,.95,.3,body);
+  part(box(),dark,.45,.16,.85,0,.98,-.45,body);
+  part(box(),metal,.5,.35,.55,0,.59,.05,body);
+  part(box(),metal,.08,.1,1.2,.27,.52,-.25,body);
+  part(box(),metal,.8,.07,.08,0,1.33,.73,body);
+  for(const side of [-1,1])part(box(),dark,.17,.08,.09,side*.4,1.33,.73,body);
+  for(const side of [-1,1])part(box(),metal,.06,.8,.06,side*.12,.8,.91,body).rotation.x=-.18;
+  part(sph(),emi(0xffe9bb,1.3),.28,.25,.13,0,1.12,1,body);
+  const tail=new THREE.MeshStandardMaterial({color:0xb0141d,emissive:0xff1e20,emissiveIntensity:.4});
+  part(box(),tail,.23,.12,.08,0,1,-.91,body);
+  const wheels:{pivot:THREE.Group;spin:THREE.Group}[]=[];
+  for(const z of [-.92,.92]){
+    const pivot=new THREE.Group();pivot.position.set(0,.4,z);root.add(pivot);
+    const spin=new THREE.Group();pivot.add(spin);
+    const tire=part(cyl(),rubber,.8,.19,.8,0,0,0,spin);tire.rotation.z=Math.PI/2;
+    const hub=part(cyl(),metal,.47,.2,.47,0,0,0,spin);hub.rotation.z=Math.PI/2;wheels.push({pivot,spin});
+  }
+  let last=0,spin=0;
+  return {root,driverSeat:new THREE.Vector3(0,1,-.25),motion(speed,steer,brake,time){
+    const dt=Math.max(0,Math.min(.1,time-last));last=time;spin+=speed*dt/.4;
+    wheels.forEach(w=>{w.spin.rotation.x=spin;});wheels[1]!.pivot.rotation.y=steer*.4;
+    body.rotation.z=-steer*Math.min(.3,Math.abs(speed)*.012);tail.emissiveIntensity=brake?2.5:.4;
+  },dispose(){tail.dispose();root.removeFromParent();}};
 }
