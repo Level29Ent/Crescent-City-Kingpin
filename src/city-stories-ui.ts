@@ -4,7 +4,7 @@ export function cityStoriesPanel(c:Campaign,root:HTMLElement,h:{changed():void;t
  const text=(tag:string,value:string)=>{const el=document.createElement(tag);el.textContent=value;return el;};
  const card=(title:string,body:string)=>{const box=text('article','');box.className='empire-card';box.append(text('h3',title),text('p',body));root.append(box);return box;};
  const button=(parent:HTMLElement,title:string,action:()=>void,disabled=false)=>{const b=text('button',title) as HTMLButtonElement;b.disabled=disabled;b.onclick=()=>{action();h.changed();};parent.append(b);};
- root.append(text('h2','Stories & Exploration'),text('p','Three connected story chapters, with quiet or bold choices. Travel to the marked contact, press E to begin the encounter, defeat the named crew, then return to Mama Nola. Quiet choices improve loyalty; bold choices pay 35% extra but bring more heat. Complete onboarding or explicitly skip it in Legacy & Training first.'));
+ root.append(text('p','Three connected story chapters, with quiet or bold choices. Travel to the marked contact, press E to begin the encounter, defeat the named crew, then return to Mama Nola. Quiet choices improve loyalty; bold choices pay 35% extra but bring more heat. Complete onboarding or explicitly skip it in Legacy & Training first.'));
  const active=storyObjective(c);if(active){const box=card('Current story',active.text);button(box,'Track story objective',()=>{h.track(active.x,active.z,active.text);h.resume();});}
  STORIES.forEach((m,i)=>{
   const complete=c.cityStories.completed.includes(m.id),locked=i>0&&!c.cityStories.completed.includes(STORIES[i-1]!.id);
