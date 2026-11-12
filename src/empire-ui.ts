@@ -2,7 +2,7 @@ import { owns } from './expansion.ts';
 import { EXPANSION_TABS, renderExpansion } from './expansion-ui.ts';
 import { ACHIEVEMENTS, BLOCKS, EVENTS, GOODS, SPECIALISTS, activeCrew, bonus, heist, hire, launder, layLow, price, salePrice, resolveDefense, revenuePerMinute, settleWages, trade, type Campaign } from './campaign.ts';
 export type EmpireHooks = {
-  campaign: Campaign; pause(open: boolean): void; changed(): void; notice(text: string): void;
+  backRoom():void; buildings(): readonly {id:string;name:string;x:number;z:number}[]; enterBuilding(id:string):void; campaign: Campaign; pause(open: boolean): void; changed(): void; notice(text: string): void;
   location(): { x: number; z: number; district: number }; attack(id: string): void; waypoint(x: number, z: number, name: string): void;
   deploy(index: number): void; armory(weapon: number): void; gearOwned(weapon: number): boolean; appearance(): void; save(): void; reset(): Promise<void>; audio(): void;
 };
@@ -14,7 +14,7 @@ export function createEmpireUI(h: EmpireHooks) {
   const overlay = document.getElementById('empire')!;
   const content = document.getElementById('empireContent')!;
   const summary = document.getElementById('empireSummary')!;
-  const tabs = [...EXPANSION_TABS, 'Turf', 'Crew', 'Market', 'Safehouse', 'Character', 'Achievements', 'Leaderboard', 'Settings'];
+  const tabs = [...EXPANSION_TABS, 'Turf', 'Crew', 'Market', 'Safehouse', 'Character', 'Achievements', 'Leaderboard', 'Buildings', 'Settings'];
   let selected = 'Turf'; let opened = false;
   function button(parent: HTMLElement, text: string, fn: () => void, disabled = false) {
     const b = document.createElement('button'); b.textContent = text; b.disabled = disabled;
@@ -42,7 +42,14 @@ export function createEmpireUI(h: EmpireHooks) {
     Array.from(nav.children).forEach((b, i) => b.setAttribute('aria-pressed', String(tabs[i] === selected)));
     if (renderExpansion(selected,c,content,{location:h.location,waypoint:h.waypoint,close,notice:h.notice,deploy:h.deploy,armory:h.armory,gearOwned:h.gearOwned,reload:h.changed})) return;
     content.append(el('h2', selected));
-    if (selected === 'Turf') {
+    if (selected === 'Buildings') {
+      content.append(el('p','Eight walkable interiors. Enter on foot at the door; HQ also accepts its sheltered approach. Outdoor combat and income pause while inside. Visit the back desk for services; E at the teal exit or Exit Building returns you to your original street position. Property ownership and prices remain unchanged.'));
+      for(const b of h.buildings()){
+        const d=distance(h.location(),b.x,b.z),near=d<=(b.id==='hq'?24:4);
+        const item=card(b.name,`${d} m away · walkable furnished room · no entry fee`);
+        button(item,near?'Enter building':'Mark entrance',()=>{if(near){h.enterBuilding(b.id);close();}else{h.waypoint(b.x,b.z,b.name);close();}});
+      }
+    } else if (selected === 'Turf') {
       content.append(el('p', 'Select a corner to mark it on the minimap. Travel there, press E to start a fight, and defeat its guards. Controlled corners earn dirty cash per minute but raise heat. Rival attacks suspend that corner’s revenue.'));
       if (c.defense) {
         const block = BLOCKS.find(b => b.id === c.defense!.block)!;
@@ -102,6 +109,7 @@ export function createEmpireUI(h: EmpireHooks) {
     } else if (selected === 'Safehouse') {
       const near = distance(h.location(), 30, 4) < 10;
       content.append(el('p', `Mama Nola’s is your safehouse. ${near ? 'You are inside its safe zone.' : 'Travel to the gold HQ marker to launder cash or lay low.'} Operations pause while managing your empire.`));
+      button(content, 'Back room gear & import jobs', () => {close();h.backRoom();}, !near);
       button(content, 'Mark safehouse', () => { h.waypoint(30, 4, 'Safehouse'); close(); });
       const wash = card('Laundering desk', 'Convert dirty cash into clean capital at an 80% return (83% with a paid, loyal Hacker). High-tier upgrades and crew wages require clean funds. +2 heat per batch.');
       button(wash, 'Launder $500 dirty → $400 clean', () => { launder(c, 500); }, !near || c.dirty < 500);

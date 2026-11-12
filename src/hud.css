@@ -102,3 +102,22 @@
   #start button { min-height: 32px; padding: 7px 14px; }
   #start .quality { margin-top: 8px; }
 }
+/* Analog joystick replaces the overlapping directional buttons. */
+#moveJoystick { position: relative; width: 112px; height: 112px; margin: 0 auto; border-radius: 50%; border: 2px solid #a5d7d4aa; background: radial-gradient(circle, #1c4852aa, #102c3ac9); pointer-events: auto; touch-action: none; user-select: none; box-shadow: inset 0 0 20px #06121caa, 0 4px 16px #0005; }
+.joystick-knob { position: absolute; left: 50%; top: 50%; width: 42px; height: 42px; border-radius: 50%; transform: translate(-50%,-50%); background: linear-gradient(135deg,#a2c5c5,#3a6c77); border: 2px solid #e8f9edb0; box-shadow: 0 3px 10px #0006; pointer-events: none; }
+.joystick-label { position: absolute; left: 0; right: 0; bottom: 9px; font-size: 8px; color: #d6edeb; letter-spacing: 1px; text-align: center; pointer-events: none; }
+#insideLabel { color: #ffe2a0; font-size: 12px; margin-bottom: 5px; }
+body:not(.touch-enabled) #touchControls { display: none; }
+body.touch-enabled { --touch-height: 194px; }
+body.touch-enabled #touchControls { display: block; top: auto; height: var(--touch-height); bottom: calc(var(--toolbar-height) + max(16px, env(safe-area-inset-bottom))); left: var(--hud-edge); right: var(--hud-edge); }
+body.touch-enabled .touchMove { left: 0; bottom: 0; width: 40%; max-width: 180px; }
+body.touch-enabled .touchActions { right: 0; bottom: 0; width: 48%; max-width: 240px; grid-template-columns: repeat(2,minmax(0,1fr)); }
+body.touch-enabled #touchControls button { min-width: 0; padding: 8px 3px; font-size: 10px; min-height: 42px; overflow-wrap: anywhere; }
+body:not(.touch-enabled) { --touch-height: 0px; }
+@media (max-height:550px) {
+  body.touch-enabled { --touch-height: 96px; }
+  body.touch-enabled .touchActions { width: 48%; max-width: 360px; grid-template-columns: repeat(4,minmax(0,1fr)); }
+  body.touch-enabled #touchControls button { min-height:40px; font-size:9px; }
+  #moveJoystick { width: 86px; height: 86px; }
+  .joystick-knob { width: 34px; height: 34px; }
+}
