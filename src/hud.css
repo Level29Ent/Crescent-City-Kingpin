@@ -96,3 +96,9 @@
   #start p { font-size: 12px; margin: 8px 0; }
   #start .features { margin: 8px 0; }
 }
+@media (max-height: 550px) {
+  #start .eyebrow, #start .features, #start > p:first-of-type { display: none; }
+  #start > p { font-size: 10px; max-height: 90px; overflow-y: auto; }
+  #start button { min-height: 32px; padding: 7px 14px; }
+  #start .quality { margin-top: 8px; }
+}
