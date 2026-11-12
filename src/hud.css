@@ -154,3 +154,7 @@ body[data-tutorial="1"] #touchControls [data-control="Space"], body[data-tutoria
 #objectiveArrow { width:0; height:0; border-left:9px solid transparent; border-right:9px solid transparent; border-bottom:20px solid #82eadb; font-size:0; }
 @media(max-width:1000px){.quest-card{grid-column:1/-1;grid-row:auto;}}
 body[data-tutorial="0"] #weapon { visibility:hidden; }
+
+body[data-tutorial="0"] #touchControls [data-control="cover"] {display:none;}
+
+body[data-tutorial="1"] #touchControls [data-control="cover"] {display:none;}

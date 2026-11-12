@@ -107,6 +107,7 @@ export const WEAPONS: WeaponInfo[] = [
   { name: "Shotgun", cd: 0.85, dmg: 13, pellets: 7, spread: 0.085, range: 32 },
   { name: "Carbine", cd: .16, dmg: 25, pellets: 1, spread: .018, range: 110 },
   { name: "Marksman rifle", cd: .8, dmg: 75, pellets: 1, spread: .003, range: 160 },
+  { name: "Crescent Revolver", cd: .55, dmg: 58, pellets: 1, spread: .009, range: 90 },
 ];
 export type ShopItem = { id: number; name: string; desc: string; price: number };
 export const SHOP: ShopItem[] = [

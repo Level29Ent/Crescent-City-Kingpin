@@ -26,6 +26,8 @@ import { INTERIORS, nearestEntrance, indoorMove, createInterior, type InteriorDe
 import { conditions, VEHICLES, MISSIONS, missionInteract, tickExpansion, inventoryCap, cashCap, furnished } from './expansion.ts';
 import { createFestival } from './festival.ts';
 import { createMoneyBundle } from './money.ts';
+import {STORIES,DISCOVERIES,storyInteract,storyObjective,discover,tacticalHeading,coverReduction} from './city-stories.ts';
+import {createStreetLife} from './street-life.ts';
 import { createWeather } from './weather.ts';
 // Reserve the toolbar's actual wrapped height (including the optional parade button).
 const toolbar = document.getElementById('toolbar')!;
@@ -84,6 +86,17 @@ let lastCleaned=C.stats.cleaned;
 const doorwayGeometry=new THREE.RingGeometry(1.1,1.45,24);
 const doorwayMaterial=new THREE.MeshBasicMaterial({color:0x82e6d1,side:THREE.DoubleSide,transparent:true,opacity:.8,depthWrite:false});
 for(const entry of INTERIORS){const marker=new THREE.Mesh(doorwayGeometry,doorwayMaterial);marker.rotation.x=-Math.PI/2;marker.position.set(entry.x,.08,entry.z);scene.add(marker);}
+const streetLife=createStreetLife(scene);
+const coverStations=[{x:0,z:-115},{x:120,z:175},{x:-180,z:6},{x:60,z:6}];
+const coverGeo=new THREE.BoxGeometry(3,1.1,1),coverMat=new THREE.MeshStandardMaterial({color:0x706e51,roughness:1});
+for(const p of coverStations){const wall=new THREE.Mesh(coverGeo,coverMat);wall.position.set(p.x,.55,p.z);scene.add(wall);}
+const discoveryGeo=new THREE.OctahedronGeometry(.7),discoveryMat=new THREE.MeshStandardMaterial({color:0xf4c268,emissive:0x8c5f14,emissiveIntensity:.6});
+const landmarkProps=new THREE.Group();scene.add(landmarkProps);
+for(const [i,d] of DISCOVERIES.entries()){
+ const panel=new THREE.Mesh(new THREE.BoxGeometry(.3,3.5,5),new THREE.MeshStandardMaterial({color:[0x426c66,0xa64c79,0x767f8b,0x99733d][i],roughness:.8}));panel.position.set(d.x+7,1.75,d.z);landmarkProps.add(panel);
+ const lamp=new THREE.Mesh(new THREE.SphereGeometry(.3,8,6),new THREE.MeshBasicMaterial({color:0xffd47e}));lamp.position.set(d.x+7,3.8,d.z);landmarkProps.add(lamp);
+}
+const discoveryMeshes=DISCOVERIES.map(d=>{const mesh=new THREE.Mesh(discoveryGeo,discoveryMat);mesh.position.set(d.x,1.2,d.z+3);scene.add(mesh);return mesh;});
 const festival = createFestival(scene);
 const weather = createWeather(scene);
 const shotLight = new THREE.PointLight(0xffb760,0,8);scene.add(shotLight);
@@ -97,7 +110,7 @@ type Vehicle = { rig: Car; style: number; x: number; z: number; h: number; speed
 
 const P = {
   x: SPAWN.x, z: SPAWN.z, heading: SPAWN.heading, hp: MAX_HP, armor: 0, heat: 0,
-  weapon: 0, owned: [true, false, false, false, false], lastFire: -10, deadT: 0, car: null as Vehicle | null,
+  weapon: 0, owned: [true, false, false, false, false, false], lastFire: -10, deadT: 0, car: null as Vehicle | null,
   captured: new Set<number>([0]), kills: new Map<number, number>(), bossOut: new Set<number>(),
   job: null as null | { name: string; x: number; z: number; t: number; duration: number; pay: number; priority: boolean }, won: false,
   streak: 0, stamina: { value: 100, exhausted: false }, boost: { value: 100, exhausted: false },
@@ -111,6 +124,8 @@ let introElapsed = 0;
 let needsCharacter = !loaded;
 let missionUnlockUntil = 0;
 let shake=0;
+let crouched=false;
+let storySpawned=false;
 let tutorialRival: Foe|null=null;
 let tutorialCar: Vehicle|null=null;
 let effectClock=0;
@@ -194,7 +209,7 @@ if (loaded && Array.isArray(loaded.player.foes)) {
     const f = spawnFoe(raw.kind, x, z, Math.floor(bounded(raw.district, -1, -1, 4)));
     f.mugged = raw.mugged === true;
     f.hp = bounded(raw.hp, 55, 1, 260); f.aggro = raw.aggro === true;
-    if (BLOCKS.some(b => b.id === raw.blockId)) f.blockId = raw.blockId;
+    if (BLOCKS.some(b => b.id === raw.blockId)||['tutorial','ambush',...STORIES.map(m=>`story:${m.id}`)].includes(raw.blockId)) f.blockId = raw.blockId;
   }
 } else for (const d of DISTRICTS) {
   if (P.captured.has(d.id)) continue;
@@ -300,6 +315,8 @@ function updateHud() {
   if (C.defense && !battle && !mission) obj = `TURF ATTACK: ${BLOCKS.find(b => b.id === C.defense!.block)!.name} · ${Math.ceil(C.defense.remaining)}s · M to respond`;
   if(inside)obj=`${inside.def.name} · walk to service desk · E at exit / Esc to leave`;
   if(target){const angle=Math.atan2(target.x-P.x,target.z-P.z)-yaw;$('objectiveArrow').style.transform=`rotate(${-angle}rad)`;}
+  const story=inside?null:storyObjective(C);if(story){obj=story.text;if(C.cityStories.active?.step===1){const enemies=foes.filter(f=>!f.dead&&f.blockId===`story:${C.cityStories.active!.id}`);obj+=` · ${enemies.length} rivals left${enemies[0]?` · lead HP ${Math.ceil(enemies[0].hp)}`:''}`;}}
+  if(crouched&&!inside)obj=(coverStations.some(p=>dist2(P.x,P.z,p.x,p.z)<2.4)?'COVERED (-60% damage) · ':'CROUCHED · ')+obj;
   if(C.legacy.tutorial<3)obj=TUTORIAL[C.legacy.tutorial]!;
   $('questTracker').textContent=C.legacy.tutorial<3?`TUTORIAL ${C.legacy.tutorial+1}/3`:C.legacy.daily&&!C.legacy.daily.finished?`DAILY: checkpoint ${C.legacy.daily.step+1}/3 · ${C.legacy.daily.elapsed.toFixed(1)}s`:`EMPIRE OBJECTIVE · Launder $${Math.max(0,10000-C.stats.cleaned).toLocaleString()} more · Capture ${Math.max(0,5-C.owned.length)} more corners · $${Math.floor(C.clean).toLocaleString()} / $1,000,000 clean`;
   $("obj").textContent = obj;
@@ -333,8 +350,9 @@ addEventListener("keydown", (e) => {
   keys.add(e.code);
   if (!playing || shopOpen || managing) return;
   if (e.code === "KeyE") interact();
+  if(e.code==='KeyC'&&!e.repeat)crouched=!crouched;
   if (e.code === "KeyR") reloadWeapon();
-  if (/^Digit[1-5]$/.test(e.code)) {
+  if (/^Digit[1-6]$/.test(e.code)) {
     const w = Number(e.code.slice(-1)) - 1;
     if (P.owned[w]) { P.weapon = w; reloading = 0; }
   }
@@ -486,6 +504,13 @@ function closeShop() {
 
 // ───────── interaction ─────────
 function interact() {
+  if(!inside&&C.legacy.tutorial>=3){
+    const story=storyInteract(C,P.x,P.z);
+    if(story==='fight'){spawnStoryEncounter();feed('Encounter started. Use C / COVER beside sandbags to reduce damage.');saveGame();return;}
+    if(story==='complete'){feed('Chapter complete! Return to Stories & Exploration for the next dialogue.');sfx('capture');saveGame();return;}
+    const cache=DISCOVERIES.find(d=>!C.cityStories.discovered.includes(d.id)&&dist2(P.x,P.z,d.x,d.z)<6);
+    if(cache&&discover(C,cache.id)){feed(`Discovered ${cache.name}! One-time cache recovered.`);sfx('cash');saveGame();return;}
+  }
   if(micro?.kind===0&&dist2(P.x,P.z,micro.x,micro.z)<5){if(C.dirty>=100){C.dirty-=100;C.heat=Math.max(0,C.heat-8);micro.t=0;feed('Checkpoint bribe paid.');saveGame();}else feed('Need $100 dirty cash, or find another route.');return;}
   if(C.legacy.tutorial===0&&dist2(P.x,P.z,HQ.x,HQ.z)<8){
     advanceTutorial(C,0);feed('Mama Nola: a rival is shaking down our corner. Defend yourself — aim, fire and reload.');
@@ -537,6 +562,7 @@ let hitFlash = 0;
 
 function hurt(dmg: number) {
   if (P.deadT > 0 || P.won) return;
+  dmg*=coverReduction(coverStations.some(p=>dist2(P.x,P.z,p.x,p.z)<2.4),crouched&&!P.car);
   const soak = Math.min(P.armor, dmg * 0.6);
   P.armor -= soak;
   const stored = P.car?.garage !== undefined ? C.expansion.cars[P.car.garage] : null;
@@ -585,6 +611,7 @@ function damageFoe(f: Foe, dmg: number, byPlayer: boolean) {
       sfx("wanted");
     }
   }
+  if(f.blockId?.startsWith('story:'))return;
   if (f.kind === "boss") {
     const d = DISTRICTS[f.district]!;
     P.captured.add(f.district);
@@ -618,7 +645,7 @@ function rayHit(ox: number, oy: number, oz: number, dx: number, dy: number, dz: 
   return { foe: best, t: bt, head };
 }
 
-const MAGAZINES = [12,30,6,24,5];
+const MAGAZINES = [12,30,6,24,5,6];
 const ammo = [...MAGAZINES];
 let reloading = 0;
 let recoil = 0;
@@ -639,7 +666,7 @@ function fire() {
   player.root.updateMatrixWorld(true);
   player.muzzle(_o);
   const base = new THREE.Vector3().subVectors(_e, _o).normalize();
-  const spread = w.spread * (aimHeld ? .4 : 1) * (C.expansion.gear.includes("Crescent Precision Barrel") ? .75 : 1);
+  const spread = w.spread * (aimHeld ? .4 : 1) * (crouched?.65:1) * (C.expansion.gear.includes("Crescent Precision Barrel") ? .75 : 1);
   for (let i = 0; i < w.pellets; i++) {
     const dir = base.clone();
     dir.x += rnd(-spread, spread);
@@ -675,6 +702,7 @@ function slide(o: { x: number; z: number }, dx: number, dz: number, r: number): 
     else if (walkable(o.x, nz)) nx = o.x;
     else return true;
   }
+  if(coverStations.some(p=>Math.abs(nx-p.x)<1.5+r&&Math.abs(nz-p.z)<.5+r))return true;
   if (roadblock && dist2(nx, nz, roadblock.vehicle.x, roadblock.vehicle.z) < r + 2.2) return true;
   if(micro?.kind===0&&micro.t>0&&dist2(nx,nz,micro.x,micro.z)<r+1.5&&(!P.car||Math.abs(P.car.speed)<15))return true;
   const p = pushOut(nx, nz, r);
@@ -717,6 +745,7 @@ function updateFoes(dt: number) {
       if (d < 40) copsNear = true;
     }
     if (f.kind === "civilian") {
+      if(streetLife.near(f.x,f.z)) {f.flee=Math.max(f.flee,1);}
       if (f.flee > 0) {
         f.flee -= dt;
         const a = Math.atan2(f.x - px, f.z - pz);
@@ -734,9 +763,9 @@ function updateFoes(dt: number) {
       if (!f.aggro && los && d < 40*sight) f.aggro = true;
       if (f.aggro && d > 90) f.aggro = f.kind === "cop";
       if (f.aggro) {
-        f.heading = Math.atan2(px - f.x, pz - f.z);
+        f.heading = tacticalHeading(Math.atan2(px - f.x, pz - f.z),d,i,time);
         aiming = true;
-        if (d > 13 || !los) moving = f.speed;
+        if (d > 13 || !los || (d>9&&Math.floor(time/3+i)%3===0)) moving = f.speed;
         f.cd -= dt;
         if (f.cd <= 0 && los && d < 42*sight) {
           f.cd = f.kind === "boss" ? rnd(0.6, 1) : rnd(1, 1.7);
@@ -810,12 +839,14 @@ function updateDriving(dt: number) {
   if(Math.abs(c.speed)>32)addHeat(C,dt*.25);
   P.x = c.x;
   P.z = c.z;
+  player.root.scale.y=1;
   player.setVisible(c.style===6);
   if(c.style===6){player.root.position.set(c.x-Math.sin(c.h)*.15,.12,c.z-Math.cos(c.h)*.15);player.root.rotation.y=c.h;player.pose('ride',0,time,0,dt);}
 }
 
 function updateWalking(dt: number) {
   player.setVisible(true);
+  player.root.scale.y=crouched?.78:1;
   sound.engine(null);
   const f = Math.max(-1,Math.min(1,(keys.has("KeyW") || keys.has("ArrowUp") ? 1 : 0) - (keys.has("KeyS") || keys.has("ArrowDown") ? 1 : 0) + joystick.value.y*C.legacy.sensitivity));
   const s = Math.max(-1,Math.min(1,(keys.has("KeyD") || keys.has("ArrowRight") ? 1 : 0) - (keys.has("KeyA") || keys.has("ArrowLeft") ? 1 : 0) + joystick.value.x*C.legacy.sensitivity));
@@ -831,7 +862,7 @@ function updateWalking(dt: number) {
     const m = Math.hypot(dx, dz);
     dx /= m;
     dz /= m;
-    moving = (run ? 8.2*(C.legacy.trait==='enforcer'?.85:1) : 5)*Math.min(1,Math.hypot(f,s));
+    moving = (crouched?2.6:run ? 8.2*(C.legacy.trait==='enforcer'?.85:1) : 5)*Math.min(1,Math.hypot(f,s));
     walkVelocity.x+=(dx*moving-walkVelocity.x)*(1-Math.exp(-14*dt));
     walkVelocity.y+=(dz*moving-walkVelocity.y)*(1-Math.exp(-14*dt));
     slide(P, walkVelocity.x * dt, walkVelocity.y * dt, 0.5);
@@ -869,6 +900,7 @@ function updateEconomy(dt: number) {
   }
   for(const msg of tickExpansion(C,dt)){feed(msg);if(msg.includes('WARNING')||msg.includes('SHOWDOWN'))sfx('wanted');}
   if (P.car?.garage !== undefined && C.expansion.runs.some(r=>r.car===P.car!.garage)) {P.car=null;player.setVisible(true);}
+  updateStoryCity(dt);
   updateTraining(dt);
   if(C.legacy.daily&&!C.legacy.daily.finished){C.legacy.daily.elapsed+=dt;const point=dailyRoute(C.legacy.daily.date)[C.legacy.daily.step];if(point)target={...point,name:'Daily speedrun checkpoint'};if(dailyCheckpoint(C,P.x,P.z)){feed('Daily route complete! +$1,000 clean.');saveGame();}}
   milestoneRewards(C);
@@ -928,8 +960,12 @@ function prompt() {
     t=inside.z>5?'E / INTERACT: exit building':inside.z < -3.6 && Math.abs(inside.x)<3?'E / INTERACT: service desk':'Walk to the desk · Exit at the teal doorway';
   } else if (!P.car && P.deadT <= 0) {
     const corner = BLOCKS.find(b => dist2(P.x, P.z, b.x, b.z) < 14 && (!C.owned.includes(b.id) || C.defense?.block === b.id));
+    const cache=DISCOVERIES.find(d=>!C.cityStories.discovered.includes(d.id)&&dist2(P.x,P.z,d.x,d.z)<6);
+    const storyContact=storyObjective(C);
     const entrance=nearestEntrance(P.x,P.z);
-    if(entrance)t=`E / INTERACT: enter ${entrance.name}`;
+    if(storyContact&&C.cityStories.active?.step!==1&&dist2(P.x,P.z,storyContact.x,storyContact.z)<8)t='E / INTERACT: story contact';
+    else if(cache)t=`E / INTERACT: discover ${cache.name}`;
+    else if(entrance)t=`E / INTERACT: enter ${entrance.name}`;
     else if(foes.some(f=>f.kind==='gangster'&&!f.dead&&!f.mugged&&dist2(P.x,P.z,f.x,f.z)<2.5))t='E: shake down rival courier (raises heat)';
     else if (corner && !battle) t = `E: ${C.defense?.block === corner.id ? 'defend' : 'fight for'} ${corner.name}`;
     else
@@ -1075,7 +1111,7 @@ const empire = createEmpireUI({
   },
   gearOwned: weapon => P.owned[weapon]===true,
   armory(weapon) {
-    const prices=[0,2500,5000,6500,9000];if(!WEAPONS[weapon])return;
+    const prices=[0,2500,5000,6500,9000,12000];if(!WEAPONS[weapon]||(weapon===5&&!C.cityStories.revolver))return;
     if(!P.owned[weapon]){if(C.clean<prices[weapon]!)return;C.clean-=prices[weapon]!;P.owned[weapon]=true;}
     P.weapon=weapon;reloading=0;feed(`${WEAPONS[weapon]!.name} equipped.`);
   },
@@ -1142,6 +1178,7 @@ for (const element of Array.from(document.querySelectorAll<HTMLElement>('[data-c
     element.setPointerCapture(e.pointerId);
     if (code === 'fire') mouseDown = true;
     else if (code === 'aim') aimHeld = true;
+    else if(code==='cover')crouched=!crouched;
     else if (code === 'reload') reloadWeapon();
     else if (code === 'weapon') { for (let i = 1; i <= WEAPONS.length; i++) { const next = (P.weapon + i) % WEAPONS.length; if (P.owned[next]) { P.weapon = next; reloading=0; break; } } }
     else if (code === 'KeyE') interact();
@@ -1195,6 +1232,24 @@ function updateIndoor(dt:number){
   if(speed>.1)inside.room.avatar.root.rotation.y=Math.atan2(next.x-inside.x,next.z-inside.z);
   inside.x=next.x;inside.z=next.z;inside.room.avatar.root.position.set(next.x,0,next.z);
   inside.room.avatar.pose(speed>.1?'walk':'idle',speed,performance.now()/1000,0,dt);
+}
+
+function spawnStoryEncounter(){
+ const a=C.cityStories.active;if(!a||a.step!==1)return;
+ const def=STORIES.find(m=>m.id===a.id)!;
+ if(foes.some(f=>!f.dead&&f.blockId===`story:${a.id}`)){storySpawned=true;return;}
+ const count=a.id==='crown'?3:2;
+ for(let i=0;i<count;i++){const [x,z]=freeSpot(def.x+(i-1)*4,def.z+8,5);const f=spawnFoe(i===0?'boss':'gangster',x,z,0);f.blockId=`story:${a.id}`;f.hp=i===0?(a.id==='crown'?220:140):65;f.aggro=true;}
+ storySpawned=true;
+}
+function updateStoryCity(dt:number){
+ const a=C.cityStories.active;
+ if(a){if(a.step===1&&!storySpawned)spawnStoryEncounter();
+ if(a.step===1&&storySpawned&&!foes.some(f=>!f.dead&&f.blockId===`story:${a.id}`)){a.step=2;storySpawned=false;feed('Rival encounter won. Return to Mama Nola with the evidence.');saveGame();}
+ const objective=storyObjective(C);if(objective)target={x:objective.x,z:objective.z,name:objective.text};}
+ DISCOVERIES.forEach((d,i)=>{discoveryMeshes[i]!.visible=!C.cityStories.discovered.includes(d.id);discoveryMeshes[i]!.rotation.y=time*.7;});
+ streetLife.update(dt,time,P.x,P.z,C.heat,C.legacy.tutorial>=3,Cspeed=>{C.cityStories.trafficHits++;if(P.car){P.car.speed*=.65;hurt(Cspeed*.25);addHeat(C,2);}else hurt(4);shake=.3;});
+ if(P.car&&streetLife.near(P.x,P.z))P.car.speed*=Math.exp(-dt*3);
 }
 
 // Staged onboarding teaches one mechanic at a time, without paying for idling.
