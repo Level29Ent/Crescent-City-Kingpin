@@ -394,13 +394,8 @@ $("go").addEventListener("click", () => {
 });
 document.addEventListener("pointerlockchange", () => {
   if (performance.now()<missionUnlockUntil) {locked=document.pointerLockElement===renderer.domElement;return;}
-  if (document.pointerLockElement !== renderer.domElement && locked && playing && !shopOpen && !managing && !P.won) {
-    $("go").textContent = "RESUME";
-    $("start").style.display = "flex";
-    playing = false;
-    keys.clear(); joystick.reset(); mouseDown = aimHeld = false;
-    locked = false;
-  }
+  if (document.pointerLockElement !== renderer.domElement && locked && playing && !shopOpen && !managing && !P.won) pauseRun();
+
 });
 
 // ───────── shop ─────────
@@ -1053,7 +1048,7 @@ function snapshotPlayer() {
 function saveGame(manual = false) {
   if (resetting) return;
   const result = store.save(C, snapshotPlayer());
-  if (manual) void result.mirrored.then(mirrored => feed(result.local && mirrored ? 'Game saved to localStorage and IndexedDB.' : result.local || mirrored ? 'Game saved to one storage copy; backup unavailable.' : 'Save failed: browser storage is unavailable.'));
+  if (manual) void result.mirrored.then(mirrored => {const message=result.local && mirrored ? 'Game saved to localStorage and IndexedDB.' : result.local || mirrored ? 'Game saved to one storage copy; backup unavailable.' : 'Save failed: browser storage is unavailable.';feed(message);$('saveNotice').textContent=message;});
 }
 $('paradeView').onclick=()=>{
   if(C.expansion.mission?.id!=='parade')return;

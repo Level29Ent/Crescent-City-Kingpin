@@ -149,3 +149,8 @@ body:not(.touch-enabled) { --touch-height: 0px; }
 
 body[data-tutorial="0"] #touchControls [data-control="fire"], body[data-tutorial="0"] #touchControls [data-control="aim"], body[data-tutorial="0"] #touchControls [data-control="weapon"], body[data-tutorial="0"] #touchControls [data-control="reload"], body[data-tutorial="0"] #touchControls [data-control="Space"], body[data-tutorial="0"] #touchControls [data-control="ShiftLeft"] {display:none;}
 body[data-tutorial="1"] #touchControls [data-control="Space"], body[data-tutorial="1"] #touchControls [data-control="ShiftLeft"] {display:none;}
+
+.quest-card { grid-column:1; grid-row:2; }
+#objectiveArrow { width:0; height:0; border-left:9px solid transparent; border-right:9px solid transparent; border-bottom:20px solid #82eadb; font-size:0; }
+@media(max-width:1000px){.quest-card{grid-column:1/-1;grid-row:auto;}}
+body[data-tutorial="0"] #weapon { visibility:hidden; }
