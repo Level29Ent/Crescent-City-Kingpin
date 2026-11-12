@@ -10,6 +10,8 @@ Choose **Mardi Gras / Missions** on the title screen or **Empire → Missions �
 2. Recover three float-power crates at the south barricade, bead stand and north balcony.
 3. Follow the lead jester float from z=42 to z=102. Stay within 18 m for 40 seconds of escort progress, then interact at the finale.
 
+The HUD’s **Parade Balcony** button offers a paused elevated overview; Return to Play restores the prior play/pause state. It does not teleport the player or complete objectives.
+
 The six-minute mission has four moving, stacked parade floats, giant jester masks, purple/green/gold lamps and beads, ribbons, overhead bunting, 340 instanced spectators, float riders and falling confetti. Floats and static decorations are batched per material. This is a stylized low-poly interpretation of the reference photos, not photorealistic New Orleans. Spectators and floats are decorative, not targetable combatants or vehicle colliders. Shooting along the route raises police heat. The mission awards dirty cash and a unique Krewe Captain Medallion; its permanent +5% reward buff applies to subsequent side-mission completions.
 
 Other spatial, timed missions: French Quarter Night Courier, Recover the Stolen Purses and Chop Shop Parts Run. Mechanics returns six parts for vehicle/weapon upgrades. Missions and escort progress persist through saves; mission and transport timers resume after offline sessions instead of failing unseen.

@@ -90,6 +90,8 @@ let time = 0;
 let playing = false;
 let shopOpen = false;
 let managing = false;
+let balcony = false;
+let balconyWasPlaying = false;
 let pausedForHidden = false;
 let resetting = false;
 let target: null | { x: number; z: number; name: string } = null;
@@ -278,6 +280,7 @@ let mouseDown = false;
 let aimHeld = false;
 addEventListener("keydown", (e) => {
   if ((e.target as HTMLElement)?.matches("input, select, textarea")) return;
+  if (balcony) {if(e.code === "Escape") $("paradeView").click(); return;}
   if (e.code === "KeyM") { e.preventDefault(); if (!e.repeat) { if (empire.isOpen()) empire.close(); else empire.open(); } return; }
   if (managing) return;
   if (["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.code)) e.preventDefault();
@@ -867,9 +870,11 @@ function prompt() {
   el.style.display = t && playing && !managing && !shopOpen ? "block" : "none";
 }
 
+const balconyPosition = new THREE.Vector3(9,24,45);
 const camPos = new THREE.Vector3();
 const camLook = new THREE.Vector3();
 function updateCamera(dt: number) {
+  if(balcony){camera.position.lerp(balconyPosition,1-Math.exp(-8*dt));camera.lookAt(0,2,-45);camera.fov=62;camera.updateProjectionMatrix();return;}
   if (P.car && Math.abs(P.car.speed) > 3 && !mouseDown) {
     let diff = P.car.h - yaw;
     diff = Math.atan2(Math.sin(diff), Math.cos(diff));
@@ -972,6 +977,11 @@ function saveGame(manual = false) {
   const result = store.save(C, snapshotPlayer());
   if (manual) void result.mirrored.then(mirrored => feed(result.local && mirrored ? 'Game saved to localStorage and IndexedDB.' : result.local || mirrored ? 'Game saved to one storage copy; backup unavailable.' : 'Save failed: browser storage is unavailable.'));
 }
+$('paradeView').onclick=()=>{
+  if(C.expansion.mission?.id!=='parade')return;
+  if(!balcony){balconyWasPlaying=playing;playing=false;balcony=true;keys.clear();mouseDown=aimHeld=false;document.exitPointerLock();$('start').style.display='none';$('hud').style.display='none';$('paradeView').textContent='RETURN TO PLAY';}
+  else {balcony=false;$('hud').style.display='';playing=balconyWasPlaying;$('paradeView').textContent='PARADE BALCONY';if(playing)lock();else $('start').style.display='flex';}
+};
 let wasPlaying = false;
 const empire = createEmpireUI({
   deploy(index) {
@@ -991,7 +1001,7 @@ const empire = createEmpireUI({
   },
   campaign: C,
   pause(open) {
-    if (open) { wasPlaying = playing; managing = true; keys.clear(); mouseDown = aimHeld = false; document.exitPointerLock(); }
+    if (open) { if(balcony){balcony=false;$('hud').style.display='';playing=balconyWasPlaying;$("paradeView").textContent="PARADE BALCONY";} wasPlaying = playing; managing = true; keys.clear(); mouseDown = aimHeld = false; document.exitPointerLock(); }
     else { managing = false; playing = wasPlaying; if (playing) { $('start').style.display = 'none'; lock(); } }
   },
   changed() { if (battle?.defending && C.defense?.block !== battle.block) clearBattle(); for (const a of unlock(C)) feed(`Achievement: ${a}`); updateHud(); saveGame(); sfx('click'); },
@@ -1117,6 +1127,7 @@ function frame() {
   scenery.update(time, P.x, P.z);
   const weatherState=weather.update(time,playing&&!managing&&!shopOpen?dt:0,P.x,P.z);
   const parade=C.expansion.mission?.id==='parade';
+  $('paradeView').hidden=!parade;
   festival.update(time,playing&&!managing&&!shopOpen?dt:0,parade,parade&&C.expansion.mission?.step===4?(C.expansion.mission.escort??0):null);
   sound.environment(P.x>60&&P.z<-60,weatherState.weather==='Rainstorm');
   shotLight.intensity=Math.max(0,1-(time-P.lastFire)*18)*12;
