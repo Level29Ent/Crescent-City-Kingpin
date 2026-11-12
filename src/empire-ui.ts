@@ -2,7 +2,7 @@ import { owns } from './expansion.ts';
 import { EXPANSION_TABS, renderExpansion } from './expansion-ui.ts';
 import { ACHIEVEMENTS, BLOCKS, EVENTS, GOODS, SPECIALISTS, activeCrew, bonus, heist, hire, launder, layLow, price, salePrice, resolveDefense, revenuePerMinute, settleWages, trade, type Campaign } from './campaign.ts';
 export type EmpireHooks = {
-  backRoom():void; buildings(): readonly {id:string;name:string;x:number;z:number}[]; enterBuilding(id:string):void; campaign: Campaign; pause(open: boolean): void; changed(): void; notice(text: string): void;
+  missionStarted():void; characterConfirmed():void; backRoom():void; buildings(): readonly {id:string;name:string;x:number;z:number}[]; enterBuilding(id:string):void; campaign: Campaign; pause(open: boolean): void; changed(): void; notice(text: string): void;
   location(): { x: number; z: number; district: number }; attack(id: string): void; waypoint(x: number, z: number, name: string): void;
   deploy(index: number): void; armory(weapon: number): void; gearOwned(weapon: number): boolean; appearance(): void; save(): void; reset(): Promise<void>; audio(): void;
 };
@@ -40,7 +40,7 @@ export function createEmpireUI(h: EmpireHooks) {
     content.replaceChildren();
     summary.textContent = `${money(c.clean)} clean · ${money(c.dirty)} dirty · Heat ${Math.floor(c.heat)}/100 · ${Math.floor(revenuePerMinute(c))}/min from turf`;
     Array.from(nav.children).forEach((b, i) => b.setAttribute('aria-pressed', String(tabs[i] === selected)));
-    if (renderExpansion(selected,c,content,{location:h.location,waypoint:h.waypoint,close,notice:h.notice,deploy:h.deploy,armory:h.armory,gearOwned:h.gearOwned,reload:h.changed})) return;
+    if (renderExpansion(selected,c,content,{location:h.location,waypoint:h.waypoint,close,notice:h.notice,deploy:h.deploy,armory:h.armory,gearOwned:h.gearOwned,missionStarted:h.missionStarted,reload:h.changed})) return;
     content.append(el('h2', selected));
     if (selected === 'Buildings') {
       content.append(el('p','Eight walkable interiors. Enter on foot at the door; HQ also accepts its sheltered approach. Outdoor combat and income pause while inside. Visit the back desk for services; E at the teal exit or Exit Building returns you to your original street position. Property ownership and prices remain unchanged.'));
@@ -138,7 +138,7 @@ export function createEmpireUI(h: EmpireHooks) {
       select('Hair', hairs, hairs[c.avatar.hair]!, v => c.avatar.hair = hairs.indexOf(v));
       const label = el('label', 'Player alias (public only if you submit a score)', 'field');
       const alias = document.createElement('input'); alias.value = c.alias; alias.maxLength = 24; alias.onchange = () => { c.alias = alias.value.replace(/[^a-zA-Z0-9 _-]/g, '').slice(0,24) || 'New Kingpin'; h.changed(); }; label.append(alias); content.append(label);
-      button(content, 'Apply & return to city', () => { h.appearance(); close(); });
+      button(content, 'Apply & return to city', () => { h.appearance(); close(); h.characterConfirmed(); });
     } else if (selected === 'Achievements') {
       content.append(el('p', `Total Cash Cleaned: ${money(c.stats.cleaned)} · Districts/Corners Captured: ${c.stats.captured} · Max Heat Survived: ${Math.floor(c.stats.maxHeat)} · Defenses: ${c.stats.defended}`));
       ACHIEVEMENTS.forEach(a => card(`${c.achievements.includes(a.id) ? 'UNLOCKED' : 'LOCKED'} · ${a.name}`, `${a.description} · ${a.reward}. Rewards unlock automatically once, and survive reloads.`));

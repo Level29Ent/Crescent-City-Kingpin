@@ -18,6 +18,7 @@ import { SaveStore } from './persistence.ts';
 import { createEmpireUI } from './empire-ui.ts';
 import './campaign.css';
 import './hud.css';
+import { missionSession, INTRO_SHOTS, introShot } from './session.ts';
 import { mountJoystick } from './joystick.ts';
 import { INTERIORS, nearestEntrance, indoorMove, createInterior, type InteriorDefinition } from './interiors.ts';
 import { conditions, VEHICLES, MISSIONS, missionInteract, tickExpansion, inventoryCap, cashCap, furnished } from './expansion.ts';
@@ -101,6 +102,10 @@ let yaw = SPAWN.heading;
 let pitch = -0.15;
 let time = 0;
 let playing = false;
+let introActive = false;
+let introElapsed = 0;
+let needsCharacter = !loaded;
+let missionUnlockUntil = 0;
 let shopOpen = false;
 let managing = false;
 let inside: null | { room: ReturnType<typeof createInterior>; def: InteriorDefinition; x: number; z: number } = null;
@@ -303,6 +308,7 @@ let mouseDown = false;
 let aimHeld = false;
 addEventListener("keydown", (e) => {
   if ((e.target as HTMLElement)?.matches("input, select, textarea")) return;
+  if(introActive){if(e.code==='Escape'||e.code==='Space')finishIntro();return;}
   if (balcony) {if(e.code === "Escape") $("paradeView").click(); return;}
   if (e.code === 'Escape' && inside && !managing) { leaveInterior(); return; }
   if (e.code === "KeyM") { e.preventDefault(); if (!e.repeat) { if (empire.isOpen()) empire.close(); else empire.open(); } return; }
@@ -355,16 +361,33 @@ function lock() {
 }
 let locked = false;
 document.addEventListener("pointerlockchange", () => { locked = document.pointerLockElement === renderer.domElement || locked; });
+function startPlaying(){
+  const state=missionSession();
+  playing=state.playing;managing=state.managing;shopOpen=state.shopOpen;balcony=state.balcony;
+  $('start').style.display='none';$('shop').style.display='none';$('hud').style.display='';
+  keys.clear();joystick.reset();mouseDown=aimHeld=false;walkVelocity.set(0,0);
+  // A queued pointer-lock loss from closing a menu must not immediately pause the accepted mission.
+  locked=false;missionUnlockUntil=performance.now()+600;
+  try{lock();}catch{} sound.start();
+}
+function finishIntro(){
+  introActive=false;$('cinematic').hidden=true;$('hud').style.display='';
+  needsCharacter=true;empire.open('Character');
+}
+$('skipIntro').onclick=finishIntro;
+$('replayIntro').onclick=()=>beginIntro();
+function beginIntro(){
+  introElapsed=0;introActive=true;playing=false;
+  $('start').style.display='none';$('cinematic').hidden=false;$('hud').style.display='none';
+  keys.clear();joystick.reset();mouseDown=aimHeld=false;locked=false;
+  document.exitPointerLock();sound.start();
+}
 $("go").addEventListener("click", () => {
-  $("start").style.display = "none";
-  playing = true;
-  ($('go') as HTMLButtonElement).blur();
-  keys.clear();
-  mouseDown = aimHeld = false;
-  try { lock(); } catch { /* no pointer lock: drag the mouse to look */ }
-  try { sound.start(); } catch (err) { console.warn("audio unavailable", err); }
+  if(needsCharacter){beginIntro();return;}
+  startPlaying();
 });
 document.addEventListener("pointerlockchange", () => {
+  if (performance.now()<missionUnlockUntil) {locked=document.pointerLockElement===renderer.domElement;return;}
   if (document.pointerLockElement !== renderer.domElement && locked && playing && !shopOpen && !managing && !P.won) {
     $("go").textContent = "RESUME";
     $("start").style.display = "flex";
@@ -907,6 +930,7 @@ const balconyPosition = new THREE.Vector3(9,24,45);
 const camPos = new THREE.Vector3();
 const camLook = new THREE.Vector3();
 function updateCamera(dt: number) {
+  if(introActive){const shot=INTRO_SHOTS[introShot(introElapsed)]!;const p=shot.from;camera.position.lerp(new THREE.Vector3(p[0]+(matchMedia('(prefers-reduced-motion: reduce)').matches?0:Math.sin(introElapsed*.3)*5),p[1],p[2]),1-Math.exp(-1.6*dt));camera.lookAt(shot.look[0],shot.look[1],shot.look[2]);camera.fov=58;camera.updateProjectionMatrix();return;}
   if(inside){camera.position.set(inside.x,5.2,Math.min(11,inside.z+6.5));camera.lookAt(inside.x,1,inside.z-2);camera.fov=65;camera.updateProjectionMatrix();return;}
   if(balcony){camera.position.lerp(balconyPosition,1-Math.exp(-8*dt));camera.lookAt(0,2,-45);camera.fov=62;camera.updateProjectionMatrix();return;}
   if (P.car && Math.abs(P.car.speed) > 3 && !mouseDown) {
@@ -1034,6 +1058,12 @@ const empire = createEmpireUI({
     if(!P.owned[weapon]){if(C.clean<prices[weapon]!)return;C.clean-=prices[weapon]!;P.owned[weapon]=true;}
     P.weapon=weapon;reloading=0;feed(`${WEAPONS[weapon]!.name} equipped.`);
   },
+  missionStarted(){
+    if(inside)leaveInterior();
+    if(introActive){introActive=false;$('cinematic').hidden=true;}
+    startPlaying();saveGame();feed('Mission started — follow the white marker. E / INTERACT advances objectives.');
+  },
+  characterConfirmed(){needsCharacter=false;startPlaying();saveGame();},
   backRoom: openShop,
   buildings: () => INTERIORS,
   enterBuilding(id) { const def=INTERIORS.find(b=>b.id===id);if(def)enterInterior(def); },
@@ -1148,10 +1178,16 @@ let hudT = 0;
 let miniT = 0;
 function frame() {
   requestAnimationFrame(frame);
-  const menuObscuresControls = managing || shopOpen || $("start").style.display !== "none";
+  const menuObscuresControls = introActive || managing || shopOpen || $("start").style.display !== "none";
   toolbar.classList.toggle("menu-obscured", menuObscuresControls);
   $("touchControls").classList.toggle("menu-obscured", menuObscuresControls);
   const dt = Math.min(0.05, clock.getDelta());
+  if(introActive&&!document.hidden){
+    introElapsed+=dt;
+    const shot=INTRO_SHOTS[introShot(introElapsed)]!;
+    $('introTitle').textContent=shot.title;$('introCaption').textContent=shot.text;
+    if(introElapsed>=12)finishIntro();
+  }
   if(inside && playing && !shopOpen && !managing && !document.hidden){updateIndoor(dt);prompt();updateHud();}
   else if (playing && !shopOpen && !managing && !P.won && !document.hidden) {
     time += dt;

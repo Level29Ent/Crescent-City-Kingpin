@@ -121,3 +121,12 @@ body:not(.touch-enabled) { --touch-height: 0px; }
   #moveJoystick { width: 86px; height: 86px; }
   .joystick-knob { width: 34px; height: 34px; }
 }
+
+#cinematic { position:fixed; inset:0; z-index:20; pointer-events:none; background:linear-gradient(#000d 0 8%, transparent 25% 65%, #000e 92%); display:flex; align-items:flex-end; justify-content:center; padding:70px 24px; box-sizing:border-box; }
+.cinematic-copy { text-align:center; color:#f6db9e; text-shadow:0 2px 12px #000; max-width:760px; }
+.cinematic-copy h1 { font-size:clamp(26px,5vw,64px); letter-spacing:5px; margin:12px 0; }
+.cinematic-copy p { line-height:1.6; }
+#skipIntro { position:absolute; right:20px; top:20px; pointer-events:auto; font-size:12px; background:#102330dd; color:#ffe3a2; border:1px solid #d4b478; }
+#replayIntro { font-size:11px; margin-top:8px; background:#193844; color:#c0dfdf; }
+@media (prefers-reduced-motion:reduce) { #cinematic { background:#102330e8; } }
+@media (max-height:550px) { #cinematic {padding-bottom:24px;} .cinematic-copy h1 {font-size:25px;} .cinematic-copy p {font-size:11px;} }
