@@ -2,7 +2,7 @@ import { restoreCampaign, type Campaign } from './campaign.ts';
 export const SAVE_KEY = 'cck.campaign.v2';
 const RESET_KEY = 'cck.resetAt';
 export type Save = { version: 2; savedAt: number; campaign: Campaign; player: Record<string, any> };
-function parse(value: unknown): Save | null {
+export function parseSave(value: unknown): Save | null {
   if (!value || typeof value !== 'object') return null;
   const v = value as Save;
   if (v.version !== 2 || !Number.isFinite(v.savedAt) || v.savedAt <= 0) return null;
@@ -37,9 +37,9 @@ export class SaveStore {
   load(): Promise<Save | null> {
     return (async () => {
       let local: Save | null = null; let resetAt = 0;
-      try { local = parse(JSON.parse(localStorage.getItem(SAVE_KEY) ?? 'null')); resetAt = Number(localStorage.getItem(RESET_KEY) ?? 0); } catch { /* fall back to IndexedDB */ }
+      try { local = parseSave(JSON.parse(localStorage.getItem(SAVE_KEY) ?? 'null')); resetAt = Number(localStorage.getItem(RESET_KEY) ?? 0); } catch { /* fall back to IndexedDB */ }
       let backup: Save | null = null;
-      try { backup = parse(await database()); } catch { /* localStorage-only browser */ }
+      try { backup = parseSave(await database()); } catch { /* localStorage-only browser */ }
       return [local, backup].filter((s): s is Save => !!s && s.savedAt > resetAt).sort((a, b) => b.savedAt - a.savedAt)[0] ?? null;
     })();
   }
@@ -66,4 +66,13 @@ export class SaveStore {
       }); db.close();
     } catch { /* tombstone remains authoritative */ }
   }
+}
+
+export function encodeSave(campaign:Campaign,player:Record<string,any>):string {
+  const json=JSON.stringify({version:2,savedAt:Date.now(),campaign,player});
+  return 'CCK2.'+btoa(Array.from(new TextEncoder().encode(json),b=>String.fromCharCode(b)).join(''));
+}
+export function decodeSave(code:string):Save|null{
+  if(code.length>1000000||!code.startsWith('CCK2.'))return null;
+  try{return parseSave(JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(code.slice(5)),c=>c.charCodeAt(0)))));}catch{return null;}
 }

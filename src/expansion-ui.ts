@@ -19,7 +19,7 @@ export function renderExpansion(tab:string,c:Campaign,container:HTMLElement,h:Ho
     const state=conditions(c.clock);
     container.append(text('p',`${state.weather} · ${state.night?'Night rewards +30% on deliveries, +25% recoveries':'Daylight'} · Rain cuts police sight to 60% and heat generation by 35%. Fog cuts sight to 45%. Heatwaves drain sprint stamina 40% faster. No owned turf or businesses means zero idle income.`));
     if(e.mission){const m=MISSIONS.find(m=>m.id===e.mission!.id)!;const step=m.steps[e.mission.step]!;const active=card(`ACTIVE: ${m.name}`,`${step.name} · ${Math.ceil(e.mission.remaining)}s. Travel to the white marker and press E. Parade finale requires staying beside the lead float for 40 seconds.`);button(active,'Track current objective',()=>mark(step.x,step.z,step.name));button(active,'Abandon (crew loyalty -12)',()=>{c.crew.forEach(m=>m.loyalty=Math.max(0,m.loyalty-12));e.mission=null;});}
-    for(const m of MISSIONS){const item=card(m.name,`${m.desc} · $${m.pay} dirty base · ${m.duration}s${e.completed.includes(m.id)?' · previously completed':''}`);button(item,m.id==='parade'?'Join Mardi Gras parade':'Accept side mission',()=>{if(startMission(c,m.id)){mark(m.steps[0].x,m.steps[0].z,m.steps[0].name);h.missionStarted();}},!!e.mission);}
+    for(const m of MISSIONS){const item=card(m.name,`${m.desc} · $${m.pay} dirty base · ${m.duration}s${e.completed.includes(m.id)?' · previously completed':''}`);button(item,m.id==='parade'?'Join Mardi Gras parade':'Accept side mission',()=>{if(startMission(c,m.id)){mark(m.steps[0].x,m.steps[0].z,m.steps[0].name);h.missionStarted();}},!!e.mission||c.legacy.tutorial<3);}
     container.append(text('p','Dynamic pickup stashes and contraband boxes appear near traversable streets every 22 seconds (maximum 12). Walk within 1.8m to collect; they never pay you for simply waiting at spawn. Purple = goods, gold = cash, teal = mechanical parts.'));
   }else if(tab==='Garage'){
     container.append(text('p',`Stored vehicles ${e.cars.length}/8 · Parts ${e.parts}. Buy a vehicle, deploy it at the HQ garage, or send it on an automated contraband run. Runs consume unmarked crates upfront, carry roadblock risk, and pay dirty cash only after completion. You cannot drive a vehicle while it is dispatched.`));
@@ -31,8 +31,8 @@ export function renderExpansion(tab:string,c:Campaign,container:HTMLElement,h:Ho
     for(const model of VEHICLES){const item=card(model.name,`$${model.price} clean · capacity ${model.capacity} crates · speed ${model.speed}× · armor ${Math.round(model.armor*100)}%.`);button(item,'Buy & store',()=>{buyVehicle(c,model.id);},c.clean<model.price||e.cars.length>=8);}
     e.cars.forEach((car,i)=>{const model=VEHICLES.find(v=>v.id===car.id)!;const run=e.runs.find(r=>r.car===i);const item=card(`Garage bay ${i+1} · ${model.name}`,`Engine ${car.engine}/3 · armor ${car.armor}/3${run?` · delivering ${Math.ceil(run.remaining)}s / ${Math.round(run.risk*100)}% intercept risk`:''}`);
       button(item,'Deploy at HQ',()=>{h.deploy(i);},!!run);
-      button(item,`Engine upgrade · $${250*(car.engine+1)} + 2 parts`,()=>{upgradeVehicle(c,i,false);},!!run||car.engine>=3||e.parts<2||c.clean<250*(car.engine+1));
-      button(item,`Armor upgrade · $${250*(car.armor+1)} + 2 parts`,()=>{upgradeVehicle(c,i,true);},!!run||car.armor>=3||e.parts<2||c.clean<250*(car.armor+1));
+      button(item,`Engine upgrade · $${Math.round(250*(car.engine+1)*(loyal(c,'mechanic').length?.75:1))} + 2 parts`,()=>{upgradeVehicle(c,i,false);},!!run||car.engine>=3||e.parts<2||c.clean<Math.round(250*(car.engine+1)*(loyal(c,'mechanic').length?.75:1)));
+      button(item,`Armor upgrade · $${Math.round(250*(car.armor+1)*(loyal(c,'mechanic').length?.75:1))} + 2 parts`,()=>{upgradeVehicle(c,i,true);},!!run||car.armor>=3||e.parts<2||c.clean<Math.round(250*(car.armor+1)*(loyal(c,'mechanic').length?.75:1)));
       button(item,`Auto delivery · ${model.capacity} crates`,()=>{startRun(c,i);},!!run||c.inventory[0]!<model.capacity);
       for(const [label,color]of [['Purple',0x682db5],['Gold',0xe7b449],['Green',0x237c60],['Black',0x17202a]] as const)button(item,label,()=>{car.color=color;});
     });
@@ -57,7 +57,7 @@ export function renderExpansion(tab:string,c:Campaign,container:HTMLElement,h:Ho
       if(!owned)button(item,'Buy property',()=>{buyProperty(c,p.id);},c.clean<p.cost);
       else if(!enabled)button(item,`Pay daily bill · $${p.upkeep}`,()=>{c.clean-=p.upkeep;e.disabled=e.disabled.filter(id=>id!==p.id);},c.clean<p.upkeep);
       button(item,'Mark location',()=>mark(p.x,p.z,p.name));
-      if(enabled&&p.capacity){const left=p.capacity-(e.frontsUsed[p.id]??0);const fee=Math.max(.03,p.fee-(loyal(c,'hacker').length ? .03 : 0));item.append(text('p',`Laundering $${Math.floor(left)} remaining this minute · fee ${Math.round(fee*100)}%.`));button(item,'Launder available dirty cash',()=>{const n=frontLaunder(c,p.id);h.notice(`Front laundered $${n} clean.`);},c.dirty<1||left<1);}
+      if(enabled&&p.capacity){const left=p.capacity*(loyal(c,'accountant').length?1.25:1)-(e.frontsUsed[p.id]??0);const fee=Math.max(.03,p.fee-(loyal(c,'hacker').length ? .03 : 0)-(loyal(c,'accountant').length?.03:0)-(c.legacy.trait==='accountant'?.05:0));item.append(text('p',`Laundering $${Math.floor(left)} remaining this minute · fee ${Math.round(fee*100)}%.`));button(item,'Launder available dirty cash',()=>{const n=frontLaunder(c,p.id);h.notice(`Front laundered $${n} clean.`);},c.dirty<1||left<1);}
       if(enabled&&p.id==='airboat')button(item,'Bayou lay-low · $50 / -50 heat',()=>{c.clean-=50;c.heat=Math.max(0,c.heat-50);c.cooldown=60;},c.clean<50||c.cooldown>0||c.heat<=0);
     }
   }else if(tab==='Interior'){

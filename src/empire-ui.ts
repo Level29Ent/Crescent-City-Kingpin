@@ -1,8 +1,9 @@
+import { legacyPanel } from './legacy-ui.ts';
 import { owns } from './expansion.ts';
 import { EXPANSION_TABS, renderExpansion } from './expansion-ui.ts';
 import { ACHIEVEMENTS, BLOCKS, EVENTS, GOODS, SPECIALISTS, activeCrew, bonus, heist, hire, launder, layLow, price, salePrice, resolveDefense, revenuePerMinute, settleWages, trade, type Campaign } from './campaign.ts';
 export type EmpireHooks = {
-  missionStarted():void; characterConfirmed():void; backRoom():void; buildings(): readonly {id:string;name:string;x:number;z:number}[]; enterBuilding(id:string):void; campaign: Campaign; pause(open: boolean): void; changed(): void; notice(text: string): void;
+  retire():void;travel(x:number,z:number):void;repair():void; milestone():void; missionStarted():void; characterConfirmed():void; backRoom():void; buildings(): readonly {id:string;name:string;x:number;z:number}[]; enterBuilding(id:string):void; campaign: Campaign; pause(open: boolean): void; changed(): void; notice(text: string): void;
   location(): { x: number; z: number; district: number }; attack(id: string): void; waypoint(x: number, z: number, name: string): void;
   deploy(index: number): void; armory(weapon: number): void; gearOwned(weapon: number): boolean; appearance(): void; save(): void; reset(): Promise<void>; audio(): void;
 };
@@ -14,7 +15,7 @@ export function createEmpireUI(h: EmpireHooks) {
   const overlay = document.getElementById('empire')!;
   const content = document.getElementById('empireContent')!;
   const summary = document.getElementById('empireSummary')!;
-  const tabs = [...EXPANSION_TABS, 'Turf', 'Crew', 'Market', 'Safehouse', 'Character', 'Achievements', 'Leaderboard', 'Buildings', 'Settings'];
+  const tabs = [...EXPANSION_TABS, 'Turf', 'Crew', 'Market', 'Safehouse', 'Character', 'Achievements', 'Leaderboard', 'Buildings', 'Legacy & Training', 'Settings'];
   let selected = 'Turf'; let opened = false;
   function button(parent: HTMLElement, text: string, fn: () => void, disabled = false) {
     const b = document.createElement('button'); b.textContent = text; b.disabled = disabled;
@@ -25,7 +26,7 @@ export function createEmpireUI(h: EmpireHooks) {
   }
   function close() { opened = false; overlay.hidden = true; h.pause(false); }
   function open(tab = 'Turf') {
-    selected = tab; opened = true; overlay.hidden = false; h.pause(true); render();
+    h.milestone(); selected = tab; opened = true; overlay.hidden = false; h.pause(true); render();
     (document.getElementById('empireClose') as HTMLButtonElement).focus();
   }
   document.getElementById('empireClose')!.onclick = close;
@@ -42,7 +43,8 @@ export function createEmpireUI(h: EmpireHooks) {
     Array.from(nav.children).forEach((b, i) => b.setAttribute('aria-pressed', String(tabs[i] === selected)));
     if (renderExpansion(selected,c,content,{location:h.location,waypoint:h.waypoint,close,notice:h.notice,deploy:h.deploy,armory:h.armory,gearOwned:h.gearOwned,missionStarted:h.missionStarted,reload:h.changed})) return;
     content.append(el('h2', selected));
-    if (selected === 'Buildings') {
+    if(selected==='Legacy & Training'){legacyPanel(c,content,{changed:h.changed,retire:h.retire,travel:h.travel,repair:h.repair,waypoint:(x,z)=>{h.waypoint(x,z,'Daily checkpoint');close();}});}
+    else if (selected === 'Buildings') {
       content.append(el('p','Eight walkable interiors. Enter on foot at the door; HQ also accepts its sheltered approach. Outdoor combat and income pause while inside. Visit the back desk for services; E at the teal exit or Exit Building returns you to your original street position. Property ownership and prices remain unchanged.'));
       for(const b of h.buildings()){
         const d=distance(h.location(),b.x,b.z),near=d<=(b.id==='hq'?24:4);
@@ -162,7 +164,7 @@ export function createEmpireUI(h: EmpireHooks) {
       button(content, 'Submit my public score', () => {
         void (async () => {
           try {
-            const r = await fetch('/api/leaderboard', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: c.alias, cleaned: Math.floor(c.stats.cleaned), captured: c.stats.captured, heat: Math.floor(c.stats.maxHeat) }) });
+            const r = await fetch('/api/leaderboard', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ daily:c.legacy.daily?.finished?{date:c.legacy.daily.date,ms:Math.round(c.legacy.daily.best!*1000)}:undefined, name: c.alias, cleaned: Math.floor(c.stats.cleaned), captured: c.stats.captured, heat: Math.floor(c.stats.maxHeat) }) });
             const data = await r.json(); if (!r.ok) throw new Error(data.error || 'Submission failed');
             h.notice('Score submitted.'); void show();
           } catch (e) { h.notice(e instanceof Error ? e.message : 'Submission unavailable'); }

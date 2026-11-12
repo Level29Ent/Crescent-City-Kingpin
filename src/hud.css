@@ -130,3 +130,27 @@ body:not(.touch-enabled) { --touch-height: 0px; }
 #replayIntro { font-size:11px; margin-top:8px; background:#193844; color:#c0dfdf; }
 @media (prefers-reduced-motion:reduce) { #cinematic { background:#102330e8; } }
 @media (max-height:550px) { #cinematic {padding-bottom:24px;} .cinematic-copy h1 {font-size:25px;} .cinematic-copy p {font-size:11px;} }
+
+.quest-card { grid-column: 2; min-width: 0; padding:10px 14px; border-left:3px solid #5ee0d3; border-radius:8px; background:linear-gradient(135deg,#142d3feb,#24172de8); display:flex; gap:10px; align-items:center; font-size:12px; line-height:1.5; color:#e9d3a7; box-shadow:0 4px 16px #0004; }
+#objectiveArrow { display:block; color:#82eadb; font-size:25px; flex-shrink:0; }
+#stats, #city { backdrop-filter:blur(5px); border-color:#daa85b88; box-shadow:0 8px 22px #080e1e66; }
+#pauseMenu {z-index:18; gap:10px; padding:24px; box-sizing:border-box; overflow:auto;}
+#pauseMenu h1 {font-size:32px;} #pauseMenu label {display:grid; gap:6px; max-width:560px; width:100%;font-size:12px;}
+#pauseMenu textarea {resize:vertical; color:#fff; background:#142635; border:1px solid #8dbab9; padding:8px;max-height:100px;}
+#saveNotice {font-size:12px;}
+#milestoneToast {position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:30;max-width:80vw;background:#183b38f5;border:1px solid #f4ca74;border-radius:10px;padding:16px;color:#ffe1a0;box-shadow:0 10px 35px #0009;}
+#cashBurst {position:fixed;left:45%;top:50%;z-index:25;pointer-events:none;opacity:0;color:#9ce5ad;font-size:32px;letter-spacing:8px;}
+#cashBurst.animate {animation:cash-fly 1s ease-out;}
+@keyframes cash-fly {0%{opacity:0;transform:translateY(30px) scale(.6);}20%{opacity:1;}100%{opacity:0;transform:translateY(-140px) rotate(-15deg) scale(1.3);}}
+#touchControls button {border:2px solid #caf9f2!important;background:#153f50ed!important;color:white!important;font-weight:800;box-shadow:0 3px 10px #0008;}
+@media(max-width:1000px){.quest-card{grid-column:1/-1;font-size:10px;padding:6px 10px;}}
+@media(max-height:740px){.quest-card{display:none;}#pauseMenu {justify-content:flex-start;}#pauseMenu h1{font-size:23px;}#pauseMenu button{font-size:11px;padding:7px 12px;}}
+@media(prefers-reduced-motion:reduce){#cashBurst.animate{animation:none;}}
+
+body[data-tutorial="0"] #touchControls [data-control="fire"], body[data-tutorial="0"] #touchControls [data-control="aim"], body[data-tutorial="0"] #touchControls [data-control="weapon"], body[data-tutorial="0"] #touchControls [data-control="reload"], body[data-tutorial="0"] #touchControls [data-control="Space"], body[data-tutorial="0"] #touchControls [data-control="ShiftLeft"] {display:none;}
+body[data-tutorial="1"] #touchControls [data-control="Space"], body[data-tutorial="1"] #touchControls [data-control="ShiftLeft"] {display:none;}
+
+.quest-card { grid-column:1; grid-row:2; }
+#objectiveArrow { width:0; height:0; border-left:9px solid transparent; border-right:9px solid transparent; border-bottom:20px solid #82eadb; font-size:0; }
+@media(max-width:1000px){.quest-card{grid-column:1/-1;grid-row:auto;}}
+body[data-tutorial="0"] #weapon { visibility:hidden; }

@@ -92,7 +92,7 @@ export function buyVehicle(c: Campaign, id: string) {
 }
 export function upgradeVehicle(c: Campaign, index: number, armor: boolean) {
   const car = c.expansion.cars[index]; if (!car || c.expansion.runs.some(r => r.car === index)) return false;
-  const key = armor ? 'armor' : 'engine'; const cost = 250 * (car[key] + 1);
+  const key = armor ? 'armor' : 'engine'; const cost = Math.round(250 * (car[key] + 1)*(loyal(c,'mechanic').length?.75:1));
   if (car[key] >= 3 || c.clean < cost || c.expansion.parts < 2) return false;
   c.clean -= cost; c.expansion.parts -= 2; car[key]++; return true;
 }
@@ -164,9 +164,9 @@ export function missionInteract(c: Campaign, x: number, z: number): string | nul
 }
 export function frontLaunder(c: Campaign, id: string): number {
   const p = PROPERTIES.find(p => p.id === id); if (!p || !p.capacity || !owns(c,id)) return 0;
-  const used = c.expansion.frontsUsed[id] ?? 0; const amount = Math.min(c.dirty, p.capacity-used);
+  const used = c.expansion.frontsUsed[id] ?? 0; const amount = Math.min(c.dirty, p.capacity*(loyal(c,'accountant').length?1.25:1)-used);
   if (amount < 1) return 0;
-  const fee = Math.max(.03, p.fee - (loyal(c,'hacker').length ? .03 : 0));
+  const fee = Math.max(.03, p.fee - (loyal(c,'hacker').length ? .03 : 0)-(loyal(c,'accountant').length?.03:0)-(c.legacy.trait==='accountant'?.05:0));
   const clean = Math.floor(amount * (1-fee)); c.dirty -= amount; c.clean += clean; c.stats.cleaned += clean;
   c.expansion.frontsUsed[id] = used+amount; c.heat = Math.min(100,c.heat + p.heat); return clean;
 }
@@ -199,6 +199,8 @@ export function offlineExpansion(c: Campaign, seconds: number) {
   // No offline random raid/showdown rolls. Vehicle runs and active missions resume their timers.
   const risk=PROPERTIES.filter(p=>owns(c,p.id)).reduce((n,p)=>n+p.heat,0);
   c.heat=Math.max(0,Math.min(100,c.heat+risk*seconds/60*.1));
+  // Owned fronts process a bounded batch while away; only existing dirty funds are converted.
+  if(seconds>=60){for(const front of PROPERTIES.filter(p=>p.capacity&&owns(c,p.id))){const amount=Math.min(c.dirty,front.capacity*Math.min(10,seconds/3600));const clean=Math.floor(amount*(1-front.fee));c.dirty-=amount;c.clean+=clean;c.stats.cleaned+=clean;}}
   return income;
 }
 export function tickExpansion(c: Campaign, dt: number, random = Math.random): string[] {
@@ -244,11 +246,11 @@ export function restoreExpansion(value: unknown): Expansion {
   if(Array.isArray(v.runs)) for(const r of v.runs) if(Number.isInteger(r?.car)&&e.cars[r.car]&&!e.runs.some(o=>o.car===r.car)) e.runs.push({car:r.car,remaining:n(r.remaining,180),risk:n(r.risk,1),pay:n(r.pay,20000)});
   if(Array.isArray(v.furniture)) for(const f of v.furniture) if(FURNITURE.some(m=>m.id===f?.id)&&!e.furniture.some(o=>o.id===f.id)&&Number.isInteger(f.slot)&&f.slot>=0&&f.slot<6&&!e.furniture.some(o=>o.slot===f.slot))e.furniture.push({id:f.id,slot:f.slot});
   e.completed=MISSIONS.filter(m=>Array.isArray(v.completed)&&v.completed.includes(m.id)).map(m=>m.id);
-  if(Array.isArray(v.completed)&&v.completed.includes('kingpin'))e.completed.push('kingpin');
+  if(Array.isArray(v.completed))for(const id of ['kingpin','millionKingpin'])if(v.completed.includes(id))e.completed.push(id);
   e.report=typeof v.report==='string'?v.report.slice(0,300):'';
   e.gear=[...HEISTS.map(h=>h.gear),'Krewe Captain Medallion'].filter(g=>Array.isArray(v.gear)&&v.gear.includes(g));
   for(const h of HEISTS) if(v.plans?.[h.id]) {const p=v.plans[h.id];e.plans[h.id]={phase:Math.floor(n(p.phase,2)),intel:n(p.intel,100),assigned:h.roles.filter(r=>Array.isArray(p.assigned)&&p.assigned.includes(r)),step:Math.floor(n(p.step,2)),score:n(p.score,3),cooldown:n(p.cooldown,600)};}
-  for(const p of PROPERTIES) if(v.frontsUsed?.[p.id] !== undefined)e.frontsUsed[p.id]=n(v.frontsUsed[p.id],p.capacity);
+  for(const p of PROPERTIES) if(v.frontsUsed?.[p.id] !== undefined)e.frontsUsed[p.id]=n(v.frontsUsed[p.id],p.capacity*1.25);
   const m=MISSIONS.find(m=>m.id===v.mission?.id); if(m)e.mission={id:m.id,step:Math.floor(n(v.mission.step,m.steps.length-1)),remaining:n(v.mission.remaining,m.duration),escort:n(v.mission.escort,40)};
   if(v.poker&&Array.isArray(v.poker.cards)&&v.poker.cards.length===5&&new Set(v.poker.cards).size===5&&v.poker.cards.every((n:any)=>Number.isInteger(n)&&n>=0&&n<52))e.poker={cards:v.poker.cards,held:[0,1,2,3,4].filter(i=>v.poker.held?.includes(i))};
   return e;

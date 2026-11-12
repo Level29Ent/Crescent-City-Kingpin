@@ -118,7 +118,7 @@ export const SHOP: ShopItem[] = [
   { id: 5, name: "Patch up", desc: "Heal to full health.", price: 200 },
 ];
 export const MAX_LEVEL = 4;
-export const GOAL = 250000;
+export const GOAL = 1000000;
 export const MAX_HP = 100;
 export const RESPAWN_SECONDS = 5;
 

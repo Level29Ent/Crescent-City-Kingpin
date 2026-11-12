@@ -76,6 +76,9 @@
 </head>
   <body>
     <div id="app"></div>
+    <section id="pauseMenu" class="overlay" hidden aria-label="Pause menu"><h1>EMPIRE PAUSED</h1><p>Back up your run or return to the city.</p><button id="resumeRun">RESUME</button><button id="pauseSave">SAVE GAME</button><button id="exportSave">EXPORT SAVE CODE</button><label>Import save code<textarea id="importCode" rows="3" aria-label="Import save code"></textarea></label><button id="importSave">IMPORT (REPLACES THIS DEVICE’S RUN)</button><p id="saveNotice" aria-live="polite"></p></section>
+    <div id="cashBurst" aria-hidden="true">▰ $ ▰ $ ▰</div>
+    <aside id="milestoneToast" hidden aria-live="polite"></aside>
     <section id="cinematic" hidden aria-label="Cinematic introduction"><div class="cinematic-copy"><p>LEVEL 29 PRESENTS</p><h1 id="introTitle">AFTER THE FLOOD</h1><p id="introCaption"></p></div><button id="skipIntro">SKIP TO CHARACTER</button></section>
     <div id="hud">
       <div class="hud-top">
@@ -87,7 +90,7 @@
         <div id="streak">Delivery streak 0</div>
       </div>
       <div id="city"><div id="insideLabel"></div><div id="weather">CLEAR</div><div id="cityTime">18:00 · GOLDEN HOUR</div><div id="demand"></div></div>
-      <div id="obj" aria-live="polite"></div>
+      <div id="obj" aria-live="polite"></div><div class="quest-card"><span id="objectiveArrow" aria-hidden="true"></span><div id="questTracker"></div></div>
       </div>
       <div class="hud-bottom">
       <div id="feed"></div>
@@ -98,7 +101,7 @@
       <div id="cross"></div>
       <div id="hurt"></div>
     </div>
-    <nav id="toolbar" aria-label="Game controls"><button id="manage">EMPIRE / MAP · M</button><button id="paradeView" hidden>PARADE BALCONY</button><button id="exitInterior" hidden>EXIT BUILDING</button><button id="mute" aria-label="Toggle mute">MUTE</button></nav>
+    <nav id="toolbar" aria-label="Game controls"><button id="manage">EMPIRE / MAP · M</button><button id="paradeView" hidden>PARADE BALCONY</button><button id="exitInterior" hidden>EXIT BUILDING</button><button id="pauseButton">PAUSE / SAVE</button><button id="mute" aria-label="Toggle mute">MUTE</button></nav>
     <div id="touchControls" aria-label="Touch game controls">
       <div class="touchMove"><div id="moveJoystick" role="group" aria-label="Movement joystick" aria-valuetext="Centered"><span class="joystick-label">MOVE / DRIVE</span><span class="joystick-knob"></span></div></div>
       <div class="touchActions"><button data-control="ShiftLeft">SPRINT / NITRO</button><button data-control="Space">BRAKE</button><button data-control="KeyE">INTERACT</button><button data-control="fire">FIRE</button><button data-control="aim">AIM</button><button data-control="weapon">WEAPON</button><button data-control="reload">RELOAD</button></div>
@@ -112,13 +115,13 @@
       <div class="eyebrow">NEW ORLEANS · AFTER HOURS</div>
       <h1>CRESCENT CITY KINGPIN</h1>
       <div class="features"><span>Living day / night</span><span>Neon-lit streets</span><span>Nitro getaways</span><span>Priority contracts</span></div>
-      <p>Rise from a corner po-boy shop to kingpin of New Orleans. Beat each gang, then its boss, to take the district and its business. Capture corners, manage your crew and launder dirty cash into <b>$250,000 clean capital</b>. No turf means no passive income.</p>
+      <p>Rise from a corner po-boy shop to kingpin of New Orleans. Beat each gang, then its boss, to take the district and its business. Capture corners, manage your crew and launder dirty cash into <b>$1,000,000 clean capital</b>. No turf means no passive income.</p>
       <p><b>WASD</b> move · <b>Mouse</b> look · <b>Click</b> shoot · <b>Shift</b> sprint (uses stamina) · <b>E</b> car / shop / deliver · <b>1–5</b> weapons · <b>R</b> reload<br />In a car: <b>W S</b> gas and reverse · <b>A D</b> steer · <b>Space</b> brake · <b>Shift + W</b> nitro · <b>E</b> get out<br />Shop and import jobs are at Mama Nola's (the gold ring). Chain deliveries for bigger pay; priority contracts rotate every 90 seconds. Esc pauses. Arrow keys also move. <b>M</b> opens your empire. On touch: drag the left joystick to move/drive; drag the city to look. Buildings are listed in Empire → Buildings.</p>
       <button id="go">BEGIN / CONTINUE</button><button id="replayIntro">WATCH CINEMATIC INTRO</button><button id="festivalLaunch">MARDI GRAS / MISSIONS</button><button id="customize">CHOOSE CHARACTER & OUTFIT</button>
       <label class="quality"><input type="checkbox" id="touchMode" /> Enable touch joystick & action buttons</label>
       <label class="quality" for="quality">Graphics<select id="quality"><option value="balanced">Balanced · neon bloom</option><option value="cinematic">Cinematic · sharper bloom</option><option value="performance">Performance · no bloom</option></select></label>
     </div>
-    <div id="end" class="overlay" style="display:none"><h1 id="endTitle"></h1><p id="endText"></p><button onclick="location.reload()">KEEP BUILDING</button></div>
+    <div id="end" class="overlay" style="display:none"><h1 id="endTitle"></h1><p id="endText"></p><button id="endLegacy">SHARE CARD / RETIRE</button><button onclick="location.reload()">KEEP BUILDING</button></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
