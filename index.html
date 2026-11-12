@@ -77,6 +77,7 @@
   <body>
     <div id="app"></div>
     <div id="hud">
+      <div class="hud-top">
       <div id="stats">
         <div id="cash">$300 clean</div><div id="dirty">$0 dirty</div><div id="goal"></div>
         <div class="bar" id="hp"><i></i></div><div class="bar" id="armor"><i></i></div>
@@ -85,12 +86,15 @@
         <div id="streak">Delivery streak 0</div>
       </div>
       <div id="city"><div id="weather">CLEAR</div><div id="cityTime">18:00 · GOLDEN HOUR</div><div id="demand"></div></div>
-      <div id="obj"></div>
+      <div id="obj" aria-live="polite"></div>
+      </div>
+      <div class="hud-bottom">
       <div id="feed"></div>
       <canvas id="mini" width="180" height="180"></canvas>
       <div id="speed"></div>
-      <div id="cross"></div>
       <div id="prompt"></div>
+      </div>
+      <div id="cross"></div>
       <div id="hurt"></div>
     </div>
     <nav id="toolbar" aria-label="Game controls"><button id="manage">EMPIRE / MAP · M</button><button id="paradeView" hidden>PARADE BALCONY</button><button id="mute" aria-label="Toggle mute">MUTE</button></nav>

@@ -17,10 +17,16 @@ import { BLOCKS, addHeat, bonus, captureBlock, failMission, newCampaign, offline
 import { SaveStore } from './persistence.ts';
 import { createEmpireUI } from './empire-ui.ts';
 import './campaign.css';
+import './hud.css';
 import { conditions, VEHICLES, MISSIONS, missionInteract, tickExpansion, inventoryCap, cashCap, furnished } from './expansion.ts';
 import { createFestival } from './festival.ts';
 import { createMoneyBundle } from './money.ts';
 import { createWeather } from './weather.ts';
+// Reserve the toolbar's actual wrapped height (including the optional parade button).
+const toolbar = document.getElementById('toolbar')!;
+new ResizeObserver(() => {
+  document.documentElement.style.setProperty('--toolbar-height', `${Math.ceil(toolbar.getBoundingClientRect().height)}px`);
+}).observe(toolbar);
 const store = new SaveStore();
 const loaded = await store.load();
 const C = loaded?.campaign ?? newCampaign();
