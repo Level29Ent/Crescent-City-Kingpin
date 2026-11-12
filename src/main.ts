@@ -1092,6 +1092,9 @@ let hudT = 0;
 let miniT = 0;
 function frame() {
   requestAnimationFrame(frame);
+  const menuObscuresControls = managing || shopOpen || $("start").style.display !== "none";
+  toolbar.classList.toggle("menu-obscured", menuObscuresControls);
+  $("touchControls").classList.toggle("menu-obscured", menuObscuresControls);
   const dt = Math.min(0.05, clock.getDelta());
   if (playing && !shopOpen && !managing && !P.won && !document.hidden) {
     time += dt;
