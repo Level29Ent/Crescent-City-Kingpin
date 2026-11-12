@@ -86,3 +86,13 @@
   .hud-bottom { grid-template-columns: minmax(0, 1fr) 64px; grid-template-areas: "prompt mini"; }
   #feed, #speed { display: none; }
 }
+/* Title/pause screens remain usable in short landscape windows. */
+#start { overflow-y: auto; justify-content: safe center; }
+#start > * { flex-shrink: 0; }
+#toolbar.menu-obscured, #touchControls.menu-obscured { visibility: hidden; pointer-events: none; }
+@media (max-height: 550px) {
+  #start { justify-content: flex-start; padding-block: 16px; }
+  #start h1 { font-size: 28px; }
+  #start p { font-size: 12px; margin: 8px 0; }
+  #start .features { margin: 8px 0; }
+}
