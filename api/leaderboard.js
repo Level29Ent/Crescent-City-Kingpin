@@ -17,7 +17,8 @@ export default {
     }
     try {
       if (request.method === 'GET') {
-        const rankings = await commands(metrics.map(m => ['ZREVRANGE', `cck:board:${m}`, 0, 19, 'WITHSCORES']));
+        const date=new Date().toISOString().slice(0,10);
+        const rankings = await commands([...metrics.map(m => ['ZREVRANGE', `cck:board:${m}`, 0, 19, 'WITHSCORES']),['ZRANGE',`cck:daily:${date}`,0,19,'WITHSCORES']]);
         const ids = [...new Set(rankings.flatMap(rows => rows.filter((_, i) => i % 2 === 0)))];
         const names = ids.length ? await commands(ids.map(id => ['GET', `cck:name:${id}`])) : [];
         const byId = new Map(ids.map((id, i) => [id, names[i] || 'Anonymous Kingpin']));
@@ -26,6 +27,7 @@ export default {
           for (let i = 0; i < rows.length; i += 2) entries.push({ name: byId.get(rows[i]), score: Number(rows[i + 1]) });
           return [labels[m], entries];
         }));
+        const daily=rankings[3]??[];boards[`Daily ${date} · milliseconds (lower is better)`]=Array.from({length:Math.floor(daily.length/2)},(_,i)=>({name:byId.get(daily[i*2])||'Anonymous Kingpin',score:Number(daily[i*2+1])}));
         return json({ boards, verification: 'Self-reported single-player scores' });
       }
       const origin = request.headers.get('origin');
@@ -42,6 +44,7 @@ export default {
       if (!data || typeof data.name !== 'string' || !/^[a-zA-Z0-9 _-]{1,24}$/.test(data.name)) return json({ error: 'Alias must be 1–24 letters, numbers, spaces, underscores or hyphens' }, 400);
       const caps = { cleaned: 1e9, captured: 1e6, heat: 100 };
       if (metrics.some(m => !Number.isSafeInteger(data[m]) || data[m] < 0 || data[m] > caps[m])) return json({ error: 'Invalid score values' }, 400);
+      if(data.daily && (data.daily.date!==new Date().toISOString().slice(0,10)||!Number.isSafeInteger(data.daily.ms)||data.daily.ms<1000||data.daily.ms>86400000))return json({error:'Invalid daily time'},400);
       const ip = request.headers.get('x-vercel-forwarded-for') || request.headers.get('x-forwarded-for')?.split(',')[0] || 'unknown';
       // Store only a hash for a short-lived rate-limit key; never publish network identifiers.
       const key = createHash('sha256').update(ip).digest('hex');
@@ -51,6 +54,7 @@ export default {
       const id = cookie || randomUUID();
       await commands([
         ['SET', `cck:name:${id}`, data.name, 'EX', 2592000],
+        ...(data.daily?[['ZADD',`cck:daily:${data.daily.date}`,'LT',data.daily.ms,id],['EXPIRE',`cck:daily:${data.daily.date}`,172800]]:[]),
         ...metrics.flatMap(m => [ ['ZADD', `cck:board:${m}`, 'GT', data[m], id], ['ZREMRANGEBYRANK', `cck:board:${m}`, 0, -1001] ]),
       ]);
       return json({ ok: true }, 200, { 'Set-Cookie': `cck_player=${id}; Path=/api/leaderboard; HttpOnly; Secure; SameSite=Strict; Max-Age=2592000` });

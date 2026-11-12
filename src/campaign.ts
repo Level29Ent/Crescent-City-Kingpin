@@ -1,3 +1,4 @@
+import { newLegacy, restoreLegacy, type LegacyState } from './legacy.ts';
 import { newExpansion, restoreExpansion, offlineExpansion, conditions, furnished, owns, inventoryCap, cashCap, type Expansion } from './expansion.ts';
 // Campaign simulation. All money/heat changes are explicit; standing at spawn pays nothing.
 export const BLOCKS = [
@@ -8,6 +9,8 @@ export const BLOCKS = [
   { id: 'bayou', name: 'Port of NOLA', district: 4, x: 120, z: 180, rate: 200, risk: 1.3 },
 ] as const;
 export const SPECIALISTS = [
+  {id:'mechanic',name:'Jo “Wrench” Duval',role:'Mechanic Lieutenant',fee:500,wage:120,defense:10,payout:0,cooling:0,desc:'Vehicle engine/armor upgrades cost 25% less clean capital; roadside repair ability.'},
+  {id:'accountant',name:'Nadine “Ledger” Price',role:'Accountant',fee:600,wage:140,defense:0,payout:.05,cooling:0,desc:'Front capacity +25% and three percentage points lower laundering fee.'},
   { id: 'demo', name: 'Rene “Fuse” Landry', role: 'Demolitions Expert', fee: 700, wage: 200, defense: 20, payout: .05, cooling: 0, desc: 'The Mint crew specialist; +20 defense and +5% payouts.' },
   { id: 'muscle', name: 'Simone “Brick” Baptiste', role: 'Muscle Enforcer', fee: 200, wage: 120, defense: 35, payout: 0, cooling: 0, desc: '+35% remote defense chance; -15% combat damage per active enforcer.' },
   { id: 'hacker', name: 'Eli “Switch” Tran', role: 'Hacker / Safecracker', fee: 350, wage: 160, defense: 8, payout: 0.15, cooling: 0, desc: '+15% contract, heist and turf payouts.' },
@@ -22,7 +25,7 @@ export const GOODS = [
 export const EVENTS = ['Quiet streets', 'Port blockade', 'Rival crew war', 'Police crackdown', 'Festival demand'] as const;
 export type Appearance = { gender: string; heritage: string; skin: number; outfit: number; hair: number };
 export type Campaign = {
-  expansion: Expansion; clean: number; dirty: number; heat: number; owned: string[]; crew: { id: string; loyalty: number; owed: number }[];
+  legacy: LegacyState; expansion: Expansion; clean: number; dirty: number; heat: number; owned: string[]; crew: { id: string; loyalty: number; owed: number }[];
   inventory: number[]; upgrades: number; avatar: Appearance; clock: number; wageClock: number; marketClock: number;
   marketEvent: number; defenseClock: number; defense: null | { block: string; remaining: number };
   policeClock: number; intervention: string; cooldown: number; heistCooldown: number;
@@ -30,7 +33,7 @@ export type Campaign = {
   achievements: string[]; audio: { music: number; ambient: number; sfx: number; muted: boolean }; alias: string;
 };
 export function newCampaign(): Campaign {
-  return { expansion: newExpansion(), clean: 300, dirty: 0, heat: 0, owned: [], crew: [], inventory: [0, 0, 0, 0], upgrades: 0,
+  return { legacy:newLegacy(), expansion: newExpansion(), clean: 300, dirty: 0, heat: 0, owned: [], crew: [], inventory: [0, 0, 0, 0], upgrades: 0,
     avatar: { gender: 'Man', heritage: 'Not specified', skin: 2, outfit: 0, hair: 0 }, clock: 0, wageClock: 0,
     marketClock: 0, marketEvent: 0, defenseClock: 100, defense: null, policeClock: 0, intervention: '', cooldown: 0, heistCooldown: 0,
     stats: { cleaned: 0, captured: 0, maxHeat: 0, defended: 0, deals: 0, heists: 0 }, achievements: [],
@@ -46,10 +49,10 @@ export function bonus(c: Campaign) {
 }
 export function revenuePerMinute(c: Campaign): number {
   const base = BLOCKS.filter(b => c.owned.includes(b.id) && c.defense?.block !== b.id).reduce((v, b) => v + b.rate * (1 + .25 * c.expansion.levels[b.district]!), 0);
-  return base * (1 + c.upgrades * 0.15 + bonus(c).payout + (c.achievements.includes('cleaner') ? 0.05 : 0));
+  return base * (1+.1*Math.min(5,c.legacy.generation)) * (1 + c.upgrades * 0.15 + bonus(c).payout + (c.achievements.includes('cleaner') ? 0.05 : 0));
 }
 export function addHeat(c: Campaign, amount: number, action = true) {
-  c.heat = clamp(c.heat + amount * (action && amount > 0 && bonus(c).cooling ? 0.7 : 1) * (amount > 0 ? conditions(c.clock).heat : 1));
+  c.heat = clamp(c.heat + amount * (action && amount > 0 && bonus(c).cooling ? 0.7 : 1) * (amount > 0 ? conditions(c.clock).heat * (c.legacy.trait==='driver'?1.15:1) : 1));
   c.stats.maxHeat = Math.max(c.stats.maxHeat, c.heat);
 }
 export function failMission(c: Campaign) { for (const m of c.crew) m.loyalty = clamp(m.loyalty - 12); }
@@ -108,7 +111,7 @@ export function trade(c: Campaign, good: number, district: number, sell: boolean
 function loyalHacker(c: Campaign) { return activeCrew(c).some(m=>m.id==='hacker'); }
 export function launder(c: Campaign, amount: number): number {
   const n = Math.min(c.dirty, Math.max(0, Math.floor(amount)));
-  const clean = Math.floor(n * (loyalHacker(c) ? .83 : .8)); if (!clean) return 0;
+  const clean = Math.floor(n * (.8+(loyalHacker(c)?.03:0)+(c.legacy.trait==='accountant'?.05:0))); if (!clean) return 0;
   c.dirty -= n; c.clean += clean; c.stats.cleaned += clean; addHeat(c, 2); return clean;
 }
 export function layLow(c: Campaign): boolean {
@@ -187,6 +190,7 @@ export function restoreCampaign(value: unknown): Campaign | null {
   if (!value || typeof value !== 'object') return null;
   const v = value as Record<string, any>; const c = newCampaign();
   c.expansion = restoreExpansion(v.expansion);
+  c.legacy=restoreLegacy(v.legacy);
   const num = (v: unknown, fallback = 0, max = 1e9) => typeof v === 'number' && Number.isFinite(v) ? clamp(v, 0, max) : fallback;
   for (const key of ['clean','dirty','heat','clock','wageClock','marketClock','marketEvent','defenseClock','policeClock','cooldown','heistCooldown','upgrades'] as const) c[key] = num(v[key], c[key], key === 'heat' ? 100 : key === 'upgrades' ? 5 : 1e9);
   c.marketEvent = Math.floor(c.marketEvent) % EVENTS.length;

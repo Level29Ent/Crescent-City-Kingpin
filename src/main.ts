@@ -14,6 +14,8 @@ import { createScenery } from "./scenery.ts";
 import { createSound } from "./audio.ts";
 import { createImpacts } from "./effects.ts";
 import { BLOCKS, addHeat, bonus, captureBlock, failMission, newCampaign, offlineProgress, revenuePerMinute, resolveDefense, tickCampaign, unlock } from './campaign.ts';
+import { encodeSave, decodeSave } from './persistence.ts';
+import { TUTORIAL, advanceTutorial, peakMultiplier, dailyRoute, dailyCheckpoint, milestoneRewards, legacyInheritance } from './legacy.ts';
 import { SaveStore } from './persistence.ts';
 import { createEmpireUI } from './empire-ui.ts';
 import './campaign.css';
@@ -77,6 +79,8 @@ const sound = createSound(abort.signal);
 sound.configure(C.audio);
 const scenery = createScenery(scene);
 const impacts = createImpacts(scene);
+const tireSmoke=createImpacts(scene,true);
+let lastCleaned=C.stats.cleaned;
 const doorwayGeometry=new THREE.RingGeometry(1.1,1.45,24);
 const doorwayMaterial=new THREE.MeshBasicMaterial({color:0x82e6d1,side:THREE.DoubleSide,transparent:true,opacity:.8,depthWrite:false});
 for(const entry of INTERIORS){const marker=new THREE.Mesh(doorwayGeometry,doorwayMaterial);marker.rotation.x=-Math.PI/2;marker.position.set(entry.x,.08,entry.z);scene.add(marker);}
@@ -106,6 +110,11 @@ let introActive = false;
 let introElapsed = 0;
 let needsCharacter = !loaded;
 let missionUnlockUntil = 0;
+let shake=0;
+let tutorialRival: Foe|null=null;
+let tutorialCar: Vehicle|null=null;
+let effectClock=0;
+let checkpointNotice=0;
 let shopOpen = false;
 let managing = false;
 let inside: null | { room: ReturnType<typeof createInterior>; def: InteriorDefinition; x: number; z: number } = null;
@@ -254,6 +263,7 @@ function drawMini() {
 }
 
 function updateHud() {
+  document.body.dataset.tutorial=String(C.legacy.tutorial);
   $("cash").textContent = `$${Math.floor(C.clean).toLocaleString()} clean`;
   $("dirty").textContent = `$${Math.floor(C.dirty).toLocaleString()} dirty`;
   $("mute").textContent = C.audio.muted ? 'UNMUTE' : 'MUTE';
@@ -289,6 +299,9 @@ function updateHud() {
   if (mission) { const def = MISSIONS.find(m=>m.id===mission.id)!; obj = `${def.name} · ${def.steps[mission.step]!.name} · ${Math.ceil(mission.remaining)}s · E to interact`; }
   if (C.defense && !battle && !mission) obj = `TURF ATTACK: ${BLOCKS.find(b => b.id === C.defense!.block)!.name} · ${Math.ceil(C.defense.remaining)}s · M to respond`;
   if(inside)obj=`${inside.def.name} · walk to service desk · E at exit / Esc to leave`;
+  if(target){const angle=Math.atan2(target.x-P.x,target.z-P.z)-yaw;$('objectiveArrow').style.transform=`rotate(${-angle}rad)`;}
+  if(C.legacy.tutorial<3)obj=TUTORIAL[C.legacy.tutorial]!;
+  $('questTracker').textContent=C.legacy.tutorial<3?`TUTORIAL ${C.legacy.tutorial+1}/3`:C.legacy.daily&&!C.legacy.daily.finished?`DAILY: checkpoint ${C.legacy.daily.step+1}/3 · ${C.legacy.daily.elapsed.toFixed(1)}s`:`EMPIRE OBJECTIVE · Launder $${Math.max(0,10000-C.stats.cleaned).toLocaleString()} more · Capture ${Math.max(0,5-C.owned.length)} more corners · $${Math.floor(C.clean).toLocaleString()} / $1,000,000 clean`;
   $("obj").textContent = obj;
   $("obj").style.display = obj ? "block" : "none";
   const sp = P.car ? Math.round(Math.abs(P.car.speed) * 3.6) : 0;
@@ -310,19 +323,12 @@ addEventListener("keydown", (e) => {
   if ((e.target as HTMLElement)?.matches("input, select, textarea")) return;
   if(introActive){if(e.code==='Escape'||e.code==='Space')finishIntro();return;}
   if (balcony) {if(e.code === "Escape") $("paradeView").click(); return;}
-  if (e.code === 'Escape' && inside && !managing) { leaveInterior(); return; }
+  if (e.code === 'Escape' && inside && !managing) { pauseRun(); return; }
+  if(!$('pauseMenu').hidden)return;
   if (e.code === "KeyM") { e.preventDefault(); if (!e.repeat) { if (empire.isOpen()) empire.close(); else empire.open(); } return; }
   if (managing) return;
   if (["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.code)) e.preventDefault();
-  if (e.code === "Escape" && playing && !shopOpen) {
-    playing = false;
-    mouseDown = aimHeld = false;
-    keys.clear(); joystick.reset();
-    $("go").textContent = "RESUME";
-    $("start").style.display = "flex";
-    document.exitPointerLock();
-    return;
-  }
+  if (e.code === "Escape" && playing && !shopOpen) {pauseRun();return;}
   if (e.repeat && e.code === "KeyE") return;
   keys.add(e.code);
   if (!playing || shopOpen || managing) return;
@@ -364,7 +370,7 @@ document.addEventListener("pointerlockchange", () => { locked = document.pointer
 function startPlaying(){
   const state=missionSession();
   playing=state.playing;managing=state.managing;shopOpen=state.shopOpen;balcony=state.balcony;
-  $('start').style.display='none';$('shop').style.display='none';$('hud').style.display='';
+  $('pauseMenu').hidden=true;$('start').style.display='none';$('shop').style.display='none';$('hud').style.display='';
   keys.clear();joystick.reset();mouseDown=aimHeld=false;walkVelocity.set(0,0);
   // A queued pointer-lock loss from closing a menu must not immediately pause the accepted mission.
   locked=false;missionUnlockUntil=performance.now()+600;
@@ -485,12 +491,17 @@ function closeShop() {
 
 // ───────── interaction ─────────
 function interact() {
+  if(micro?.kind===0&&dist2(P.x,P.z,micro.x,micro.z)<5){if(C.dirty>=100){C.dirty-=100;C.heat=Math.max(0,C.heat-8);micro.t=0;feed('Checkpoint bribe paid.');saveGame();}else feed('Need $100 dirty cash, or find another route.');return;}
+  if(C.legacy.tutorial===0&&dist2(P.x,P.z,HQ.x,HQ.z)<8){
+    advanceTutorial(C,0);feed('Mama Nola: a rival is shaking down our corner. Defend yourself — aim, fire and reload.');
+    const [x,z]=freeSpot(10,12,4);tutorialRival=spawnFoe('gangster',x,z,0);tutorialRival.blockId='tutorial';tutorialRival.aggro=true;target={x,z,name:'First rival · aim and shoot'};saveGame();return;
+  }
   if (inside) {interiorInteract();return;}
   if (P.deadT > 0) return;
   const advanced = missionInteract(C,P.x,P.z);
   if(advanced) {feed(advanced); sfx('cash'); saveGame(); return;}
   const entrance=nearestEntrance(P.x,P.z);
-  if(!P.car&&entrance){enterInterior(entrance);return;}
+  if(!P.car&&entrance&&C.legacy.tutorial>=3){enterInterior(entrance);return;}
   const rival = foes.find(f=>f.kind==='gangster'&&!f.dead&&!f.mugged&&dist2(P.x,P.z,f.x,f.z)<2.5);
   if(!P.car&&rival){rival.mugged=true;rival.aggro=true;const pay=conditions(C.clock).night?125:100;C.dirty=Math.min(cashCap(C),C.dirty+pay);addHeat(C,8);feed(`Rival courier shaken down: +$${pay} dirty. Crew alerted!`);sfx('cash');saveGame();return;}
   const corner = BLOCKS.find(b => dist2(P.x, P.z, b.x, b.z) < 14 && (!C.owned.includes(b.id) || C.defense?.block === b.id));
@@ -512,6 +523,7 @@ function interact() {
     const d = dist2(v.x, v.z, P.x, P.z);
     if (d < bd) { bd = d; best = v; }
   }
+  if(best&&C.legacy.tutorial<2){feed('Meet Mama Nola and finish the rival encounter before driving.');return;}
   if (best) { P.car = best; sfx("door"); return; }
   if (dist2(P.x, P.z, HQ.x, HQ.z) < HQ.r) openShop();
 }
@@ -619,7 +631,7 @@ const walkVelocity = new THREE.Vector2();
 function reloadWeapon() { if(P.car || reloading>0 || ammo[P.weapon] === MAGAZINES[P.weapon]) return; reloading=P.weapon===2?2.2:1.6; sfx('click'); }
 function fire() {
   const w = WEAPONS[P.weapon]!;
-  if (inside || reloading > 0 || time - P.lastFire < w.cd) return;
+  if (C.legacy.tutorial===0 || inside || reloading > 0 || time - P.lastFire < w.cd) return;
   if (ammo[P.weapon]! <= 0) {reloadWeapon();return;}
   ammo[P.weapon]!--;
   P.lastFire = time;
@@ -643,7 +655,7 @@ function fire() {
     tracer(_o.clone(), _o.clone().addScaledVector(dir, r.t), 0xffe9a0);
     if (r.t < w.range) impacts.burst(_o.x + dir.x * r.t, _o.y + dir.y * r.t, _o.z + dir.z * r.t);
     if (r.foe) {
-      damageFoe(r.foe, w.dmg * (1+C.expansion.weaponLevel*.08+(furnished(C,"locker")?.1:0)) * (r.head ? 2 : 1), true);
+      damageFoe(r.foe, w.dmg * (C.legacy.trait==='enforcer'?1.15:C.legacy.trait==='accountant'?.9:1) * (1+C.expansion.weaponLevel*.08+(furnished(C,"locker")?.1:0)) * (r.head ? 2 : 1), true);
       hitFlash = 0.12;
       sfx(r.head ? "headshot" : "hit", 0.6);
     }
@@ -669,6 +681,7 @@ function slide(o: { x: number; z: number }, dx: number, dz: number, r: number): 
     else return true;
   }
   if (roadblock && dist2(nx, nz, roadblock.vehicle.x, roadblock.vehicle.z) < r + 2.2) return true;
+  if(micro?.kind===0&&micro.t>0&&dist2(nx,nz,micro.x,micro.z)<r+1.5&&(!P.car||Math.abs(P.car.speed)<15))return true;
   const p = pushOut(nx, nz, r);
   o.x = nx + p.x;
   o.z = nz + p.z;
@@ -720,7 +733,7 @@ function updateFoes(dt: number) {
         const dd = dist2(f.x, f.z, f.wx, f.wz);
         if (dd > 1) { f.heading = Math.atan2(f.wx - f.x, f.wz - f.z); moving = 1.6; }
       }
-    } else if (alive) {
+    } else if (alive && (C.legacy.tutorial>=3 || f===tutorialRival)) {
       const sight = f.kind === "cop" ? conditions(C.clock).visibility : 1;
       const los = d < 60*sight && hasLOS(f.x, f.z, px, pz);
       if (!f.aggro && los && d < 40*sight) f.aggro = true;
@@ -763,17 +776,17 @@ function updateDriving(dt: number) {
   const brake = keys.has("Space");
   const left = keys.has("KeyA") || keys.has("ArrowLeft");
   const right = keys.has("KeyD") || keys.has("ArrowRight");
-  boosting = updateReserve(P.boost, fwd && !brake && (keys.has("ShiftLeft") || keys.has("ShiftRight")), dt, 30, 12);
+  boosting = updateReserve(P.boost, fwd && !brake && (keys.has("ShiftLeft") || keys.has("ShiftRight")), dt, 30*(1-.15*(C.legacy.mods[P.car?.garage??-1]?.nitro??0)), 12*(1+.1*Math.min(5,C.legacy.generation)));
   const stored = c.garage !== undefined ? C.expansion.cars[c.garage] : null;
   const model = stored ? VEHICLES.find(v=>v.id===stored.id)! : null;
-  const performance = model ? model.speed + stored!.engine*.1 : 1;
+  const performance = (model ? model.speed + stored!.engine*.1 : 1)*(C.legacy.trait==='driver'?1.15:1);
   if (boosting) c.speed += CAR_ACC[k]! * 1.3 * dt;
-  if (fwd) c.speed += (c.speed < 0 ? CAR_ACC[k]! * 2.5 : CAR_ACC[k]!) * dt * (keys.has("KeyW")||keys.has("ArrowUp")?1:joystick.value.y);
-  else if (back) c.speed -= (c.speed > 0 ? CAR_ACC[k]! * 2.5 : CAR_ACC[k]! * 0.6) * dt * (keys.has("KeyS")||keys.has("ArrowDown")?1:-joystick.value.y);
+  if (fwd) c.speed += (c.speed < 0 ? CAR_ACC[k]! * 2.5 : CAR_ACC[k]!) * dt * (keys.has("KeyW")||keys.has("ArrowUp")?1:Math.min(1,joystick.value.y*C.legacy.sensitivity));
+  else if (back) c.speed -= (c.speed > 0 ? CAR_ACC[k]! * 2.5 : CAR_ACC[k]! * 0.6) * dt * (keys.has("KeyS")||keys.has("ArrowDown")?1:Math.min(1,-joystick.value.y*C.legacy.sensitivity));
   else c.speed *= Math.exp(-0.5 * dt);
   if (brake) c.speed -= Math.sign(c.speed) * Math.min(Math.abs(c.speed), 45 * dt);
   c.speed = Math.max(-9, Math.min(CAR_MAX[k]! * performance * (boosting ? 1.35 : 1), c.speed));
-  const want = Math.max(-1,Math.min(1,(left ? 1 : 0) - (right ? 1 : 0) - joystick.value.x));
+  const want = Math.max(-1,Math.min(1,(left ? 1 : 0) - (right ? 1 : 0) - joystick.value.x*C.legacy.sensitivity));
   c.steer += (want - c.steer) * Math.min(1, dt * 8);
   const handling = c.style===6?1.25:c.style===8||c.style===9?.7:1;
   const turn = Math.max(-1, Math.min(1, c.speed / 7)) * (1 - Math.min(0.6, Math.abs(c.speed) / 70));
@@ -782,6 +795,8 @@ function updateDriving(dt: number) {
   if (hit && Math.abs(c.speed) > 6) {
     if (Math.abs(c.speed) > 14) hurt(Math.abs(c.speed) * 0.4);
     c.speed *= -0.25;
+    if(C.crew.some(m=>m.id==='mechanic'&&m.loyalty>=25&&!m.owed))P.hp=Math.min(MAX_HP,P.hp+2);
+    shake=Math.max(shake,.65);addHeat(C,2);
     sfx("bump", 0.7);
   } else if (hit) c.speed *= 0.6;
   c.rig.root.position.set(c.x, 0, c.z);
@@ -797,6 +812,7 @@ function updateDriving(dt: number) {
     }
   }
   sound.engine(Math.min(1, Math.abs(c.speed) / CAR_MAX[k]!));
+  if(Math.abs(c.speed)>32)addHeat(C,dt*.25);
   P.x = c.x;
   P.z = c.z;
   player.setVisible(c.style===6);
@@ -806,10 +822,10 @@ function updateDriving(dt: number) {
 function updateWalking(dt: number) {
   player.setVisible(true);
   sound.engine(null);
-  const f = Math.max(-1,Math.min(1,(keys.has("KeyW") || keys.has("ArrowUp") ? 1 : 0) - (keys.has("KeyS") || keys.has("ArrowDown") ? 1 : 0) + joystick.value.y));
-  const s = Math.max(-1,Math.min(1,(keys.has("KeyD") || keys.has("ArrowRight") ? 1 : 0) - (keys.has("KeyA") || keys.has("ArrowLeft") ? 1 : 0) + joystick.value.x));
+  const f = Math.max(-1,Math.min(1,(keys.has("KeyW") || keys.has("ArrowUp") ? 1 : 0) - (keys.has("KeyS") || keys.has("ArrowDown") ? 1 : 0) + joystick.value.y*C.legacy.sensitivity));
+  const s = Math.max(-1,Math.min(1,(keys.has("KeyD") || keys.has("ArrowRight") ? 1 : 0) - (keys.has("KeyA") || keys.has("ArrowLeft") ? 1 : 0) + joystick.value.x*C.legacy.sensitivity));
   boosting = false;
-  updateReserve(P.boost, false, dt, 30, 12);
+  updateReserve(P.boost, false, dt, 30*(1-.15*(C.legacy.mods[P.car?.garage??-1]?.nitro??0)), 12*(1+.1*Math.min(5,C.legacy.generation)));
   const run = updateReserve(P.stamina, (f !== 0 || s !== 0) && (keys.has("ShiftLeft") || keys.has("ShiftRight")), dt, 22 * conditions(C.clock).stamina, 16);
   const shooting = time - P.lastFire < 0.7 || aimHeld;
   let moving = 0;
@@ -820,7 +836,7 @@ function updateWalking(dt: number) {
     const m = Math.hypot(dx, dz);
     dx /= m;
     dz /= m;
-    moving = (run ? 8.2 : 5)*Math.min(1,Math.hypot(f,s));
+    moving = (run ? 8.2*(C.legacy.trait==='enforcer'?.85:1) : 5)*Math.min(1,Math.hypot(f,s));
     walkVelocity.x+=(dx*moving-walkVelocity.x)*(1-Math.exp(-14*dt));
     walkVelocity.y+=(dz*moving-walkVelocity.y)*(1-Math.exp(-14*dt));
     slide(P, walkVelocity.x * dt, walkVelocity.y * dt, 0.5);
@@ -858,6 +874,10 @@ function updateEconomy(dt: number) {
   }
   for(const msg of tickExpansion(C,dt)){feed(msg);if(msg.includes('WARNING')||msg.includes('SHOWDOWN'))sfx('wanted');}
   if (P.car?.garage !== undefined && C.expansion.runs.some(r=>r.car===P.car!.garage)) {P.car=null;player.setVisible(true);}
+  updateTraining(dt);
+  if(C.legacy.daily&&!C.legacy.daily.finished){C.legacy.daily.elapsed+=dt;const point=dailyRoute(C.legacy.daily.date)[C.legacy.daily.step];if(point)target={...point,name:'Daily speedrun checkpoint'};if(dailyCheckpoint(C,P.x,P.z)){feed('Daily route complete! +$1,000 clean.');saveGame();}}
+  milestoneRewards(C);
+  updateMicroEvents(dt);
   updateRoadblock(dt);
   updatePickups(dt);
   if(C.expansion.mission) {
@@ -882,11 +902,11 @@ function updateEconomy(dt: number) {
     (markerRing.material as THREE.MeshBasicMaterial).color.setHex(j.priority ? 0xffb347 : 0x40f0ff);
     if (dist2(P.x, P.z, j.x, j.z) < 6) {
       const bonus = deliveryBonus(j.pay, j.t, j.duration);
-      C.dirty += Math.round((j.pay + bonus) * (1 + crewPayout()) * (conditions(C.clock).night ? 1.3 : 1));
+      C.dirty += Math.round((j.pay + bonus) * (1 + crewPayout()) * peakMultiplier(C.clock,C.heat));
       P.streak++;
       feed(`Delivery #${P.streak}: +$${j.pay} + $${bonus} speed bonus!`);
       sfx("cash");
-      P.job = null;
+      P.job = null;saveGame();
     } else if (j.t <= 0) {
       P.streak = 0;
       failMission(C);
@@ -895,8 +915,8 @@ function updateEconomy(dt: number) {
       P.job = null;
     }
   }
-  if (C.clean >= GOAL && !P.won && !C.expansion.completed.includes("kingpin")) {
-    C.expansion.completed.push("kingpin");
+  if (C.clean >= GOAL && !P.won && !C.expansion.completed.includes("millionKingpin")) {
+    C.expansion.completed.push("millionKingpin");
     P.won = true;
     document.exitPointerLock();
     $("endTitle").textContent = "KINGPIN OF NEW ORLEANS";
@@ -981,7 +1001,7 @@ function updatePickups(dt:number){
       if(p.kind===0){C.dirty=Math.min(cashCap(C),C.dirty+80);feed('Stash recovered: +$80 dirty');collected=true;}
       else if(p.kind===2){C.expansion.parts++;feed('Mechanical part recovered');collected=true;}
       else if(C.inventory.reduce((a,b)=>a+b,0)<inventoryCap(C)){C.inventory[Math.floor(rnd(0,C.inventory.length))]!++;feed('Contraband box recovered');collected=true;}
-      if(collected){C.expansion.pickupCount++;sfx('cash');}
+      if(collected){C.expansion.pickupCount++;sfx('cash');saveGame();}
     }
     if(collected||p.life<=0){p.mesh.removeFromParent();pickups.splice(i,1);}
   }
@@ -1050,6 +1070,12 @@ const empire = createEmpireUI({
     const model=VEHICLES.find(v=>v.id===stored.id)!;
     const gx=inside?.def.id==='garage'?-60:44,gz=inside?.def.id==='garage'?6:-8;
     const v=addVehicle(model.style,gx,gz,Math.PI/2,stored.color);v.garage=index;
+    const mods=C.legacy.mods[index];
+    if(mods){
+      const ownedResources:{dispose():void}[]=[];const disposeRig=v.rig.dispose;v.rig.dispose=()=>{ownedResources.forEach(r=>r.dispose());disposeRig();};
+      if(mods.glow){const glow=new THREE.Mesh(new THREE.PlaneGeometry(2.5,4.5),new THREE.MeshBasicMaterial({color:0xa84dff,transparent:true,opacity:.35,depthWrite:false}));glow.rotation.x=-Math.PI/2;glow.position.y=.06;v.rig.root.add(glow);ownedResources.push(glow.geometry,glow.material);}
+      v.rig.root.traverse(o=>{if(!(o instanceof THREE.Mesh)||!(o.material instanceof THREE.MeshStandardMaterial))return;const material=o.material.clone();ownedResources.push(material);if(mods.matte)material.roughness=1;if(mods.rims&&material.color.getHex()===0xc8ccd2)material.color.setHex(0xe7bd63);o.material=material;});
+    }
     feed(`${model.name} deployed at garage marker. E to enter.`);target={x:gx,z:gz,name:'Your garage vehicle'};
   },
   gearOwned: weapon => P.owned[weapon]===true,
@@ -1064,6 +1090,10 @@ const empire = createEmpireUI({
     startPlaying();saveGame();feed('Mission started — follow the white marker. E / INTERACT advances objectives.');
   },
   characterConfirmed(){needsCharacter=false;startPlaying();saveGame();},
+  milestone(){milestoneRewards(C);const rewards=C.legacy.pending.splice(0);if(rewards.length){$('milestoneToast').textContent=rewards.join(' · ');$('milestoneToast').hidden=false;sfx('capture');setTimeout(()=>$('milestoneToast').hidden=true,6000);saveGame();}},
+  travel(x,z){if(inside)leaveInterior();P.car=null;P.x=x;P.z=z;player.root.position.set(x,0,z);walkVelocity.set(0,0);saveGame();},
+  repair(){if(C.clean>=50&&C.cooldown<=0){C.clean-=50;P.armor=50;C.cooldown=60;feed('Mechanic reinforced your armor.');saveGame();}},
+  retire(){const inheritance=legacyInheritance(C);const next=newCampaign();next.legacy.generation=inheritance.generation;next.legacy.inherited=inheritance.inherited;next.clean+=inheritance.inherited;resetting=true;const result=store.save(next,{});void result.mirrored.then(()=>location.reload());},
   backRoom: openShop,
   buildings: () => INTERIORS,
   enterBuilding(id) { const def=INTERIORS.find(b=>b.id===id);if(def)enterInterior(def); },
@@ -1072,7 +1102,7 @@ const empire = createEmpireUI({
     if (open) { if(balcony){balcony=false;$('hud').style.display='';playing=balconyWasPlaying;$("paradeView").textContent="PARADE BALCONY";} wasPlaying = playing; managing = true; keys.clear(); joystick.reset(); mouseDown = aimHeld = false; document.exitPointerLock(); }
     else { managing = false; playing = wasPlaying; if (playing) { $('start').style.display = 'none'; lock(); } }
   },
-  changed() { if (battle?.defending && C.defense?.block !== battle.block) clearBattle(); for (const a of unlock(C)) feed(`Achievement: ${a}`); updateHud(); saveGame(); sfx('click'); },
+  changed() { if(C.stats.cleaned>lastCleaned){lastCleaned=C.stats.cleaned;sfx('cash');$('cashBurst').classList.remove('animate');void $('cashBurst').offsetWidth;$('cashBurst').classList.add('animate');} if (battle?.defending && C.defense?.block !== battle.block) clearBattle(); for (const a of unlock(C)) feed(`Achievement: ${a}`); updateHud(); saveGame(); sfx('click'); },
   notice: feed, location: () => ({ x: inside?.def.x ?? P.x, z: inside?.def.z ?? P.z, district: districtAt(inside?.def.x ?? P.x, inside?.def.z ?? P.z) }),
   attack: startBattle,
   waypoint(x, z, name) { target = { x, z, name }; yaw=Math.atan2(x-P.x,z-P.z); feed(`Route marked: ${name}. White dot on minimap.`); },
@@ -1172,13 +1202,47 @@ function updateIndoor(dt:number){
   inside.room.avatar.pose(speed>.1?'walk':'idle',speed,performance.now()/1000,0,dt);
 }
 
+// Staged onboarding teaches one mechanic at a time, without paying for idling.
+let micro:null|{kind:number;x:number;z:number;t:number;mesh:THREE.Mesh}=null;
+function updateTraining(dt:number){
+ const stage=C.legacy.tutorial;
+ if(stage===0){target={x:HQ.x,z:HQ.z,name:'➜ Mama Nola — walk here, then E'};}
+ if(stage===1&&!tutorialRival){const [x,z]=freeSpot(10,12,3);tutorialRival=spawnFoe('gangster',x,z,0);tutorialRival.blockId='tutorial';tutorialRival.aggro=true;}
+ if(stage===1&&tutorialRival?.dead){
+  advanceTutorial(C,1);tutorialCar=addVehicle(0,12,0,Math.PI/2,0xc79a44);target={x:12,z:0,name:'First delivery sedan · E to enter'};
+  feed('Driving unlocked. Take the marked sedan to the nearby drop at x=0, z=60.');saveGame();
+ }
+ if(stage===2){if(!tutorialCar)tutorialCar=addVehicle(0,12,0,Math.PI/2,0xc79a44);
+  if(P.car){target={x:0,z:60,name:'Tutorial delivery drop'};if(dist2(P.x,P.z,0,60)<8){advanceTutorial(C,2);C.dirty+=250;feed('Tutorial complete! +$250 dirty. Launder cash and capture turf to grow your empire.');saveGame();}}
+ }
+ C.legacy.lieutenantClock+=dt;
+ if(C.legacy.lieutenantClock>60){C.legacy.lieutenantClock=0;if(C.defense&&C.crew.some(m=>m.id==='muscle'&&m.loyalty>=25&&!m.owed)){const success=Math.random()<.6;if(success){resolveDefense(C,true);feed('Your Enforcer automatically held the corner.');saveGame();}}}
+}
+function updateMicroEvents(dt:number){
+ checkpointNotice=Math.max(0,checkpointNotice-dt);
+ C.legacy.microClock+=dt;
+ if(micro){micro.t-=dt;if(micro.t<=0){micro.mesh.removeFromParent();micro.mesh.geometry.dispose();(micro.mesh.material as THREE.Material).dispose();micro=null;}
+ else if(micro.kind===0&&dist2(P.x,P.z,micro.x,micro.z)<4){if(checkpointNotice===0){checkpointNotice=4;feed('Checkpoint: E for a $100 dirty bribe, detour, or drive through at speed (heat +15).');}if(P.car&&Math.abs(P.car.speed)>15){addHeat(C,15);shake=.7;micro.t=0;}}
+ else if(micro.kind===2&&dist2(P.x,P.z,micro.x,micro.z)<2){if(P.car){addHeat(C,3);P.car.speed*=.7;}else walkVelocity.multiplyScalar(.7);}}
+ if(!micro&&C.legacy.microClock>55&&C.legacy.tutorial>=3){C.legacy.microClock=0;const [x,z]=freeSpot(P.x+Math.sin(yaw)*22,P.z+Math.cos(yaw)*22,8);const kind=Math.floor(Math.random()*3);
+ const mesh=new THREE.Mesh(new THREE.BoxGeometry(kind===0?5:1.2,1.2,.7),new THREE.MeshStandardMaterial({color:kind===0?0x4466cc:kind===1?0xaa3344:0xd4a840}));mesh.position.set(x,.6,z);scene.add(mesh);micro={kind,x,z,t:35,mesh};
+ if(kind===1&&P.job){for(let i=0;i<2;i++){const rival=spawnFoe('gangster',x+i*2,z,0);rival.aggro=true;rival.blockId='ambush';}feed('Shipment ambush! Rival couriers spotted your delivery.');}else feed(kind===0?'Police checkpoint ahead — dirty-cash bribe or detour.':'Street performer ahead — maneuver carefully.');}
+ if(C.legacy.lastHeat>=30&&C.heat<30){C.legacy.copsOutrun++;saveGame();}C.legacy.lastHeat=C.heat;
+ effectClock-=dt;if(effectClock<=0){effectClock=.12;if(boosting&&P.car){tireSmoke.burst(P.x-Math.sin(P.car.h)*2,.2,P.z-Math.cos(P.car.h)*2);sound.nitro();}}
+}
+function pauseRun(){playing=false;keys.clear();joystick.reset();mouseDown=aimHeld=false;$('pauseMenu').hidden=false;locked=false;document.exitPointerLock();}
+$('endLegacy').onclick=()=>{$('end').style.display='none';empire.open('Legacy & Training');};
+$('pauseButton').onclick=pauseRun;$('resumeRun').onclick=startPlaying;$('pauseSave').onclick=()=>saveGame(true);
+$('exportSave').onclick=()=>{saveGame();const code=encodeSave(C,snapshotPlayer());$<HTMLTextAreaElement>('importCode').value=code;$('saveNotice').textContent='Copy this code to your other device. Keep it private: it contains your alias and progress.';};
+$('importSave').onclick=()=>{const save=decodeSave($<HTMLTextAreaElement>('importCode').value.trim());if(!save){$('saveNotice').textContent='Invalid or unsupported save code. Current progress unchanged.';return;}if(!confirm('Replace this device’s current run with this save?'))return;resetting=true;const result=store.save(save.campaign,save.player);void result.mirrored.then(ok=>{if(ok||result.local)location.reload();else{resetting=false;$('saveNotice').textContent='Import failed: storage unavailable.';}});};
+
 // ───────── main loop ─────────
 const clock = new THREE.Clock();
 let hudT = 0;
 let miniT = 0;
 function frame() {
   requestAnimationFrame(frame);
-  const menuObscuresControls = introActive || managing || shopOpen || $("start").style.display !== "none";
+  const menuObscuresControls = !$('pauseMenu').hidden || introActive || managing || shopOpen || $("start").style.display !== "none";
   toolbar.classList.toggle("menu-obscured", menuObscuresControls);
   $("touchControls").classList.toggle("menu-obscured", menuObscuresControls);
   const dt = Math.min(0.05, clock.getDelta());
@@ -1213,7 +1277,7 @@ function frame() {
     for (const v of vehicles) if (v !== P.car) { v.rig.root.position.set(v.x, 0, v.z); v.rig.root.rotation.y = v.h; v.rig.motion(0, 0, false, time); }
     updateFoes(dt);
     updateEconomy(dt);
-    impacts.update(dt);
+    impacts.update(dt);tireSmoke.update(dt);
     if (hitFlash > 0) hitFlash -= dt;
     $("cross").classList.toggle("hit", hitFlash > 0);
     for (let i = tracers.length - 1; i >= 0; i--) {
@@ -1228,7 +1292,9 @@ function frame() {
     if (miniT <= 0) { miniT = 0.15; drawMini(); }
   }
   if (!playing || managing || shopOpen || P.deadT > 0) { sound.engine(null); sound.siren(false); }
+  sound.intensity(playing&&!managing&&!inside&&(boosting||C.heat>=30),conditions(C.clock).night);
   updateCamera(dt);
+  if(shake>0&&!matchMedia('(prefers-reduced-motion: reduce)').matches){shake=Math.max(0,shake-dt*2);camera.position.x+=(Math.random()-.5)*shake*.2;camera.position.y+=(Math.random()-.5)*shake*.1;}
   if(inside){renderPass.scene=inside.room.scene;if(quality.value!=="performance")composer.render();else renderer.render(inside.room.scene,camera);return;}
   renderPass.scene=scene;
   scenery.update(time, P.x, P.z);

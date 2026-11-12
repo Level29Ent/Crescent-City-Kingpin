@@ -12,6 +12,9 @@ export class AudioController {
   private ambience!: BiquadFilterNode;
   private sirenWanted = false;
   private beat = 0;
+  private action=0;
+  private actionTarget=0;
+  private night=false;
   private timer: ReturnType<typeof setInterval> | undefined;
   constructor(signal: AbortSignal) { signal.addEventListener('abort', () => this.dispose(), { once: true }); }
   start() {
@@ -37,16 +40,21 @@ export class AudioController {
     // Sparse jazz-like bass and chord voicings; interval is disposed on page teardown.
     this.timer = setInterval(() => {
       if (!this.ctx || this.ctx.state !== 'running') return;
+      this.action+=(this.actionTarget-this.action)*.3;
+      if(this.action>.03){const bass=this.beat%2?82.41:65.41;this.tone(this.buses.music,bass,bass*.5,.16,.1*this.action,'sawtooth');this.tone(this.buses.music,120,35,.12,.15*this.action,'sine');if(this.beat%2===0)this.tone(this.buses.music,329.63,392,.12,.06*this.action,'square');}
+      if(this.night&&this.beat%4===0)this.tone(this.buses.ambient,2600,2300,.08,.025,'sine');
       const notes = [130.81, 155.56, 196, 233.08, 174.61, 207.65, 261.63, 311.13];
       const root = notes[this.beat % notes.length]!;
-      this.tone(this.buses.music, root / 2, root / 2, .32, .12, 'triangle');
-      if (this.beat % 2 === 0) [1, 1.25, 1.5].forEach(v => this.tone(this.buses.music, root * v, root * v, .65, .025, 'sine'));
+      if(this.beat%2===0)this.tone(this.buses.music, root / 2, root / 2, .32, .12*(1-this.action*.6), 'triangle');
+      if (this.beat % 4 === 0) [1, 1.25, 1.5].forEach(v => this.tone(this.buses.music, root * v, root * v, .65, .025, 'sine'));
       if (this.sirenWanted) this.tone(this.buses.sfx, this.beat % 2 ? 660 : 880, this.beat % 2 ? 880 : 660, .35, .1, 'sine');
       if (this.beat % 8 === 0 && this.ambience.frequency.value > 700) this.tone(this.buses.ambient, 1800, 1200, .15, .025, 'sine');
       this.beat++;
-    }, 450);
+    }, 225);
     void c.resume();
   }
+  intensity(active:boolean,night:boolean){this.actionTarget=active?1:0;this.night=night;}
+  nitro(){if(this.ctx){this.tone(this.buses.sfx,140,1100,.35,.14,'sawtooth');}}
   configure(settings: AudioSettings) {
     this.settings = { ...settings };
     if (!this.ctx) return;

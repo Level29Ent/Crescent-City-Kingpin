@@ -17,7 +17,7 @@ test('leaderboard validates payloads, rate limits submissions, and reads three m
   let locked = false; const calls = [];
   globalThis.fetch = async (_, options) => {
     const commands = JSON.parse(options.body); calls.push(...commands);
-    return Response.json(commands.map(cmd => ({ result: cmd[0] === 'SET' && cmd[1].includes(':rate:') ? (locked ? null : (locked = true, 'OK')) : cmd[0] === 'ZREVRANGE' ? ['test-id','1200'] : cmd[0] === 'GET' ? 'Test Kingpin' : 'OK' })));
+    return Response.json(commands.map(cmd => ({ result: cmd[0] === 'SET' && cmd[1].includes(':rate:') ? (locked ? null : (locked = true, 'OK')) : ['ZREVRANGE','ZRANGE'].includes(cmd[0]) ? ['test-id','1200'] : cmd[0] === 'GET' ? 'Test Kingpin' : 'OK' })));
   };
   try {
     assert.equal((await handler.fetch(request({ ...score, heat: -1 }))).status, 400);
@@ -26,7 +26,7 @@ test('leaderboard validates payloads, rate limits submissions, and reads three m
     const response = await handler.fetch(request(score)); assert.equal(response.status, 200); assert.match(response.headers.get('set-cookie'), /HttpOnly; Secure/);
     assert.equal((await handler.fetch(request(score))).status, 429);
     const get = await handler.fetch(new Request('https://example.com/api/leaderboard'));
-    const data = await get.json(); assert.equal(Object.keys(data.boards).length, 3); assert.equal(data.boards['Total Cash Cleaned'][0].name, 'Test Kingpin');
+    const data = await get.json(); assert.equal(Object.keys(data.boards).length, 4); assert.equal(data.boards['Total Cash Cleaned'][0].name, 'Test Kingpin');
     assert.ok(calls.some(cmd => cmd[0] === 'ZADD'));
   } finally {
     globalThis.fetch = savedFetch;
