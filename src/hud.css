@@ -158,3 +158,9 @@ body[data-tutorial="0"] #weapon { visibility:hidden; }
 body[data-tutorial="0"] #touchControls [data-control="cover"] {display:none;}
 
 body[data-tutorial="1"] #touchControls [data-control="cover"] {display:none;}
+
+.character-preview-panel { position:sticky; top:0; z-index:1; background:#102333; border:1px solid #b59c6a66; border-radius:12px; padding:8px 12px; box-shadow:0 7px 20px #0007; }
+.character-preview-panel p {margin:0;font-size:10px!important;letter-spacing:2px;color:#9fe5d8;}
+.character-preview-panel .garage-preview {height:280px;margin-top:5px;}
+@media(max-width:760px){.character-preview-panel .garage-preview{height:200px;} .character-preview-panel{padding:5px 8px;}}
+@media(max-height:550px){.character-preview-panel {position:relative;}.character-preview-panel .garage-preview{height:170px;}}

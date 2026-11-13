@@ -1,3 +1,5 @@
+import {mountShowroom} from './showroom.ts';
+import {lifestylePanel} from './lifestyle-ui.ts';
 import {cityStoriesPanel} from './city-stories-ui.ts';
 import { legacyPanel } from './legacy-ui.ts';
 import { owns } from './expansion.ts';
@@ -16,7 +18,7 @@ export function createEmpireUI(h: EmpireHooks) {
   const overlay = document.getElementById('empire')!;
   const content = document.getElementById('empireContent')!;
   const summary = document.getElementById('empireSummary')!;
-  const tabs = [...EXPANSION_TABS, 'Turf', 'Crew', 'Market', 'Safehouse', 'Character', 'Achievements', 'Leaderboard', 'Buildings', 'Legacy & Training', 'Stories & Exploration', 'Settings'];
+  const tabs = [...EXPANSION_TABS, 'Turf', 'Crew', 'Market', 'Safehouse', 'Character', 'Achievements', 'Leaderboard', 'Buildings', 'Legacy & Training', 'Stories & Exploration', 'Jobs & Style', 'Settings'];
   let selected = 'Turf'; let opened = false;
   function button(parent: HTMLElement, text: string, fn: () => void, disabled = false) {
     const b = document.createElement('button'); b.textContent = text; b.disabled = disabled;
@@ -44,10 +46,11 @@ export function createEmpireUI(h: EmpireHooks) {
     Array.from(nav.children).forEach((b, i) => b.setAttribute('aria-pressed', String(tabs[i] === selected)));
     if (renderExpansion(selected,c,content,{location:h.location,waypoint:h.waypoint,close,notice:h.notice,deploy:h.deploy,armory:h.armory,gearOwned:h.gearOwned,missionStarted:h.missionStarted,reload:h.changed})) return;
     content.append(el('h2', selected));
-    if(selected==='Stories & Exploration'){cityStoriesPanel(c,content,{changed:h.changed,track:h.waypoint,resume:()=>{close();h.missionStarted();}});}
+    if(selected==='Jobs & Style'){lifestylePanel(c,content,{changed:h.changed,track:h.waypoint,resume:()=>{close();h.missionStarted();}});}
+    else if(selected==='Stories & Exploration'){cityStoriesPanel(c,content,{changed:h.changed,track:h.waypoint,resume:()=>{close();h.missionStarted();}});}
     else if(selected==='Legacy & Training'){legacyPanel(c,content,{changed:h.changed,retire:h.retire,travel:h.travel,repair:h.repair,waypoint:(x,z)=>{h.waypoint(x,z,'Daily checkpoint');close();}});}
     else if (selected === 'Buildings') {
-      content.append(el('p','Twelve walkable interiors. Enter on foot at the door; HQ also accepts its sheltered approach. Outdoor combat and income pause while inside. Visit the back desk for services; E at the teal exit or Exit Building returns you to your original street position. Property ownership and prices remain unchanged.'));
+      content.append(el('p','Seventeen walkable interiors. Enter on foot at the door; HQ also accepts its sheltered approach. Outdoor combat and income pause while inside. Visit the back desk for services; E at the teal exit or Exit Building returns you to your original street position. Property ownership and prices remain unchanged.'));
       for(const b of h.buildings()){
         const d=distance(h.location(),b.x,b.z),near=d<=(b.id==='hq'?24:4);
         const item=card(b.name,`${d} m away · walkable furnished room · no entry fee`);
@@ -127,10 +130,13 @@ export function createEmpireUI(h: EmpireHooks) {
       button(upgrade, 'Upgrade clean business · $2,000', () => { c.clean -= 2000; c.upgrades++; }, !near || c.clean < 2000 || c.upgrades >= 5);
     } else if (selected === 'Character') {
       content.append(el('p', 'Choose your identity and style. Race/heritage is self-described; skin tone is independently selectable. All choices have identical gameplay stats. Changes apply to your 3D character immediately.'));
+      const preview=el('div','','character-preview-panel');preview.append(el('p','LIVE PREVIEW · drag to rotate'));content.append(preview);
+      const live=mountShowroom(preview,'character',0,{...c.avatar},c.lifestyle);
+      function refresh(){live?.updateCharacter(c.avatar,c.lifestyle);h.appearance();h.changed();}
       function select(label: string, values: string[], current: string, change: (value: string) => void) {
         const wrap = el('label', label, 'field'); const input = document.createElement('select');
         values.forEach(v => { const option = document.createElement('option'); option.value = v; option.textContent = v; input.append(option); });
-        input.value = current; input.onchange = () => { change(input.value); h.appearance(); h.changed(); }; wrap.append(input); content.append(wrap);
+        input.value = current; input.onchange = () => { change(input.value); refresh(); }; wrap.append(input); content.append(wrap);
       }
       select('Gender', ['Man','Woman','Nonbinary'], c.avatar.gender, v => c.avatar.gender = v);
       select('Race / heritage', ['Not specified','Black / African diaspora','White / European','Asian','Latino / Hispanic','Indigenous','Middle Eastern / North African','Mixed heritage','Self-described'], c.avatar.heritage, v => c.avatar.heritage = v);
@@ -140,6 +146,9 @@ export function createEmpireUI(h: EmpireHooks) {
       select('Outfit', outfits, outfits[c.avatar.outfit]!, v => c.avatar.outfit = outfits.indexOf(v));
       const hairs = ['Black','Dark brown','Chestnut','Auburn','Blond','Silver'];
       select('Hair', hairs, hairs[c.avatar.hair]!, v => c.avatar.hair = hairs.indexOf(v));
+      const cuts=['Classic','Curls','Mohawk','Tied back'];select('Hairstyle',cuts,cuts[c.lifestyle.hairStyle]!,v=>c.lifestyle.hairStyle=cuts.indexOf(v));
+      const accessories=['No accessory','Sunglasses','Cap','Fedora'];select('Accessory',accessories,accessories[c.lifestyle.accessory]!,v=>c.lifestyle.accessory=accessories.indexOf(v));
+      select('Facial hair',['Clean shaven','Short beard'],c.lifestyle.beard?'Short beard':'Clean shaven',v=>c.lifestyle.beard=v==='Short beard');
       const label = el('label', 'Player alias (public only if you submit a score)', 'field');
       const alias = document.createElement('input'); alias.value = c.alias; alias.maxLength = 24; alias.onchange = () => { c.alias = alias.value.replace(/[^a-zA-Z0-9 _-]/g, '').slice(0,24) || 'New Kingpin'; h.changed(); }; label.append(alias); content.append(label);
       button(content, 'Apply & return to city', () => { h.appearance(); close(); h.characterConfirmed(); });

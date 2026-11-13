@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import type {Lifestyle} from './lifestyle.ts';
 import type { Appearance } from "./campaign.ts";
 import { GLTFLoader, type GLTF } from "three/addons/loaders/GLTFLoader.js";
 import { clone as cloneModel } from "three/addons/utils/SkeletonUtils.js";
@@ -99,7 +100,7 @@ function buildGun(w: number): Gun {
   return { g, tip, len, two: w > 0 };
 }
 
-export function createPerson(kind: PersonKind, look: number, appearance?: Appearance): Person {
+export function createPerson(kind: PersonKind, look: number, appearance?: Appearance, customization?: Pick<Lifestyle,'hairStyle'|'accessory'|'beard'>): Person {
   const r = rng(look + kind.length * 977);
   const boss = kind === "boss";
   const sc = boss ? 1.17 : 0.95 + r() * 0.1;
@@ -128,7 +129,7 @@ export function createPerson(kind: PersonKind, look: number, appearance?: Appear
       if (appearance?.gender === 'Nonbinary') torso.scale.x *= .95;
       extras.push(() => {
         part(box(), lam(0xf4ead2), 0.2, 0.4, 0.02, 0, 1.2, 0.15, inner); // linen shirt
-        part(box(), emi(0x111111, 0.1), 0.26, 0.07, 0.04, 0, 0.14, 0.13, head); // shades
+        if((customization?.accessory??1)===1)part(box(), emi(0x111111, 0.1), 0.26, 0.07, 0.04, 0, 0.14, 0.13, head); // shades
         part(box(), emi(0xffc83a, 0.4), 0.12, 0.03, 0.03, 0, 1.38, 0.16, inner); // chain
       });
       break;
@@ -181,12 +182,31 @@ export function createPerson(kind: PersonKind, look: number, appearance?: Appear
     }
   }
   torso.material = top;
+  if(kind==='player'){
+    // Facial landmarks and layered clothing keep the procedural avatar readable at close range.
+    for(const side of [-1,1]){
+      part(sph(),skin,.065,.11,.06,side*.15,.08,0,head);
+      part(sph(),lam(0xf5efe2),.045,.028,.025,side*.065,.13,.134,head);
+      part(sph(),lam(0x242727),.019,.022,.012,side*.065,.13,.15,head);
+      part(box(),hair,.055,.012,.02,side*.065,.162,.14,head);
+      part(box(),lam(0xe6dbb8),.035,.38,.035,side*.14,1.2,.151,inner);
+    }
+    part(sph(),skin,.05,.07,.055,0,.085,.148,head);
+    part(box(),lam(0x714637),.07,.012,.018,0,.035,.142,head);
+    if(customization?.beard)part(sph(),hair,.24,.12,.17,0,-.005,.055,head);
+    const style=customization?.hairStyle??0;
+    if(style===1)part(sph(),hair,.37,.27,.34,0,.25,-.02,head);
+    if(style===2)part(box(),hair,.1,.25,.31,0,.32,-.02,head);
+    if(style===3)part(sph(),hair,.16,.18,.2,0,.12,-.23,head);
+    if(customization?.accessory===2){part(cyl(),top,.31,.13,.31,0,.32,0,head);part(box(),top,.28,.025,.18,0,.27,.17,head);}
+    if(customization?.accessory===3){part(cyl(),lam(0xdec89a),.5,.035,.5,0,.29,0,head);part(cyl(),lam(0xdec89a),.28,.17,.28,0,.38,0,head);}
+  }
   // hair (cap/hat kinds still get hair)
   part(box(), hair, 0.3, 0.12, 0.31, 0, 0.22, -0.02, head);
   part(box(), hair, 0.3, 0.2, 0.08, 0, 0.1, -0.13, head);
   void headM;
   if (appearance?.gender === 'Woman') part(box(), hair, .32, .32, .09, 0, -.04, -.13, head);
-  // face dots (eyes) skipped for budget
+  // Non-player faces retain the inexpensive base geometry.
   for (const e of extras) e(0);
 
   const armLen = 0.58, legLen = 0.88;

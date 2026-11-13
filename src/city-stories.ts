@@ -22,7 +22,7 @@ export function restoreCityStories(v:any):CityStories{
  if(v.active&&STORIES.some(m=>m.id===v.active.id)&&['quiet','bold'].includes(v.active.choice))s.active={id:v.active.id,step:Math.max(0,Math.min(2,Math.floor(Number(v.active.step)||0))),choice:v.active.choice,spawned:v.active.spawned===true};return s;
 }
 export function startStory(c:Campaign,id:string,choice:string){
- const i=STORIES.findIndex(m=>m.id===id);if(i<0||c.cityStories.active||c.expansion.mission||(c.legacy.daily&&!c.legacy.daily.finished)||c.cityStories.completed.includes(id)||c.legacy.tutorial<3||!['quiet','bold'].includes(choice)||(i>0&&!c.cityStories.completed.includes(STORIES[i-1]!.id)))return false;
+ const i=STORIES.findIndex(m=>m.id===id);if(i<0||c.lifestyle.work||c.cityStories.active||c.expansion.mission||(c.legacy.daily&&!c.legacy.daily.finished)||c.cityStories.completed.includes(id)||c.legacy.tutorial<3||!['quiet','bold'].includes(choice)||(i>0&&!c.cityStories.completed.includes(STORIES[i-1]!.id)))return false;
  c.cityStories.active={id,step:0,choice,spawned:false};return true;
 }
 export function storyObjective(c:Campaign){const a=c.cityStories.active;if(!a)return null;const m=STORIES.find(m=>m.id===a.id)!;return {x:a.step===2?30:m.x,z:a.step===2?4:m.z,text:`${m.title}: ${m.steps[a.step]}`};}
