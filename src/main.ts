@@ -270,7 +270,7 @@ function drawMini() {
     mg.arc(dx * k, dz * k, r, 0, 6.3);
     mg.fill();
   };
-  for (const b of BUSINESSES) dot(b.x, b.z, P.captured.has(b.district) ? "#6cf06c" : "#ffd23a", 4);
+  for (const b of BUSINESSES) dot(approach(b).x, approach(b).z, P.captured.has(b.district) ? "#6cf06c" : "#ffd23a", 4);
   for (const f of foes) if (!f.dead && f.kind !== "civilian") dot(f.x, f.z, f.kind === "cop" ? "#4a8aff" : f.kind === "boss" ? "#ff40ff" : "#ff4040", f.kind === "boss" ? 4 : 2.5);
   if (P.job) dot(P.job.x, P.job.z, "#40f0ff", 4);
   if (target) dot(target.x, target.z, '#ffffff', 5);
@@ -950,7 +950,7 @@ function updateEconomy(dt: number) {
   // heal at HQ
   if (dist2(P.x, P.z, HQ.x, HQ.z) < HQ.r && P.hp < MAX_HP && P.deadT <= 0) P.hp = Math.min(MAX_HP, P.hp + 6 * dt);
   const j = P.job;
-  markerRing.visible = !!j || !!target;
+  markerRing.visible = !!j || (!!target && !(selectedLocation?.interiorId&&['Buildings & homes','Businesses','Heists'].includes(selectedLocation.category)));
   if (!j && target) markerRing.position.set(approach(target).x,.09,approach(target).z);
   if (j) {
     j.t -= dt;
