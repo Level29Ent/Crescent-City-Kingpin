@@ -12,8 +12,8 @@ test('analog joystick has a deadzone, proportional speed and a circular travel l
   assert.ok(Math.abs(Math.hypot(full.knobX,full.knobY)-40)<1e-10);assert.ok(full.y>0);
   assert.equal(joystickVector(NaN,0,40).x,0);assert.equal(joystickVector(10,0,0).x,0);
 });
-test('forty facade entrances are distinct, selectable on-site and unavailable remotely',()=>{
-  assert.equal(INTERIORS.length,40);assert.equal(new Set(INTERIORS.map(b=>b.id)).size,40);
+test('forty-one facade entrances are distinct, selectable on-site and unavailable remotely',()=>{
+  assert.equal(INTERIORS.length,41);assert.equal(new Set(INTERIORS.map(b=>b.id)).size,41);
   for(const b of INTERIORS)assert.equal(nearestEntrance(approach(b).x,approach(b).z).id,b.id);
   assert.equal(nearestEntrance(230,-230),undefined);
   const hq=approach(INTERIORS.find(b=>b.id==='hq'));assert.equal(nearestEntrance(hq.x+5,hq.z,3),undefined);assert.equal(nearestEntrance(hq.x,hq.z,3).id,'hq');

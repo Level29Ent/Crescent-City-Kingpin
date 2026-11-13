@@ -1,3 +1,4 @@
+import {furnishKarma} from './karma-interior.ts';
 import {surfaceTexture,furnishDetails} from './interior-decor.ts';
 import {approach,atPoint} from './navigation.ts';
 import * as THREE from 'three';
@@ -5,6 +6,7 @@ import { createPerson, type Person } from './actors.ts';
 import type {Lifestyle} from './lifestyle.ts';
 import type { Appearance } from './campaign.ts';
 export const INTERIORS = [
+  {id:'karma',name:'Karma',x:10,z:-16,tab:'Market',theme:'dispensary',color:0x131614},
   {id:'clinic',name:'Charity Street Clinic',x:-180,z:-60,tab:'Safehouse',theme:'cafe',color:0x638d86},
   {id:'hardware',name:'Levee Hardware & Supply',x:60,z:60,tab:'Garage',theme:'garage',color:0x6c7670},
   {id:'library',name:'Tremé Reading Room',x:-120,z:-180,tab:'Stories & Exploration',theme:'antique',color:0x8b7354},
@@ -79,21 +81,27 @@ export function createInterior(def:InteriorDefinition,appearance:Appearance,cust
     const geometry=new THREE.PlaneGeometry(6.5,1.35);geometries.push(geometry);const mesh=new THREE.Mesh(geometry,material);mesh.position.set(x,y,z);scene.add(mesh);
   }
   const floor=box(0,-.15,0,14,.3,16,0xffffff);
-  const floorTexture=surfaceTexture(def.theme==='garage'||def.theme==='warehouse'?'metal':def.theme==='cafe'||def.theme==='casino'?'tile':'wood');
+  const floorTexture=surfaceTexture(def.theme==='dispensary'?'marble':def.theme==='garage'||def.theme==='warehouse'?'metal':def.theme==='cafe'||def.theme==='casino'?'tile':'wood');
   (floor.material as THREE.MeshStandardMaterial).map=floorTexture;
+  if(def.theme==='dispensary')(floor.material as THREE.MeshStandardMaterial).roughness=.35;
   const wallTexture=surfaceTexture('brick');wallTexture.repeat.set(2,2);
-  for(let x=-6.5;x<7;x+=.7)box(x,.008,0,.025,.01,16,0x62503b);
+  if(def.theme!=='dispensary')for(let x=-6.5;x<7;x+=.7)box(x,.008,0,.025,.01,16,0x62503b);
   const wallColor=def.id==='hq'?[0x97623d,0x254f59,0x57365f][customization?.safehouseTheme??0]!:def.color;
   const walls=[box(-7,2,0,.2,4,16,wallColor),box(7,2,0,.2,4,16,wallColor),box(0,2,-8,14,4,.2,wallColor)];
   // Materials and perimeter dressing are shared by every enterable room.
-  walls.forEach(w=>{(w.material as THREE.MeshStandardMaterial).map=wallTexture;});
-  furnishDetails(def.theme,box);
+  if(def.theme!=='dispensary')walls.forEach(w=>{(w.material as THREE.MeshStandardMaterial).map=wallTexture;});
+  const disposeDressing=def.theme==='dispensary'?furnishKarma(scene,box):()=>{};
+  if(def.theme!=='dispensary')furnishDetails(def.theme,box);
   // Front wall stays open to preserve third-person camera visibility; the exit threshold is at z=6.7.
-  sign(def.name,0,3,-7.85);
+  if(def.theme!=='dispensary')sign(def.name,0,3,-7.85);
   box(0,.02,6.5,3,.035,1,0x2f9c8d);
   sign('EXIT · E / INTERACT',0,1.2,7.8,'#9cebdd');
-  box(0,.7,-5.4,4,1.4,1,0x9a7048,true);sign('SERVICE DESK · E',0,2.2,-7.7);
-  sign('SUPPLIES · E ON FLOOR EMBLEM',0,1.2,-7.65,'#9cebdd');
+  if(def.theme==='dispensary'){
+    box(0,.7,-5.4,4,1.4,1,0x222923,true);sign('SERVICE · E',0,1.05,-4.88,'#a2d355');
+  }else{
+    box(0,.7,-5.4,4,1.4,1,0x9a7048,true);sign('SERVICE DESK · E',0,2.2,-7.7);
+    sign('SUPPLIES · E ON FLOOR EMBLEM',0,1.2,-7.65,'#9cebdd');
+  }
   if(def.theme==='club'){
     box(-4,.2,-2.8,3,.4,4,0x3e284c,true);
     for(let i=0;i<3;i++){box(-4+i,.8,-3.1,.3,1.2,.3,0x24252b);box(-4+i,1.5,-3.1,.18,.2,.2,0xf4d37c);}
@@ -109,7 +117,7 @@ export function createInterior(def:InteriorDefinition,appearance:Appearance,cust
     for(const x of [-5,5]){box(x,1.2,0,1.3,2.4,8,0x76563b,true);for(let z=-3;z<=3;z+=2){box(x,2,z,.6,.7,.6,0xd2b577);box(x,.7,z,.8,.5,.5,0x477d81);}}
   }else if(def.theme==='warehouse'){
     for(const x of [-4,4])for(const z of [-2,2]){box(x,.8,z,2,1.6,2,0x937247,true);box(x,1.64,z,2,.06,2,0xba9b69);}
-  }else{
+  }else if(def.theme!=='dispensary'){
     for(const x of [-4,4])for(const z of [-1,3]){box(x,.65,z,1.8,1.3,1.3,0x956a46,true);box(x,.35,z+1.1,.7,.7,.6,0x395c5a,true);}
     for(let i=0;i<5;i++)box(-4+i*2,.1,-7,1,.2,.5,0xe8b866);
   }
@@ -128,5 +136,5 @@ export function createInterior(def:InteriorDefinition,appearance:Appearance,cust
   }
   const attendant=createPerson('civilian',2);attendant.root.position.set(-2.8,0,-6.5);scene.add(attendant.root);
   const avatar:Person=createPerson('player',5,appearance,customization);scene.add(avatar.root);
-  return {scene,avatar,obstacles,dispose(){attendant.dispose();floorTexture.dispose();wallTexture.dispose();avatar.dispose();geometries.forEach(g=>g.dispose());materials.forEach(m=>{if(m instanceof THREE.MeshBasicMaterial)m.map?.dispose();m.dispose();});}};
+  return {scene,avatar,obstacles,dispose(){disposeDressing();attendant.dispose();floorTexture.dispose();wallTexture.dispose();avatar.dispose();geometries.forEach(g=>g.dispose());materials.forEach(m=>{if(m instanceof THREE.MeshBasicMaterial)m.map?.dispose();m.dispose();});}};
 }

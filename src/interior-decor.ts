@@ -1,13 +1,18 @@
 import * as THREE from 'three';
-export type Surface='wood'|'tile'|'brick'|'metal';
+export type Surface='wood'|'tile'|'brick'|'metal'|'marble';
 /** Small local textures: no image downloads, random flicker or external asset dependencies. */
 export function surfaceTexture(kind:Surface){
  const canvas=document.createElement('canvas');canvas.width=canvas.height=128;
  const c=canvas.getContext('2d')!;
- c.fillStyle={wood:'#816044',tile:'#a6b2a4',brick:'#947362',metal:'#72828a'}[kind];c.fillRect(0,0,128,128);
+ c.fillStyle={wood:'#816044',tile:'#a6b2a4',brick:'#947362',metal:'#72828a',marble:'#d9d5ca'}[kind];c.fillRect(0,0,128,128);
  c.strokeStyle=kind==='tile'?'#5e706b':'#413e38';c.lineWidth=2;
  if(kind==='wood'){for(let y=0;y<128;y+=16){c.strokeRect(0,y,128,16);for(let i=0;i<8;i++){c.globalAlpha=.22;c.beginPath();c.moveTo(0,y+i*2);c.lineTo(128,y+i*2+1);c.stroke();}c.globalAlpha=1;c.strokeRect(y%32?64:20,y,44,16);}}
  if(kind==='tile'){for(let x=0;x<128;x+=32)for(let y=0;y<128;y+=32){c.strokeRect(x,y,32,32);if((x+y)%64===0){c.fillStyle='#91a299';c.fillRect(x+3,y+3,26,26);}}}
+ if(kind==='marble'){
+  c.strokeStyle='#a29b8e';c.lineWidth=.7;
+  for(let i=0;i<15;i++){const x=(i*37)%128,y=(i*53)%128;c.beginPath();c.moveTo(x,y);c.lineTo(x+13,y+21);c.lineTo(x+9,y+34);c.lineTo(x+29,y+57);c.stroke();}
+  c.strokeStyle='#736f65';c.lineWidth=1;for(let x=0;x<128;x+=64)for(let y=0;y<128;y+=32)c.strokeRect(x,y,64,32);
+ }
  if(kind==='brick'){for(let y=0;y<128;y+=16)for(let x=-32;x<128;x+=64)c.strokeRect(x+(y%32?32:0),y,64,16);}
  if(kind==='metal'){for(let x=4;x<128;x+=16)for(let y=4;y<128;y+=16){c.fillStyle='#b2bec1';c.fillRect(x,y,3,3);}c.strokeRect(0,0,128,128);}
  const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;texture.wrapS=texture.wrapT=THREE.RepeatWrapping;texture.repeat.set(4,4);return texture;
