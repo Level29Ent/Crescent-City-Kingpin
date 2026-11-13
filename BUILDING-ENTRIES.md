@@ -1,6 +1,6 @@
 # Physical waypoint entrances
 
-Building/home, business and heist pins now share signed exterior doors on existing building facades, rather than independent rings in the middle of the road. Each has a visible frame, glass panel, handle, canopy, threshold and name/INTERACT sign. Walk within 3 m of the threshold on foot and press E / INTERACT. The Buildings list uses the same range; the old 24 m HQ shortcut is removed.
+Building/home, business and heist pins now share signed exterior doors on existing building facades, rather than independent rings in the middle of the road. Removed the old free-standing business rings and 60 m HQ beam so they cannot obscure the doorway. Each has a visible frame, glass panel, handle, canopy, threshold and name/INTERACT sign. Walk within 3 m of the threshold on foot and press E / INTERACT. The Buildings list uses the same range; the old 24 m HQ shortcut is removed.
 
 There are 32 furnished instanced interiors, including ten additional business/heist rooms. All business and heist directory entries are associated with a room. Destinations at the same address can share a public room; entry never grants property ownership or income. These are room transitions, not seamless holes cut into the world mesh.
 

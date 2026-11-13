@@ -8,10 +8,8 @@ import {
   BLOCK_CENTERS_Z,
   BLOCK_HALF,
   BUILDINGS,
-  BUSINESSES,
   DECKS,
   DISTRICTS,
-  HQ,
   LAND_Z,
   PONDS,
   PROPS,
@@ -1973,42 +1971,7 @@ export function createScenery(scene: THREE.Scene): Scenery {
   buildLayer(far, matSolid, false, false, true);
   buildLayer(farGlow, matFarGlow, false, false, false);
 
-  // ── markers: business rings, HQ beam ──
-  const beamTex = trackT(
-    canvasTex(16, 128, (g) => {
-      const gr = g.createLinearGradient(0, 0, 0, 128);
-      gr.addColorStop(0, "rgba(255,255,255,0)");
-      gr.addColorStop(1, "rgba(255,255,255,0.9)");
-      g.fillStyle = gr;
-      g.fillRect(0, 0, 16, 128);
-    }),
-  );
-  const ringMeshes: { mesh: THREE.Mesh; phase: number }[] = [];
-  for (const biz of BUSINESSES) {
-    const isHq = biz.x === HQ.x && biz.z === HQ.z;
-    const colr = isHq ? 0xffd23a : DISTRICTS[biz.district]!.color;
-    const R = isHq ? HQ.r : 3.6;
-    const y = biz.z > LAND_Z ? 0.12 : 0.07;
-    const ringMat = trackM(new THREE.MeshBasicMaterial({ color: colr, transparent: true, opacity: isHq ? 0.9 : 0.6, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 }));
-    const ring = new THREE.Mesh(new THREE.RingGeometry(R - 0.5, R, 40).rotateX(-Math.PI / 2), ringMat);
-    ring.position.set(biz.x, y, biz.z);
-    ring.renderOrder = 2;
-    root.add(ring);
-    ringMeshes.push({ mesh: ring, phase: biz.id });
-    const fillMat = trackM(new THREE.MeshBasicMaterial({ color: colr, transparent: true, opacity: 0.16, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
-    const fill = new THREE.Mesh(new THREE.CircleGeometry(R - 0.5, 36).rotateX(-Math.PI / 2), fillMat);
-    fill.position.set(biz.x, y - 0.01, biz.z);
-    fill.renderOrder = 1;
-    root.add(fill);
-    if (isHq) {
-      const beamMat = trackM(new THREE.MeshBasicMaterial({ color: 0xffd23a, map: beamTex, transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
-      const beam = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 2.2, 60, 16, 1, true), beamMat);
-      beam.position.set(biz.x, 30, biz.z);
-      beam.renderOrder = 3;
-      root.add(beam);
-      ringMeshes.push({ mesh: beam, phase: 9 });
-    }
-  }
+  // Building markers are signed facade doors, rendered by entrance-art.ts.
 
   // ── update ──
   const water = riverGeo.attributes.position as THREE.BufferAttribute;
@@ -2078,14 +2041,7 @@ export function createScenery(scene: THREE.Scene): Scenery {
     for (const f of flickers) f.mat.color.setScalar(fl(f.phase, f.depth));
     poolMat.opacity = 0.9 + 0.1 * Math.sin(time * 1.3);
 
-    // markers
-    for (const { mesh, phase } of ringMeshes) {
-      const s = 1 + 0.05 * Math.sin(time * 2.2 + phase);
-      if (mesh.geometry.type === "CylinderGeometry") {
-        (mesh.material as THREE.MeshBasicMaterial).opacity = 0.12 + 0.04 * Math.sin(time * 2 + phase);
-        mesh.rotation.y = time * 0.3;
-      } else mesh.scale.set(s, 1, s);
-    }
+
   };
 
   const dispose = () => {
