@@ -1,3 +1,4 @@
+import {approach} from '../src/navigation.ts';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { newCampaign, addHeat, captureBlock, revenuePerMinute, hire, tickCampaign, offlineProgress, restoreCampaign } from '../src/campaign.ts';
@@ -41,11 +42,11 @@ test('garage runs consume cargo, exclude duplicate dispatch and settle only once
 });
 test('major heists enforce recon location, crew assembly, execution and cooldown with legendary reward',()=>{
   const c=newCampaign();c.clean=20000;assert.equal(recon(c,'bank',50,50),false);assert.equal(assemble(c,'bank'),false);
-  assert.ok(recon(c,'bank',0,-120));assert.equal(assemble(c,'bank'),false);hire(c,'hacker');hire(c,'muscle');
+  assert.ok(recon(c,'bank',...Object.values(approach({x:0,z:-120}))));assert.equal(assemble(c,'bank'),false);hire(c,'hacker');hire(c,'muscle');
   const funds=c.clean;assert.ok(assemble(c,'bank'));assert.equal(c.clean,funds-300);assert.equal(assemble(c,'bank'),false);
   execute(c,'bank',true,()=>0);execute(c,'bank',true,()=>0);assert.equal(c.dirty,0);
   assert.match(execute(c,'bank',true,()=>0),/HEIST COMPLETE/);assert.equal(c.dirty,7500);assert.ok(c.expansion.gear.includes('Crescent Precision Barrel'));
-  assert.equal(recon(c,'bank',0,-120),false);assert.equal(plan(c,'bank').cooldown,600);
+  assert.equal(recon(c,'bank',...Object.values(approach({x:0,z:-120}))),false);assert.equal(plan(c,'bank').cooldown,600);
 });
 test('rivals expand and trigger a showdown on lightly defended player corners',()=>{
   const c=newCampaign();captureBlock(c,'frenchmen');c.expansion.influence[0]=60;
@@ -56,15 +57,15 @@ test('rivals expand and trigger a showdown on lightly defended player corners',(
 test('Mardi Gras has spatial objectives and a required escorted float finale; rewards claimed once',()=>{
   const c=newCampaign();assert.ok(startMission(c,'parade'));assert.equal(startMission(c,'courier'),false);
   assert.equal(missionInteract(c,200,200),null);
-  for(const step of MISSIONS[0].steps.slice(0,4))assert.match(missionInteract(c,step.x,step.z),/advanced/);
-  assert.match(missionInteract(c,0,102),/Stay within/);assert.equal(c.dirty,0);
-  c.expansion.mission.escort=40;assert.match(missionInteract(c,0,102),/COMPLETE/);
+  for(const step of MISSIONS[0].steps.slice(0,4))assert.match(missionInteract(c,...Object.values(approach(step))),/advanced/);
+  assert.match(missionInteract(c,...Object.values(approach({x:0,z:102}))),/Stay within/);assert.equal(c.dirty,0);
+  c.expansion.mission.escort=40;assert.match(missionInteract(c,...Object.values(approach({x:0,z:102}))),/COMPLETE/);
   assert.equal(c.expansion.mission,null);assert.ok(c.expansion.gear.includes('Krewe Captain Medallion'));const funds=c.dirty;
-  assert.equal(missionInteract(c,0,102),null);assert.equal(c.dirty,funds);
+  assert.equal(missionInteract(c,...Object.values(approach({x:0,z:102}))),null);assert.equal(c.dirty,funds);
 });
 test('night courier pays more and mechanical side mission grants garage resources',()=>{
-  const c=newCampaign();c.clock=100;startMission(c,'courier');for(const s of MISSIONS[1].steps)missionInteract(c,s.x,s.z);
-  assert.equal(c.dirty,1170);startMission(c,'mechanic');for(const s of MISSIONS[3].steps)missionInteract(c,s.x,s.z);assert.equal(c.expansion.parts,6);
+  const c=newCampaign();c.clock=100;startMission(c,'courier');for(const s of MISSIONS[1].steps)missionInteract(c,...Object.values(approach(s)));
+  assert.equal(c.dirty,1170);startMission(c,'mechanic');for(const s of MISSIONS[3].steps)missionInteract(c,...Object.values(approach(s)));assert.equal(c.expansion.parts,6);
 });
 test('offline property revenue is reduced, capped and paired with upkeep; empty saves migrate safely',()=>{
   const c=newCampaign();c.clean=50000;buyProperty(c,'port');const report=offlineProgress(c,172800);
