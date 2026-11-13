@@ -183,6 +183,7 @@ export function createPerson(kind: PersonKind, look: number, appearance?: Appear
   }
   torso.material = top;
   if(kind==='player'){
+    part(cyl(),skin,.13,.2,.13,0,1.5,0,inner);
     // Facial landmarks and layered clothing keep the procedural avatar readable at close range.
     for(const side of [-1,1]){
       part(sph(),skin,.065,.11,.06,side*.15,.08,0,head);

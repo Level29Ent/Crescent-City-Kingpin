@@ -25,7 +25,7 @@ export function mountShowroom(parent: HTMLElement, style: number | 'cash' | 'cha
   object.rotation.y=-.25;
   const box=new THREE.Box3().setFromObject(object);const size=box.getSize(new THREE.Vector3()),center=box.getCenter(new THREE.Vector3());
   const camera=new THREE.PerspectiveCamera(36,1,.05,60);const radius=Math.max(size.x,size.y,size.z)*1.7;
-  camera.position.set(style==='character'?0:radius*.8,center.y+radius*(style==='character'?.12:.65),radius*(style==='character'?1.05:.8));camera.lookAt(center);
+  camera.position.set(style==='character'?0:radius*.8,center.y+radius*(style==='character'?.12:.65),radius*(style==='character'?1.22:.8));camera.lookAt(center);
   let disposed=false;
   const render=()=>{if(disposed||!canvas.isConnected)return;const w=Math.max(1,canvas.clientWidth),h=Math.max(1,canvas.clientHeight);renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix();renderer.render(scene,camera);};
   const resize=new ResizeObserver(render);resize.observe(canvas);
