@@ -1,3 +1,4 @@
+import {atPoint} from './navigation.ts';
 import type { Campaign } from './campaign.ts';
 export const STORIES = [
  {id:'brass',title:'The Brass Ledger',speaker:'Mama Nola',dialogue:'The Violet Crown took our musicians’ pay. Get the ledger back. We can settle quietly—or make a statement.',x:0,z:-120,pay:1800,steps:['Meet the record keeper on Rampart Street','Defeat the Crown collectors','Return the ledger to Mama Nola']},
@@ -27,7 +28,7 @@ export function startStory(c:Campaign,id:string,choice:string){
 }
 export function storyObjective(c:Campaign){const a=c.cityStories.active;if(!a)return null;const m=STORIES.find(m=>m.id===a.id)!;return {x:a.step===2?30:m.x,z:a.step===2?4:m.z,text:`${m.title}: ${m.steps[a.step]}`};}
 export function storyInteract(c:Campaign,x:number,z:number):'fight'|'complete'|null{
- const a=c.cityStories.active,point=storyObjective(c);if(!a||!point||Math.hypot(x-point.x,z-point.z)>8||a.step===1)return null;
+ const a=c.cityStories.active,point=storyObjective(c);if(!a||!point||!atPoint(x,z,point,8)||a.step===1)return null;
  if(a.step===0){a.step=1;a.spawned=true;return 'fight';}
  const m=STORIES.find(m=>m.id===a.id)!;
  c.dirty+=Math.round(m.pay*(a.choice==='bold'?1.35:1));c.heat=Math.min(100,c.heat+(a.choice==='bold'?18:5));

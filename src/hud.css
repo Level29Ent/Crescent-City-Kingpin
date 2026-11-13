@@ -164,3 +164,12 @@ body[data-tutorial="1"] #touchControls [data-control="cover"] {display:none;}
 .character-preview-panel .garage-preview {height:280px;margin-top:5px;}
 @media(max-width:760px){.character-preview-panel .garage-preview{height:200px;} .character-preview-panel{padding:5px 8px;}}
 @media(max-height:550px){.character-preview-panel {position:relative;}.character-preview-panel .garage-preview{height:170px;}}
+
+#arrivalHelp {grid-column:2;grid-row:2;align-self:start;padding:10px 14px;border:1px solid #70ddd1;background:#123637ee;color:#f7eccd;font-size:13px;line-height:1.5;border-radius:8px;overflow-wrap:anywhere;}
+#contextAction {background:#ffe09b!important;color:#152734!important;border:2px solid #fff0c8!important;font-weight:900;}
+.city-location-map {position:relative;height:360px;margin:14px 0;background:repeating-linear-gradient(0deg,transparent 0 44px,#8ec4bc33 45px 46px),repeating-linear-gradient(90deg,#102935 0 44px,#8ec4bc33 45px 46px);border:1px solid #9bcab788;border-radius:10px;}
+.city-location-map .location-pin {position:absolute;transform:translate(-50%,-50%);padding:3px;min-width:18px;font-size:9px;border:1px solid #e1d38f;background:#326b70;color:#fff;}
+.map-player {position:absolute;color:#ffce74;font-size:10px;z-index:3;background:#000b;transform:translate(-50%,-50%);pointer-events:none;}
+.location-detail {color:#a4ebd7;}
+@media(max-width:1000px){#arrivalHelp {grid-column:1/-1;grid-row:auto;font-size:11px;padding:6px 9px;}.city-location-map{height:280px;}}
+@media(max-height:740px){#arrivalHelp{max-height:44px;overflow:auto;font-size:10px;padding:4px 8px;}}

@@ -1,8 +1,15 @@
+import {approach,atPoint} from './navigation.ts';
 import * as THREE from 'three';
 import { createPerson, type Person } from './actors.ts';
 import type {Lifestyle} from './lifestyle.ts';
 import type { Appearance } from './campaign.ts';
 export const INTERIORS = [
+  {id:'home-quarter',name:'French Quarter Courtyard Home',x:0,z:-180,tab:'Jobs & Style',theme:'hq',color:0x8c704f},
+  {id:'home-uptown',name:'Uptown Shotgun Home',x:-180,z:60,tab:'Jobs & Style',theme:'hq',color:0x53776d},
+  {id:'home-bywater',name:'Bywater Artist Loft',x:180,z:-120,tab:'Character',theme:'antique',color:0x77566f},
+  {id:'dive',name:'Bywater Dive Bar',x:120,z:0,tab:'Properties',theme:'club',color:0x684b45},
+  {id:'laundromat',name:'Bywater Laundromat',x:0,z:60,tab:'Safehouse',theme:'warehouse',color:0x52777b},
+
   {id:'barber',name:'Tremé Corner Barbershop',x:-60,z:-120,tab:'Character',theme:'cafe',color:0x476777},
   {id:'record',name:'Frenchmen Record Store',x:60,z:-120,tab:'Jobs & Style',theme:'club',color:0x654777},
   {id:'seafood',name:'Crescent Seafood Market',x:120,z:120,tab:'Properties',theme:'warehouse',color:0x4b7477},
@@ -32,7 +39,7 @@ export function indoorMove(x:number,z:number,dx:number,dz:number,obstacles:Obsta
   return {x:nx,z:nz};
 }
 export function nearestEntrance(x:number,z:number,range=4):InteriorDefinition|undefined {
-  return [...INTERIORS].sort((a,b)=>Math.hypot(x-a.x,z-a.z)-Math.hypot(x-b.x,z-b.z)).find(b=>Math.hypot(x-b.x,z-b.z)<=range);
+  return [...INTERIORS].sort((a,b)=>Math.hypot(x-approach(a).x,z-approach(a).z)-Math.hypot(x-approach(b).x,z-approach(b).z)).find(b=>atPoint(x,z,b,range));
 }
 export function createInterior(def:InteriorDefinition,appearance:Appearance,customization?:Lifestyle,furniture:readonly {id:string;slot:number}[]=[]) {
   const scene=new THREE.Scene();scene.background=new THREE.Color(0x101a24);

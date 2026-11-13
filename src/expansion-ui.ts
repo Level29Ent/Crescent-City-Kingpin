@@ -1,3 +1,4 @@
+import {atPoint,approach} from './navigation.ts';
 import { mountShowroom } from './showroom.ts';
 import { banknoteCanvas } from './money.ts';
 import type { Campaign } from './campaign.ts';
@@ -44,9 +45,9 @@ export function renderExpansion(tab:string,c:Campaign,container:HTMLElement,h:Ho
     container.append(text('p','Cash comes from missions, recovered stashes and owned revenue assets. There is no free standing payout. The displayed bundle is illustrative; the ledger above is your spendable balance.'));
   }else if(tab==='Heists'){
     container.append(text('p','Every major heist has three phases: visit the landmark for Recon → assign paid, loyal specialists → make three tactical Execution choices. Clean planning fees are charged once, and every attempt has a 10-minute cooldown. Quiet choices improve—not guarantee—success. The Mint requires front-business level 3.'));
-    for(const target of HEISTS){const p=plan(c,target.id);const loc=h.location();const near=Math.hypot(loc.x-target.x,loc.z-target.z)<14;
+    for(const target of HEISTS){const p=plan(c,target.id);const loc=h.location();const near=atPoint(loc.x,loc.z,target,10);
       const item=card(target.name,`$${target.payout.toLocaleString()} dirty · $${target.fee} clean fee · specialists ${target.roles.join(', ')} · legendary ${target.gear}. Phase ${['Recon','Crew Assembly','Execution'][p.phase]}${p.cooldown?` · cooldown ${Math.ceil(p.cooldown)}s`:''}`);
-      if(p.phase===0)button(item,near?'Gather intel on-site':'Mark recon location',()=>{if(near){recon(c,target.id,loc.x,loc.z);}else mark(target.x,target.z,`${target.name} recon`);},p.cooldown>0);
+      if(p.phase===0)button(item,near?'Gather intel on-site':'Track recon · E on arrival',()=>{if(near){recon(c,target.id,loc.x,loc.z);}else mark(target.x,target.z,`${target.name} recon`);},p.cooldown>0);
       if(p.phase===1){item.append(text('p',target.roles.map(r=>`${r}: ${loyal(c,r).length?'ready':'hire / pay / restore loyalty'}`).join(' · ')));button(item,'Assign crew & fund plan',()=>{assemble(c,target.id);},target.roles.some(r=>!loyal(c,r).length)||c.clean<target.fee||(target.id==='mint'&&c.upgrades<3));}
       if(p.phase===2){item.append(text('p',`Assigned: ${p.assigned.join(', ')} · tactical choice ${p.step+1}/3`));HEIST_CHOICES[p.step]!.forEach((choice,i)=>button(item,choice,()=>{const result=execute(c,target.id,i===0);e.report=result;h.notice(result);}));}
     }if(e.report)container.append(text('p',e.report,'mission-report'));
