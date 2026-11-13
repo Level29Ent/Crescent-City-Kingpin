@@ -1,3 +1,4 @@
+import {actorHit,damageFalloff,spreadMultiplier} from './gunplay.ts';
 // Crescent City Kingpin: standalone single-player game. Plain three.js, no engine, no server.
 import * as THREE from "three";
 import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
@@ -660,16 +661,8 @@ function rayHit(ox: number, oy: number, oz: number, dx: number, dy: number, dz: 
   let head = false;
   for (const f of foes) {
     if (f.dead) continue;
-    const cx = f.x - ox;
-    const cy = 0.9 - oy;
-    const cz = f.z - oz;
-    const t = cx * dx + cy * dy + cz * dz;
-    if (t < 0 || t > bt) continue;
-    const px = ox + dx * t;
-    const py = oy + dy * t;
-    const pz = oz + dz * t;
-    if (py > 1.95 || py < 0) continue;
-    if (Math.hypot(px - f.x, pz - f.z) < 0.55) { best = f; bt = t; head = py > 1.5; }
+    const hit=actorHit(ox,oy,oz,dx,dy,dz,f.x,f.z,bt);
+    if(hit){best=f;bt=hit.t;head=hit.head;}
   }
   return { foe: best, t: bt, head };
 }
@@ -678,8 +671,10 @@ const MAGAZINES = [12,30,6,24,5,6];
 const ammo = [...MAGAZINES];
 let reloading = 0;
 let recoil = 0;
+let shotBloom=0;
+let shotFeedback=0;
 const walkVelocity = new THREE.Vector2();
-function reloadWeapon() { if(P.car || reloading>0 || ammo[P.weapon] === MAGAZINES[P.weapon]) return; reloading=P.weapon===2?2.2:1.6; sfx('click'); }
+function reloadWeapon() { if(inside||P.deadT>0||P.car || reloading>0 || ammo[P.weapon] === MAGAZINES[P.weapon]) return; reloading=P.weapon===2?2.2:1.6; sfx('click'); }
 function fire() {
   const w = WEAPONS[P.weapon]!;
   if (C.legacy.tutorial===0 || inside || reloading > 0 || time - P.lastFire < w.cd) return;
@@ -695,7 +690,7 @@ function fire() {
   player.root.updateMatrixWorld(true);
   player.muzzle(_o);
   const base = new THREE.Vector3().subVectors(_e, _o).normalize();
-  const spread = w.spread * (aimHeld ? .4 : 1) * (crouched?.65:1) * (C.expansion.gear.includes("Crescent Precision Barrel") ? .75 : 1);
+  const spread = w.spread * spreadMultiplier(aimHeld,crouched,walkVelocity.length()>1,shotBloom) * (C.expansion.gear.includes("Crescent Precision Barrel") ? .75 : 1);
   for (let i = 0; i < w.pellets; i++) {
     const dir = base.clone();
     dir.x += rnd(-spread, spread);
@@ -706,15 +701,16 @@ function fire() {
     tracer(_o.clone(), _o.clone().addScaledVector(dir, r.t), 0xffe9a0);
     if (r.t < w.range) impacts.burst(_o.x + dir.x * r.t, _o.y + dir.y * r.t, _o.z + dir.z * r.t);
     if (r.foe) {
-      damageFoe(r.foe, w.dmg * (C.legacy.trait==='enforcer'?1.15:C.legacy.trait==='accountant'?.9:1) * (1+C.expansion.weaponLevel*.08+(furnished(C,"locker")?.1:0)) * (r.head ? 2 : 1), true);
-      hitFlash = 0.12;
+      damageFoe(r.foe, w.dmg * damageFalloff(r.t,w.range) * (C.legacy.trait==='enforcer'?1.15:C.legacy.trait==='accountant'?.9:1) * (1+C.expansion.weaponLevel*.08+(furnished(C,"locker")?.1:0)) * (r.head ? 2 : 1), true);
+      hitFlash = 0.16;shotFeedback=.6;$('combatFeedback').textContent=r.foe.dead?'TARGET DOWN':r.head?'HEADSHOT':'HIT';$('combatFeedback').classList.toggle('headshot',r.head);
       sfx(r.head ? "headshot" : "hit", 0.6);
     }
   }
-  if (P.weapon > 0) crimeNoise();
+  shotBloom=Math.min(1.5,shotBloom+.16);
+  crimeNoise();
   player.flash(1);
   recoil = Math.min(.045, recoil + (P.weapon===2?.025:.009));
-  pitch = Math.max(-.7, Math.min(.45, pitch + recoil));
+  // Visual kick recovers separately from the player’s aim instead of permanently ratcheting pitch upward.
   if(C.expansion.mission?.id==='parade' && Math.abs(P.x)<12) {addHeat(C,3);feed('Keep the parade safe — firing draws police attention.');}
 }
 function crimeNoise() {
@@ -1042,9 +1038,9 @@ function updateCamera(dt: number) {
     diff = Math.atan2(Math.sin(diff), Math.cos(diff));
     yaw += diff * Math.min(1, dt * 1.8) * (P.car.speed > 0 ? 1 : 0);
   }
-  const cp = Math.cos(pitch);
+  const cp = Math.cos(pitch+recoil);
   const dx = Math.sin(yaw) * cp;
-  const dy = Math.sin(pitch);
+  const dy = Math.sin(pitch+recoil);
   const dz = Math.cos(yaw) * cp;
   const driving = !!P.car;
   const tx = P.x - Math.cos(yaw) * (driving ? 0 : 0.9);
@@ -1306,7 +1302,7 @@ function updateStoryCity(dt:number){
  if(a.step===1&&storySpawned&&!foes.some(f=>!f.dead&&f.blockId===`story:${a.id}`)){a.step=2;storySpawned=false;feed('Rival encounter won. Return to Mama Nola with the evidence.');saveGame();}
  const objective=storyObjective(C);if(objective)target={x:objective.x,z:objective.z,name:objective.text};}
  DISCOVERIES.forEach((d,i)=>{discoveryMeshes[i]!.visible=!C.cityStories.discovered.includes(d.id);discoveryMeshes[i]!.rotation.y=time*.7;});
- streetLife.update(dt,time,P.x,P.z,C.heat,C.legacy.tutorial>=3,Cspeed=>{C.cityStories.trafficHits++;if(P.car){P.car.speed*=.65;hurt(Cspeed*.25);addHeat(C,2);}else hurt(4);shake=.3;});
+ streetLife.update(dt,time,P.x,P.z,C.heat,C.legacy.tutorial>=3,Cspeed=>{C.cityStories.trafficHits++;if(P.car){P.car.speed*=.65;hurt(Cspeed*.25);addHeat(C,2);}else hurt(4);shake=.3;},(x,z)=>{if(foes.filter(f=>f.kind==='cop'&&!f.dead).length<8){const p=freeSpot(x,z,3);spawnFoe('cop',p[0],p[1],-1);feed('Police cruiser stopped — uniformed officer deploying.');}});
  if(P.car&&streetLife.near(P.x,P.z))P.car.speed*=Math.exp(-dt*3);
 }
 
@@ -1364,7 +1360,7 @@ function frame() {
   else if (playing && !shopOpen && !managing && !P.won && !document.hidden) {
     time += dt;
     if(reloading>0){reloading-=dt;if(reloading<=0)ammo[P.weapon]=MAGAZINES[P.weapon]!;}
-    recoil*=Math.exp(-10*dt);
+    recoil*=Math.exp(-10*dt);shotBloom=Math.max(0,shotBloom-dt*1.8);shotFeedback=Math.max(0,shotFeedback-dt);$('combatFeedback').style.opacity=String(Math.min(1,shotFeedback*4));$('cross').style.scale=String(aimHeld?.65:1+shotBloom*.28);
     player.flash(Math.max(0,1-(time-P.lastFire)*16));
     if (P.deadT > 0) {
       P.deadT -= dt;

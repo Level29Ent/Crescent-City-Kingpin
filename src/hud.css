@@ -173,3 +173,7 @@ body[data-tutorial="1"] #touchControls [data-control="cover"] {display:none;}
 .location-detail {color:#a4ebd7;}
 @media(max-width:1000px){#arrivalHelp {grid-column:1/-1;grid-row:auto;font-size:11px;padding:6px 9px;}.city-location-map{height:280px;}}
 @media(max-height:740px){#arrivalHelp{max-height:44px;overflow:auto;font-size:10px;padding:4px 8px;}}
+
+#hud > #combatFeedback { position:absolute; top:calc(50% + 28px); left:50%; transform:translateX(-50%); color:#e1f9eb; font-size:12px; font-weight:800; letter-spacing:2px; opacity:0; text-shadow:0 2px 7px #000; }
+#hud > #combatFeedback.headshot {color:#ffcd76;}
+#cross {transition:scale .08s ease-out; width:12px;height:12px;margin:-8px;border-width:2px;}

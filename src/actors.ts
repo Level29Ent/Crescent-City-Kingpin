@@ -54,7 +54,7 @@ function part(g: THREE.BufferGeometry, m: THREE.Material, sx: number, sy: number
 }
 export function disposeShared(): void {
   for (const g of geos.values()) g.dispose();
-  for (const m of mats.values()) m.dispose();
+  for (const m of mats.values()) {if(m instanceof THREE.MeshStandardMaterial)m.map?.dispose();m.dispose();}
   geos.clear(); mats.clear();
 }
 
@@ -73,6 +73,13 @@ const BEADS = [0x7b2cbf, 0x2d9d4a, 0xe8b923];
 // ---------- people ----------
 type Gun = { g: THREE.Group; tip: THREE.Object3D; len: number; two: boolean };
 
+function policeLabel(text:string):THREE.MeshStandardMaterial{
+ const key='police-label-'+text;const cached=mats.get(key);if(cached)return cached as THREE.MeshStandardMaterial;
+ if(typeof document==='undefined')return lam(0xf5f1db);
+ const canvas=document.createElement('canvas');canvas.width=512;canvas.height=128;const g=canvas.getContext('2d')!;
+ g.fillStyle='#f5f3e7';g.fillRect(0,0,512,128);g.fillStyle='#10213e';g.textAlign='center';g.font='bold 78px sans-serif';g.fillText(text,256,93,490);
+ const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;const material=new THREE.MeshStandardMaterial({map:texture,roughness:.8,side:THREE.DoubleSide});mats.set(key,material);return material;
+}
 function buildGun(w: number): Gun {
   const g = new THREE.Group();
   g.name=`weapon-${w}`;
@@ -151,6 +158,19 @@ export function createPerson(kind: PersonKind, look: number, appearance?: Appear
         part(box(), emi(0xffd54a, 0.6), 0.07, 0.08, 0.03, 0, 0.32, 0.17, head);
         part(box(), lam(0x111111), 0.52, 0.07, 0.3, 0, 0.88, 0, inner);
         part(box(), emi(0xffd54a, 0.6), 0.07, 0.08, 0.03, 0.12, 1.28, 0.15, inner);
+      });
+      extras.push(()=>{
+        inner.name='uniformed-police-officer';
+        part(box(),lam(0x111e32),.46,.44,.11,0,1.18,.18,inner).name='police-duty-vest';
+        part(box(),lam(0xe4c66b),.07,.09,.025,-.13,1.3,.25,inner).name='police-badge';
+        part(box(),lam(0x91abc0),.12,.025,.02,.12,1.3,.25,inner);
+        for(const side of [-1,1]){
+          part(box(),lam(0x14233a),.12,.17,.12,side*.22,.89,.1,inner);
+          part(box(),emi(0xe8c767,.1),.09,.08,.04,side*.29,1.42,.06,inner);
+        }
+        part(box(),lam(0x14191f),.07,.2,.07,-.23,1.36,.17,inner).name='police-radio';
+        part(box(),lam(0x303c46),.025,.14,.025,-.23,1.53,.17,inner);
+        const patch=part(geo('police-back-patch',()=>new THREE.PlaneGeometry(.36,.12)),policeLabel('POLICE'),1,1,1,0,1.28,-.151,inner);patch.rotation.y=Math.PI;patch.name='police-uniform-label';
       });
       break;
     case "gangster": {
@@ -389,6 +409,13 @@ export function createCar(style: number, color: number): Car {
     for(const side of [-1,1])for(let z=-.9;z<=.9;z+=.2)part(box(),Math.round(z*10)%2===0?dark:white,.025,.12,.2,side*(w/2+.015),h0+ch-.1,z,body);
   }
   if (police) {
+    root.name='marked-police-cruiser';
+    for(const side of [-1,1]){
+      const label=part(geo('police-door-label',()=>new THREE.PlaneGeometry(1.55,.36)),policeLabel('POLICE'),1,1,1,side*(w/2+.025),h0+.4,.15,body);label.rotation.y=side*Math.PI/2;label.name='police-door-livery';
+      part(box(),dark,.12,.16,.7,side*.62,h0+.13,len/2+.15,body);
+    }
+    part(box(),dark,w-.3,.25,.12,0,h0+.3,len/2+.14,body).name='police-push-bar';
+    part(box(),dark,.035,.7,.035,.6,h0+ch+cabH+.35,-.5,body).name='police-antenna';
     part(box(), white, w + 0.02, 0.22, 1.5, 0, h0 + 0.2, 0.2, body); // doors livery
   }
   const ty = h0 + 0.1;
@@ -428,7 +455,7 @@ export function createCar(style: number, color: number): Car {
     wheels.push({ pivot, spin, front: fz > 0 });
   }
   const src = carModels[police ? 0 : sports ? 1 : [0, 2, 3, 0][Math.max(0, COLORS.indexOf(color)) % 4]!];
-  if (src && style <= 3 && !truck) {
+  if (src && style <= 3 && !truck && !police) {
     const m = cloneModel(src.scene);
     const bb = new THREE.Box3().setFromObject(m);
     const k = len / (bb.max.z - bb.min.z);
@@ -453,6 +480,8 @@ export function createCar(style: number, color: number): Car {
     body.visible = false;
     for (const wh of wheels) wh.pivot.visible = false;
   }
+  const emergencyLights:THREE.PointLight[]=[];
+  if(police){for(const [x,color]of [[-.4,0xff2233],[.4,0x3377ff]]){const light=new THREE.PointLight(color,0,9,2);light.position.set(x!,h0+ch+cabH+.3,0);root.add(light);emergencyLights.push(light);}}
   let last = -1, rot = 0;
   const car: Car = {
     root,
@@ -471,6 +500,7 @@ export function createCar(style: number, color: number): Car {
       tail.color.setHex(braking ? 0xff3030 : 0x8a0a0a);
       if (barR && barB) {
         const on = Math.floor(time * 6) % 2 === 0;
+        emergencyLights.forEach((light,i)=>light.intensity=(i===0?on:!on)?9:0);
         barR.emissiveIntensity = on ? 2.2 : 0.1;
         barB.emissiveIntensity = on ? 0.1 : 2.2;
       }
