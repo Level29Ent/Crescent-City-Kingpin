@@ -1182,7 +1182,7 @@ const empire = createEmpireUI({
   backRoom: openShop,
   buildings: () => INTERIORS.map(b=>({...b,...approach(b)})),
   trackLocation(location){selectedLocation=location;target={x:location.x,z:location.z,name:location.name};yaw=Math.atan2(location.x-P.x,location.z-P.z);feed(location.instruction);},
-  enterBuilding(id) { const def=INTERIORS.find(b=>b.id===id);if(def)enterInterior(def); },
+  enterBuilding(id) { const def=INTERIORS.find(b=>b.id===id);if(def){enterInterior(def);if(inside){wasPlaying=true;startPlaying();}} },
   campaign: C,
   pause(open) {
     if (open) { if(balcony){balcony=false;$('hud').style.display='';playing=balconyWasPlaying;$("paradeView").textContent="PARADE BALCONY";} wasPlaying = playing; managing = true; keys.clear(); joystick.reset(); lookDragging=false;mouseDown = aimHeld = false; document.exitPointerLock(); }
