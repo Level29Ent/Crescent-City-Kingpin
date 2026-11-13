@@ -43,4 +43,19 @@ test('every furnished room keeps supplies, desk and exit reachable and releases 
   }
  }finally{delete globalThis.document;}
 });
-test('all four local material styles create reusable repeating textures',()=>{globalThis.document=canvasDocument();try{for(const kind of ['wood','tile','brick','metal']){const t=surfaceTexture(kind);assert.equal(t.image.width,128);assert.equal(t.repeat.x,4);t.dispose();}}finally{delete globalThis.document;}});
+test('all five local material styles create reusable repeating textures',()=>{globalThis.document=canvasDocument();try{for(const kind of ['wood','tile','brick','metal','marble']){const t=surfaceTexture(kind);assert.equal(t.image.width,128);assert.equal(t.repeat.x,4);t.dispose();}}finally{delete globalThis.document;}});
+
+test('Karma is a new public dispensary with glass cases, branded rugs, collision and disposable textures',()=>{
+ globalThis.document=canvasDocument();
+ try{
+  const def=INTERIORS.find(b=>b.id==='karma');assert.equal(def.name,'Karma');assert.equal(def.theme,'dispensary');
+  assert.ok(INTERIORS.some(b=>b.id==='herbalist'),'existing herbalist is preserved');
+  const room=createInterior(def,newCampaign().avatar);const textures=new Set();let glass=0,ceilingPanels=0;
+  room.scene.traverse(o=>{if(o.isMesh){if(o.material.transparent&&o.material.opacity===.14)glass++;if(o.material.emissiveIntensity===1.4)ceilingPanels++;if(o.material.map)textures.add(o.material.map);}});
+  assert.equal(glass,2);assert.equal(ceilingPanels,3);assert.ok(textures.size>=8);
+  assert.deepEqual(indoorMove(3,0,.5,0,room.obstacles),{x:3,z:0},'glass counter blocks walking through it');
+  const disposed=new Set();for(const texture of textures)texture.addEventListener('dispose',()=>disposed.add(texture));
+  room.dispose();assert.equal(disposed.size,textures.size);
+  const c=newCampaign();assert.match(inspectSupplies(c,'karma',0,1),/medkit/);assert.equal(inspectSupplies(c,'karma',0,1),null);
+ }finally{delete globalThis.document;}
+});
