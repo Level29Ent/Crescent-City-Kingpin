@@ -325,7 +325,7 @@ function updateHud() {
   const work=inside?null:workObjective(C);if(work)obj=work.text;
   const story=inside?null:storyObjective(C);if(story){obj=story.text;if(C.cityStories.active?.step===1){const enemies=foes.filter(f=>!f.dead&&f.blockId===`story:${C.cityStories.active!.id}`);obj+=` · ${enemies.length} rivals left${enemies[0]?` · lead HP ${Math.ceil(enemies[0].hp)}`:''}`;}}
   if(crouched&&!inside)obj=(coverStations.some(p=>dist2(P.x,P.z,p.x,p.z)<2.4)?'COVERED (-60% damage) · ':'CROUCHED · ')+obj;
-  if(C.legacy.tutorial<3)obj=TUTORIAL[C.legacy.tutorial]!;
+  if(C.legacy.tutorial<3&&!inside)obj=TUTORIAL[C.legacy.tutorial]!;
   $('questTracker').textContent=C.legacy.tutorial<3?`TUTORIAL ${C.legacy.tutorial+1}/3`:C.legacy.daily&&!C.legacy.daily.finished?`DAILY: checkpoint ${C.legacy.daily.step+1}/3 · ${C.legacy.daily.elapsed.toFixed(1)}s`:`EMPIRE OBJECTIVE · Launder $${Math.max(0,10000-C.stats.cleaned).toLocaleString()} more · Capture ${Math.max(0,5-C.owned.length)} more corners · $${Math.floor(C.clean).toLocaleString()} / $1,000,000 clean`;
   $("obj").textContent = obj;
   $("obj").style.display = obj ? "block" : "none";
@@ -516,6 +516,7 @@ function closeShop() {
 // ───────── interaction ─────────
 function interact() {
   if(P.deadT>0)return;
+  if(inside){interiorInteract();return;}
   if(!inside&&selectedLocation&&atPoint(P.x,P.z,selectedLocation,8)){
     const id=selectedLocation.id;
     if(id.startsWith('door:')){if(P.car){feed('Exit your vehicle first: E / INTERACT or GET OUT.');exitCar();return;}const door=INTERIORS.find(b=>b.id===id.slice(5));if(door){enterInterior(door);return;}}
