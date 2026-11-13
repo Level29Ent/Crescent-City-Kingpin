@@ -25,7 +25,7 @@ No active accepted mission/contract means a map pin grants no payout. Combat sta
 
 ## Doors and homes
 
-Doors share a 6m on-foot arrival range instead of a 4m silent cutoff. A tracked door while driving first exits the vehicle; interact again to enter. Buildings directory and routes use the same approach. Generic entry during onboarding explicitly tells players to complete/skip the tutorial rather than failing silently. No property purchase is required to enter public rooms, and visiting a room grants no income/ownership.
+Doors share a 6m on-foot arrival range instead of a 4m silent cutoff. A tracked door while driving first exits the vehicle; interact again to enter. Buildings directory and routes use the same approach. Public doors are no longer locked behind onboarding. A manually tracked door can be visited before finishing the tutorial; driving and combat tutorial gates still apply. No property purchase is required to enter public rooms, and visiting a room grants no income/ownership.
 
 Added three free-to-visit themed homes (French Quarter Courtyard, Uptown Shotgun, Bywater Artist Loft), a Dive Bar and Laundromat room: 22 rooms total. These are public instanced furnished rooms, not owned/resellable houses or seamless world buildings. Existing chop shop (Central City at -60,0) is accessible through its cyan ring and the Buildings/City Map lists; its desk opens Garage.
 

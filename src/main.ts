@@ -547,8 +547,7 @@ function interact() {
   const heist=HEISTS.find(h=>atPoint(P.x,P.z,h,10)&&target?.name.toLowerCase().includes(h.name.toLowerCase()));
   if(heist){handleRecon(heist.id);return;}
   const entrance=nearestEntrance(P.x,P.z,6);
-  if(!P.car&&entrance&&C.legacy.tutorial>=3){enterInterior(entrance);return;}
-  if(!P.car&&entrance&&C.legacy.tutorial<3){feed('Finish the guided tutorial first, or use Empire → Legacy & Training → Skip tutorial.');return;}
+  if(!P.car&&entrance){enterInterior(entrance);return;}
   const rival = foes.find(f=>f.kind==='gangster'&&!f.dead&&!f.mugged&&dist2(P.x,P.z,f.x,f.z)<2.5);
   if(!P.car&&rival){rival.mugged=true;rival.aggro=true;const pay=conditions(C.clock).night?125:100;C.dirty=Math.min(cashCap(C),C.dirty+pay);addHeat(C,8);feed(`Rival courier shaken down: +$${pay} dirty. Crew alerted!`);sfx('cash');saveGame();return;}
   const corner = BLOCKS.find(b => atPoint(P.x,P.z,b,14) && (!C.owned.includes(b.id) || C.defense?.block === b.id));
@@ -1314,7 +1313,7 @@ function updateStoryCity(dt:number){
 let micro:null|{kind:number;x:number;z:number;t:number;mesh:THREE.Mesh}=null;
 function updateTraining(dt:number){
  const stage=C.legacy.tutorial;
- if(stage===0){target={x:HQ.x,z:HQ.z,name:'➜ Mama Nola — walk here, then E'};}
+ if(stage===0&&!selectedLocation){target={x:HQ.x,z:HQ.z,name:'➜ Mama Nola — walk here, then E'};}
  if(stage===1&&!tutorialRival){const [x,z]=freeSpot(10,12,3);tutorialRival=spawnFoe('gangster',x,z,0);tutorialRival.blockId='tutorial';tutorialRival.aggro=true;}
  if(stage===1&&tutorialRival?.dead){
   advanceTutorial(C,1);tutorialCar=addVehicle(0,12,0,Math.PI/2,0xc79a44);target={x:12,z:0,name:'First delivery sedan · E to enter'};
