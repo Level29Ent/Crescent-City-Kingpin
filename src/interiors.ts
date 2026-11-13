@@ -2,6 +2,10 @@ import * as THREE from 'three';
 import { createPerson, type Person } from './actors.ts';
 import type { Appearance } from './campaign.ts';
 export const INTERIORS = [
+  {id:'station',name:'Old Tremé Station Waiting Room',x:-180,z:0,tab:'Stories & Exploration',theme:'warehouse',color:0x566354},
+  {id:'bywater',name:'Bywater Artists’ Studio',x:180,z:60,tab:'Stories & Exploration',theme:'antique',color:0x785487},
+  {id:'archive',name:'Cemetery Records Archive',x:180,z:0,tab:'Stories & Exploration',theme:'antique',color:0x65706c},
+  {id:'newsroom',name:'Canal Street Newsroom',x:0,z:120,tab:'Stories & Exploration',theme:'cafe',color:0x556983},
   { id:'hq', name:'Mama Nola’s Back Room', x:30,z:4, tab:'Safehouse', theme:'hq', color:0x97623d },
   { id:'jazz', name:'French Quarter Jazz Lounge', x:0,z:-60, tab:'Properties', theme:'club', color:0x713d82 },
   { id:'antique', name:'Garden District Antique Shop', x:-120,z:0, tab:'Market', theme:'antique', color:0x89744a },

@@ -1,3 +1,4 @@
+import {cityStoriesPanel} from './city-stories-ui.ts';
 import { legacyPanel } from './legacy-ui.ts';
 import { owns } from './expansion.ts';
 import { EXPANSION_TABS, renderExpansion } from './expansion-ui.ts';
@@ -15,7 +16,7 @@ export function createEmpireUI(h: EmpireHooks) {
   const overlay = document.getElementById('empire')!;
   const content = document.getElementById('empireContent')!;
   const summary = document.getElementById('empireSummary')!;
-  const tabs = [...EXPANSION_TABS, 'Turf', 'Crew', 'Market', 'Safehouse', 'Character', 'Achievements', 'Leaderboard', 'Buildings', 'Legacy & Training', 'Settings'];
+  const tabs = [...EXPANSION_TABS, 'Turf', 'Crew', 'Market', 'Safehouse', 'Character', 'Achievements', 'Leaderboard', 'Buildings', 'Legacy & Training', 'Stories & Exploration', 'Settings'];
   let selected = 'Turf'; let opened = false;
   function button(parent: HTMLElement, text: string, fn: () => void, disabled = false) {
     const b = document.createElement('button'); b.textContent = text; b.disabled = disabled;
@@ -43,9 +44,10 @@ export function createEmpireUI(h: EmpireHooks) {
     Array.from(nav.children).forEach((b, i) => b.setAttribute('aria-pressed', String(tabs[i] === selected)));
     if (renderExpansion(selected,c,content,{location:h.location,waypoint:h.waypoint,close,notice:h.notice,deploy:h.deploy,armory:h.armory,gearOwned:h.gearOwned,missionStarted:h.missionStarted,reload:h.changed})) return;
     content.append(el('h2', selected));
-    if(selected==='Legacy & Training'){legacyPanel(c,content,{changed:h.changed,retire:h.retire,travel:h.travel,repair:h.repair,waypoint:(x,z)=>{h.waypoint(x,z,'Daily checkpoint');close();}});}
+    if(selected==='Stories & Exploration'){cityStoriesPanel(c,content,{changed:h.changed,track:h.waypoint,resume:()=>{close();h.missionStarted();}});}
+    else if(selected==='Legacy & Training'){legacyPanel(c,content,{changed:h.changed,retire:h.retire,travel:h.travel,repair:h.repair,waypoint:(x,z)=>{h.waypoint(x,z,'Daily checkpoint');close();}});}
     else if (selected === 'Buildings') {
-      content.append(el('p','Eight walkable interiors. Enter on foot at the door; HQ also accepts its sheltered approach. Outdoor combat and income pause while inside. Visit the back desk for services; E at the teal exit or Exit Building returns you to your original street position. Property ownership and prices remain unchanged.'));
+      content.append(el('p','Twelve walkable interiors. Enter on foot at the door; HQ also accepts its sheltered approach. Outdoor combat and income pause while inside. Visit the back desk for services; E at the teal exit or Exit Building returns you to your original street position. Property ownership and prices remain unchanged.'));
       for(const b of h.buildings()){
         const d=distance(h.location(),b.x,b.z),near=d<=(b.id==='hq'?24:4);
         const item=card(b.name,`${d} m away · walkable furnished room · no entry fee`);
