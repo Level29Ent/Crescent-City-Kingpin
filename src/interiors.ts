@@ -4,6 +4,17 @@ import { createPerson, type Person } from './actors.ts';
 import type {Lifestyle} from './lifestyle.ts';
 import type { Appearance } from './campaign.ts';
 export const INTERIORS = [
+  {id:'dice',name:'Tremé Dice & Poker Den',x:-120,z:-120,tab:'Properties',theme:'casino',color:0x674773},
+  {id:'freight',name:'Warehouse Import/Export Dock',x:60,z:120,tab:'Properties',theme:'warehouse',color:0x55715d},
+  {id:'herbalist',name:'Magazine Street Herbalist',x:-60,z:60,tab:'Properties',theme:'antique',color:0x456c63},
+  {id:'precinct',name:'Precinct Backroom',x:-60,z:-60,tab:'Properties',theme:'warehouse',color:0x526579},
+  {id:'port',name:'Port Cargo Terminal',x:120,z:180,tab:'Heists',theme:'warehouse',color:0x55715d},
+  {id:'bank',name:'Bank Vault Lobby',x:0,z:-120,tab:'Heists',theme:'casino',color:0x89744a},
+  {id:'mint',name:'Federal Mint Lobby',x:60,z:0,tab:'Heists',theme:'casino',color:0x65706c},
+  {id:'blue-note',name:'Blue Note Jazz Club',x:-90,z:-64,tab:'Properties',theme:'club',color:0x713d82},
+  {id:'estate',name:'Magnolia Estate',x:-150,z:4,tab:'Properties',theme:'antique',color:0x89744a},
+  {id:'tours',name:'Gator Bay Airboat Tours',x:150,z:-128,tab:'Properties',theme:'garage',color:0x53776d},
+
   {id:'home-quarter',name:'French Quarter Courtyard Home',x:0,z:-180,tab:'Jobs & Style',theme:'hq',color:0x8c704f},
   {id:'home-uptown',name:'Uptown Shotgun Home',x:-180,z:60,tab:'Jobs & Style',theme:'hq',color:0x53776d},
   {id:'home-bywater',name:'Bywater Artist Loft',x:180,z:-120,tab:'Character',theme:'antique',color:0x77566f},
@@ -38,7 +49,7 @@ export function indoorMove(x:number,z:number,dx:number,dz:number,obstacles:Obsta
   if(!blocked(nx,z+dz))nz+=dz;
   return {x:nx,z:nz};
 }
-export function nearestEntrance(x:number,z:number,range=4):InteriorDefinition|undefined {
+export function nearestEntrance(x:number,z:number,range=3):InteriorDefinition|undefined {
   return [...INTERIORS].sort((a,b)=>Math.hypot(x-approach(a).x,z-approach(a).z)-Math.hypot(x-approach(b).x,z-approach(b).z)).find(b=>atPoint(x,z,b,range));
 }
 export function createInterior(def:InteriorDefinition,appearance:Appearance,customization?:Lifestyle,furniture:readonly {id:string;slot:number}[]=[]) {
