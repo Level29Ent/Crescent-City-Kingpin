@@ -1,3 +1,4 @@
+import {newLifestyle,restoreLifestyle,type Lifestyle} from './lifestyle.ts';
 import {newCityStories,restoreCityStories,type CityStories} from './city-stories.ts';
 import { newLegacy, restoreLegacy, type LegacyState } from './legacy.ts';
 import { newExpansion, restoreExpansion, offlineExpansion, conditions, furnished, owns, inventoryCap, cashCap, type Expansion } from './expansion.ts';
@@ -26,7 +27,7 @@ export const GOODS = [
 export const EVENTS = ['Quiet streets', 'Port blockade', 'Rival crew war', 'Police crackdown', 'Festival demand'] as const;
 export type Appearance = { gender: string; heritage: string; skin: number; outfit: number; hair: number };
 export type Campaign = {
-  cityStories:CityStories; legacy: LegacyState; expansion: Expansion; clean: number; dirty: number; heat: number; owned: string[]; crew: { id: string; loyalty: number; owed: number }[];
+  lifestyle:Lifestyle; cityStories:CityStories; legacy: LegacyState; expansion: Expansion; clean: number; dirty: number; heat: number; owned: string[]; crew: { id: string; loyalty: number; owed: number }[];
   inventory: number[]; upgrades: number; avatar: Appearance; clock: number; wageClock: number; marketClock: number;
   marketEvent: number; defenseClock: number; defense: null | { block: string; remaining: number };
   policeClock: number; intervention: string; cooldown: number; heistCooldown: number;
@@ -34,7 +35,7 @@ export type Campaign = {
   achievements: string[]; audio: { music: number; ambient: number; sfx: number; muted: boolean }; alias: string;
 };
 export function newCampaign(): Campaign {
-  return { cityStories:newCityStories(), legacy:newLegacy(), expansion: newExpansion(), clean: 300, dirty: 0, heat: 0, owned: [], crew: [], inventory: [0, 0, 0, 0], upgrades: 0,
+  return { lifestyle:newLifestyle(), cityStories:newCityStories(), legacy:newLegacy(), expansion: newExpansion(), clean: 300, dirty: 0, heat: 0, owned: [], crew: [], inventory: [0, 0, 0, 0], upgrades: 0,
     avatar: { gender: 'Man', heritage: 'Not specified', skin: 2, outfit: 0, hair: 0 }, clock: 0, wageClock: 0,
     marketClock: 0, marketEvent: 0, defenseClock: 100, defense: null, policeClock: 0, intervention: '', cooldown: 0, heistCooldown: 0,
     stats: { cleaned: 0, captured: 0, maxHeat: 0, defended: 0, deals: 0, heists: 0 }, achievements: [],
@@ -193,6 +194,7 @@ export function restoreCampaign(value: unknown): Campaign | null {
   c.expansion = restoreExpansion(v.expansion);
   c.legacy=restoreLegacy(v.legacy);
   c.cityStories=restoreCityStories(v.cityStories);
+  c.lifestyle=restoreLifestyle(v.lifestyle);
   const num = (v: unknown, fallback = 0, max = 1e9) => typeof v === 'number' && Number.isFinite(v) ? clamp(v, 0, max) : fallback;
   for (const key of ['clean','dirty','heat','clock','wageClock','marketClock','marketEvent','defenseClock','policeClock','cooldown','heistCooldown','upgrades'] as const) c[key] = num(v[key], c[key], key === 'heat' ? 100 : key === 'upgrades' ? 5 : 1e9);
   c.marketEvent = Math.floor(c.marketEvent) % EVENTS.length;

@@ -26,6 +26,8 @@ import { INTERIORS, nearestEntrance, indoorMove, createInterior, type InteriorDe
 import { conditions, VEHICLES, MISSIONS, missionInteract, tickExpansion, inventoryCap, cashCap, furnished } from './expansion.ts';
 import { createFestival } from './festival.ts';
 import { createMoneyBundle } from './money.ts';
+import {applyBodyStyle} from './car-style.ts';
+import {workObjective,workInteract,tickWork} from './lifestyle.ts';
 import {STORIES,DISCOVERIES,storyInteract,storyObjective,discover,tacticalHeading,coverReduction} from './city-stories.ts';
 import {createStreetLife} from './street-life.ts';
 import { createWeather } from './weather.ts';
@@ -162,7 +164,7 @@ let boosting = false;
 const headlights = new THREE.SpotLight(0xc5e8ff, 0, 65, 0.6, 0.5, 1.3);
 scene.add(headlights, headlights.target);
 
-let player = createPerson("player", 5, C.avatar);
+let player = createPerson("player", 5, C.avatar,C.lifestyle);
 player.root.position.set(P.x, 0, P.z);
 player.root.rotation.y = P.heading;
 scene.add(player.root);
@@ -315,6 +317,7 @@ function updateHud() {
   if (C.defense && !battle && !mission) obj = `TURF ATTACK: ${BLOCKS.find(b => b.id === C.defense!.block)!.name} · ${Math.ceil(C.defense.remaining)}s · M to respond`;
   if(inside)obj=`${inside.def.name} · walk to service desk · E at exit / Esc to leave`;
   if(target){const angle=Math.atan2(target.x-P.x,target.z-P.z)-yaw;$('objectiveArrow').style.transform=`rotate(${-angle}rad)`;}
+  const work=inside?null:workObjective(C);if(work)obj=work.text;
   const story=inside?null:storyObjective(C);if(story){obj=story.text;if(C.cityStories.active?.step===1){const enemies=foes.filter(f=>!f.dead&&f.blockId===`story:${C.cityStories.active!.id}`);obj+=` · ${enemies.length} rivals left${enemies[0]?` · lead HP ${Math.ceil(enemies[0].hp)}`:''}`;}}
   if(crouched&&!inside)obj=(coverStations.some(p=>dist2(P.x,P.z,p.x,p.z)<2.4)?'COVERED (-60% damage) · ':'CROUCHED · ')+obj;
   if(C.legacy.tutorial<3)obj=TUTORIAL[C.legacy.tutorial]!;
@@ -335,6 +338,7 @@ const applyTouchMode=()=>{document.body.classList.toggle('touch-enabled',touchMo
 touchMode.onchange=applyTouchMode;applyTouchMode();
 
 let mouseDown = false;
+let lookDragging=false;
 let aimHeld = false;
 addEventListener("keydown", (e) => {
   if ((e.target as HTMLElement)?.matches("input, select, textarea")) return;
@@ -346,7 +350,7 @@ addEventListener("keydown", (e) => {
   if (managing) return;
   if (["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.code)) e.preventDefault();
   if (e.code === "Escape" && playing && !shopOpen) {pauseRun();return;}
-  if (e.repeat && e.code === "KeyE") return;
+  if (e.repeat && ['KeyE','KeyR','KeyM'].includes(e.code)) return;
   keys.add(e.code);
   if (!playing || shopOpen || managing) return;
   if (e.code === "KeyE") interact();
@@ -358,22 +362,24 @@ addEventListener("keydown", (e) => {
   }
 });
 addEventListener("keyup", (e) => keys.delete(e.code));
-addEventListener("blur", () => { keys.clear(); joystick.reset(); mouseDown = aimHeld = false; });
+addEventListener("blur", () => { keys.clear(); joystick.reset(); lookDragging=false;mouseDown = aimHeld = false; });
 addEventListener("mousedown", (e) => {
-  if (!playing || managing || shopOpen || e.target !== renderer.domElement) return;
+  if (!playing || managing || shopOpen || e.target !== renderer.domElement || (e as MouseEvent & {sourceCapabilities?:{firesTouchEvents:boolean}}).sourceCapabilities?.firesTouchEvents) return;
+  if(e.button===0 && touchMode.checked){lookDragging=true;return;}
   if (e.button === 0) mouseDown = true;
-  if (e.button === 2) aimHeld = true;
+  if (e.button === 2) {aimHeld = true;lookDragging=true;}
 });
 addEventListener("mouseup", (e) => {
+  lookDragging=false;
   if (e.button === 0) mouseDown = false;
   if (e.button === 2) aimHeld = false;
 });
 addEventListener("contextmenu", (e) => e.preventDefault());
 addEventListener("mousemove", (e) => {
   if (!playing || managing || shopOpen) return;
-  if (document.pointerLockElement !== renderer.domElement && !(mouseDown && playing)) return;
-  yaw -= e.movementX * 0.0024;
-  pitch = Math.max(-0.7, Math.min(0.45, pitch - e.movementY * 0.0022));
+  if (document.pointerLockElement !== renderer.domElement && !((mouseDown||lookDragging) && playing)) return;
+  yaw -= e.movementX * 0.0024*C.lifestyle.lookSensitivity;
+  pitch = Math.max(-0.7, Math.min(0.45, pitch - e.movementY * 0.0022*C.lifestyle.lookSensitivity*(C.lifestyle.invertLook?-1:1)));
 });
 addEventListener("wheel", (e) => { if (!playing || managing || shopOpen) return; camDist = Math.max(3.5, Math.min(12, camDist + Math.sign(e.deltaY) * 0.6)); });
 let camDist = 6;
@@ -440,7 +446,7 @@ function buy(id: number) {
 }
 
 function startJob(priority = false) {
-  if (P.job) return;
+  if (P.job || C.lifestyle.work || C.cityStories.active) {feed('Finish the active job or story before starting an import run.');return;}
   const d = DROPS[priority ? demandIndex(time, DROPS.length) : Math.floor(Math.random() * DROPS.length)]!;
   const len = dist2(HQ.x, HQ.z, d.x, d.z);
   const duration = (30 + len / 9) * (priority ? 0.8 : 1);
@@ -497,13 +503,15 @@ function openShop() {
 }
 function closeShop() {
   shopOpen = false;
-  keys.clear(); joystick.reset(); mouseDown = aimHeld = false;
+  keys.clear(); joystick.reset(); lookDragging=false;mouseDown = aimHeld = false;
   $("shop").style.display = "none";
   lock();
 }
 
 // ───────── interaction ─────────
 function interact() {
+  if(P.deadT>0)return;
+  const worked=inside?null:workInteract(C,P.x,P.z);if(worked){feed(worked);sfx('cash');saveGame();return;}
   if(!inside&&C.legacy.tutorial>=3){
     const story=storyInteract(C,P.x,P.z);
     if(story==='fight'){spawnStoryEncounter();feed('Encounter started. Use C / COVER beside sandbags to reduce damage.');saveGame();return;}
@@ -900,6 +908,8 @@ function updateEconomy(dt: number) {
   }
   for(const msg of tickExpansion(C,dt)){feed(msg);if(msg.includes('WARNING')||msg.includes('SHOWDOWN'))sfx('wanted');}
   if (P.car?.garage !== undefined && C.expansion.runs.some(r=>r.car===P.car!.garage)) {P.car=null;player.setVisible(true);}
+  const expired=tickWork(C,dt);if(expired)feed(expired);
+  const work=workObjective(C);if(work)target={x:work.x,z:work.z,name:work.text};
   updateStoryCity(dt);
   updateTraining(dt);
   if(C.legacy.daily&&!C.legacy.daily.finished){C.legacy.daily.elapsed+=dt;const point=dailyRoute(C.legacy.daily.date)[C.legacy.daily.step];if(point)target={...point,name:'Daily speedrun checkpoint'};if(dailyCheckpoint(C,P.x,P.z)){feed('Daily route complete! +$1,000 clean.');saveGame();}}
@@ -960,10 +970,12 @@ function prompt() {
     t=inside.z>5?'E / INTERACT: exit building':inside.z < -3.6 && Math.abs(inside.x)<3?'E / INTERACT: service desk':'Walk to the desk · Exit at the teal doorway';
   } else if (!P.car && P.deadT <= 0) {
     const corner = BLOCKS.find(b => dist2(P.x, P.z, b.x, b.z) < 14 && (!C.owned.includes(b.id) || C.defense?.block === b.id));
+    const work=workObjective(C);
     const cache=DISCOVERIES.find(d=>!C.cityStories.discovered.includes(d.id)&&dist2(P.x,P.z,d.x,d.z)<6);
     const storyContact=storyObjective(C);
     const entrance=nearestEntrance(P.x,P.z);
-    if(storyContact&&C.cityStories.active?.step!==1&&dist2(P.x,P.z,storyContact.x,storyContact.z)<8)t='E / INTERACT: story contact';
+    if(work&&dist2(P.x,P.z,work.x,work.z)<7)t='E / INTERACT: work order';
+    else if(storyContact&&C.cityStories.active?.step!==1&&dist2(P.x,P.z,storyContact.x,storyContact.z)<8)t='E / INTERACT: story contact';
     else if(cache)t=`E / INTERACT: discover ${cache.name}`;
     else if(entrance)t=`E / INTERACT: enter ${entrance.name}`;
     else if(foes.some(f=>f.kind==='gangster'&&!f.dead&&!f.mugged&&dist2(P.x,P.z,f.x,f.z)<2.5))t='E: shake down rival courier (raises heat)';
@@ -1101,11 +1113,12 @@ const empire = createEmpireUI({
     const model=VEHICLES.find(v=>v.id===stored.id)!;
     const gx=inside?.def.id==='garage'?-60:44,gz=inside?.def.id==='garage'?6:-8;
     const v=addVehicle(model.style,gx,gz,Math.PI/2,stored.color);v.garage=index;
+    const style=C.lifestyle.carStyle[index];const disposeStyle=applyBodyStyle(v.rig.root,style);const originalDispose=v.rig.dispose;v.rig.dispose=()=>{disposeStyle();originalDispose();};
     const mods=C.legacy.mods[index];
     if(mods){
       const ownedResources:{dispose():void}[]=[];const disposeRig=v.rig.dispose;v.rig.dispose=()=>{ownedResources.forEach(r=>r.dispose());disposeRig();};
-      if(mods.glow){const glow=new THREE.Mesh(new THREE.PlaneGeometry(2.5,4.5),new THREE.MeshBasicMaterial({color:0xa84dff,transparent:true,opacity:.35,depthWrite:false}));glow.rotation.x=-Math.PI/2;glow.position.y=.06;v.rig.root.add(glow);ownedResources.push(glow.geometry,glow.material);}
-      v.rig.root.traverse(o=>{if(!(o instanceof THREE.Mesh)||!(o.material instanceof THREE.MeshStandardMaterial))return;const material=o.material.clone();ownedResources.push(material);if(mods.matte)material.roughness=1;if(mods.rims&&material.color.getHex()===0xc8ccd2)material.color.setHex(0xe7bd63);o.material=material;});
+      if(mods.glow){const glow=new THREE.Mesh(new THREE.PlaneGeometry(2.5,4.5),new THREE.MeshBasicMaterial({color:[0xa84dff,0x42ddde,0xe6b84b][style?.glowColor??0],transparent:true,opacity:.35,depthWrite:false}));glow.rotation.x=-Math.PI/2;glow.position.y=.06;v.rig.root.add(glow);ownedResources.push(glow.geometry,glow.material);}
+      v.rig.root.traverse(o=>{if(!(o instanceof THREE.Mesh)||!(o.material instanceof THREE.MeshStandardMaterial))return;const material=o.material.clone();ownedResources.push(material);if(mods.matte)material.roughness=1;if(mods.rims&&material.color.getHex()===0xc8ccd2)material.color.setHex([0xe7bd63,0xc8ccd2,0x16212a][style?.rimColor??0]!);o.material=material;});
     }
     feed(`${model.name} deployed at garage marker. E to enter.`);target={x:gx,z:gz,name:'Your garage vehicle'};
   },
@@ -1130,7 +1143,7 @@ const empire = createEmpireUI({
   enterBuilding(id) { const def=INTERIORS.find(b=>b.id===id);if(def)enterInterior(def); },
   campaign: C,
   pause(open) {
-    if (open) { if(balcony){balcony=false;$('hud').style.display='';playing=balconyWasPlaying;$("paradeView").textContent="PARADE BALCONY";} wasPlaying = playing; managing = true; keys.clear(); joystick.reset(); mouseDown = aimHeld = false; document.exitPointerLock(); }
+    if (open) { if(balcony){balcony=false;$('hud').style.display='';playing=balconyWasPlaying;$("paradeView").textContent="PARADE BALCONY";} wasPlaying = playing; managing = true; keys.clear(); joystick.reset(); lookDragging=false;mouseDown = aimHeld = false; document.exitPointerLock(); }
     else { managing = false; playing = wasPlaying; if (playing) { $('start').style.display = 'none'; lock(); } }
   },
   changed() { if(C.stats.cleaned>lastCleaned){lastCleaned=C.stats.cleaned;sfx('cash');$('cashBurst').classList.remove('animate');void $('cashBurst').offsetWidth;$('cashBurst').classList.add('animate');} if (battle?.defending && C.defense?.block !== battle.block) clearBattle(); for (const a of unlock(C)) feed(`Achievement: ${a}`); updateHud(); saveGame(); sfx('click'); },
@@ -1138,8 +1151,8 @@ const empire = createEmpireUI({
   attack: startBattle,
   waypoint(x, z, name) { target = { x, z, name }; yaw=Math.atan2(x-P.x,z-P.z); feed(`Route marked: ${name}. White dot on minimap.`); },
   appearance() {
-    if(inside){inside.room.avatar.dispose();inside.room.avatar=createPerson("player",5,C.avatar);inside.room.scene.add(inside.room.avatar.root);}
-    player.root.removeFromParent(); player.dispose(); player = createPerson('player', 5, C.avatar);
+    if(inside){inside.room.avatar.dispose();inside.room.avatar=createPerson("player",5,C.avatar,C.lifestyle);inside.room.scene.add(inside.room.avatar.root);}
+    player.root.removeFromParent(); player.dispose(); player = createPerson('player', 5, C.avatar,C.lifestyle);
     player.root.position.set(P.x, 0, P.z); player.root.rotation.y = P.heading; scene.add(player.root);
   },
   save: () => saveGame(true),
@@ -1155,7 +1168,7 @@ addEventListener('pagehide', () => { if (hiddenSince === null) saveGame(); });
 addEventListener('beforeunload', () => { if (hiddenSince === null) saveGame(); });
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
-    saveGame(); hiddenSince = Date.now(); keys.clear(); joystick.reset(); mouseDown = aimHeld = false;
+    saveGame(); hiddenSince = Date.now(); keys.clear(); joystick.reset(); lookDragging=false;mouseDown = aimHeld = false;
     if (playing && !managing && !shopOpen) {
       pausedForHidden = true; playing = false; $('go').textContent = 'RESUME'; $('start').style.display = 'flex';
     }
@@ -1195,7 +1208,7 @@ renderer.domElement.addEventListener('pointerdown', e => {
 });
 renderer.domElement.addEventListener('pointermove', e => {
   if (!touchLook || e.pointerId !== touchLook.id) return;
-  yaw -= (e.clientX - touchLook.x) * .004; pitch = Math.max(-.7, Math.min(.45, pitch - (e.clientY - touchLook.y) * .004));
+  yaw -= (e.clientX - touchLook.x) * .004*C.lifestyle.lookSensitivity; pitch = Math.max(-.7, Math.min(.45, pitch - (e.clientY - touchLook.y) * .004*C.lifestyle.lookSensitivity*(C.lifestyle.invertLook?-1:1)));
   touchLook.x = e.clientX; touchLook.y = e.clientY;
 });
 renderer.domElement.addEventListener('pointerup', () => touchLook = null);
@@ -1214,7 +1227,7 @@ function enterInterior(def:InteriorDefinition){
   // HQ back-room entrance includes its sheltered approach; all other doors require standing close.
   if(dist2(P.x,P.z,def.x,def.z)>(def.id==='hq'?24:4)){target={x:def.x,z:def.z,name:`Entrance: ${def.name}`};feed('Travel to the building entrance first.');return;}
   balcony=false;$("hud").style.display="";
-  inside={room:createInterior(def,C.avatar),def,x:0,z:5.8};
+  inside={room:createInterior(def,C.avatar,C.lifestyle,C.expansion.furniture),def,x:0,z:5.8};
   joystick.reset();keys.clear();mouseDown=aimHeld=false;walkVelocity.set(0,0);sound.engine(null);sound.siren(false);
   $('exitInterior').hidden=false;$('insideLabel').textContent=def.name;
   feed(`Entered ${def.name}. Walk to the desk for ${def.tab}, or E at the exit. Outdoor simulation paused.`);

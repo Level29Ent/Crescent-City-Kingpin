@@ -27,6 +27,12 @@ export const FURNITURE = [
 ] as const;
 // Rate is per simulation minute; upkeep is per real day. Utilities earn no cash.
 export const PROPERTIES = [
+  {id:'barber',name:'Tremé Corner Barbershop',kind:'racket',cost:650,rate:70,heat:.2,upkeep:30,capacity:0,fee:0,x:-60,z:-120,effect:'Neighborhood cash business; requires an active paid crew'},
+  {id:'record',name:'Frenchmen Vinyl & Records',kind:'racket',cost:1100,rate:120,heat:.4,upkeep:60,capacity:0,fee:0,x:60,z:-120,effect:'Music resale racket; requires crew protection'},
+  {id:'seafood',name:'Crescent Seafood Market',kind:'racket',cost:1900,rate:185,heat:1,upkeep:90,capacity:0,fee:0,x:120,z:120,effect:'Steady market revenue; requires crew protection'},
+  {id:'theater',name:'Canal Picture House',kind:'front',cost:3200,rate:0,heat:.3,upkeep:180,capacity:4200,fee:.14,x:-60,z:120,effect:'Mid-tier laundering front'},
+  {id:'courier',name:'Bywater Courier Depot',kind:'racket',cost:1400,rate:145,heat:.6,upkeep:75,capacity:0,fee:0,x:180,z:-60,effect:'Delivery logistics racket; requires a paid crew'},
+
   { id: 'laundromat', name: 'Bywater Laundromat', kind: 'front', cost: 250, rate: 0, heat: .2, upkeep: 20, capacity: 600, fee: .2, x: 0, z: 60, effect: 'Starter laundering tier' },
   { id: 'jazz', name: 'French Quarter Jazz Club & Lounge', kind: 'front', cost: 6000, rate: 0, heat: .1, upkeep: 800, capacity: 12000, fee: .1, x: 0, z: -60, effect: 'High-capacity Nightclub front; expensive musicians and permits' },
   { id: 'antique', name: 'Garden District Antique Shop', kind: 'front', cost: 1800, rate: 0, heat: -.5, upkeep: 80, capacity: 1500, fee: .12, x: -120, z: 0, effect: 'Slow, discreet laundering; permanently suppresses local suspicion' },

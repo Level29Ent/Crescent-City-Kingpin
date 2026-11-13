@@ -1,7 +1,14 @@
 import * as THREE from 'three';
 import { createPerson, type Person } from './actors.ts';
+import type {Lifestyle} from './lifestyle.ts';
 import type { Appearance } from './campaign.ts';
 export const INTERIORS = [
+  {id:'barber',name:'Tremé Corner Barbershop',x:-60,z:-120,tab:'Character',theme:'cafe',color:0x476777},
+  {id:'record',name:'Frenchmen Record Store',x:60,z:-120,tab:'Jobs & Style',theme:'club',color:0x654777},
+  {id:'seafood',name:'Crescent Seafood Market',x:120,z:120,tab:'Properties',theme:'warehouse',color:0x4b7477},
+  {id:'theater',name:'Canal Picture House Foyer',x:-60,z:120,tab:'Properties',theme:'casino',color:0x77414f},
+  {id:'courier',name:'Bywater Courier Depot',x:180,z:-60,tab:'Jobs & Style',theme:'garage',color:0x526d59},
+
   {id:'station',name:'Old Tremé Station Waiting Room',x:-180,z:0,tab:'Stories & Exploration',theme:'warehouse',color:0x566354},
   {id:'bywater',name:'Bywater Artists’ Studio',x:180,z:60,tab:'Stories & Exploration',theme:'antique',color:0x785487},
   {id:'archive',name:'Cemetery Records Archive',x:180,z:0,tab:'Stories & Exploration',theme:'antique',color:0x65706c},
@@ -27,7 +34,7 @@ export function indoorMove(x:number,z:number,dx:number,dz:number,obstacles:Obsta
 export function nearestEntrance(x:number,z:number,range=4):InteriorDefinition|undefined {
   return [...INTERIORS].sort((a,b)=>Math.hypot(x-a.x,z-a.z)-Math.hypot(x-b.x,z-b.z)).find(b=>Math.hypot(x-b.x,z-b.z)<=range);
 }
-export function createInterior(def:InteriorDefinition,appearance:Appearance) {
+export function createInterior(def:InteriorDefinition,appearance:Appearance,customization?:Lifestyle,furniture:readonly {id:string;slot:number}[]=[]) {
   const scene=new THREE.Scene();scene.background=new THREE.Color(0x101a24);
   const geometries:THREE.BufferGeometry[]=[],materials:THREE.Material[]=[];
   const obstacles:Obstacle[]=[];
@@ -45,7 +52,8 @@ export function createInterior(def:InteriorDefinition,appearance:Appearance) {
   }
   box(0,-.15,0,14,.3,16,0x3b302c);
   for(let x=-6.5;x<7;x+=.7)box(x,.008,0,.025,.01,16,0x62503b);
-  box(-7,2,0,.2,4,16,def.color);box(7,2,0,.2,4,16,def.color);box(0,2,-8,14,4,.2,def.color);
+  const wallColor=def.id==='hq'?[0x97623d,0x254f59,0x57365f][customization?.safehouseTheme??0]!:def.color;
+  box(-7,2,0,.2,4,16,wallColor);box(7,2,0,.2,4,16,wallColor);box(0,2,-8,14,4,.2,wallColor);
   // Front wall stays open to preserve third-person camera visibility; the exit threshold is at z=6.7.
   sign(def.name,0,3,-7.85);
   box(0,.02,6.5,3,.035,1,0x2f9c8d);
@@ -72,7 +80,17 @@ export function createInterior(def:InteriorDefinition,appearance:Appearance) {
   }
   const hemi=new THREE.HemisphereLight(0xf9e4c4,0x6a7594,2.5);scene.add(hemi);
   const light=new THREE.DirectionalLight(0xffe2b2,3);light.position.set(2,7,4);scene.add(light);
-  for(const x of [-5,5]){const lamp=new THREE.PointLight(def.theme==='club'?0xbd70ff:0xffc879,12,14);lamp.position.set(x,3,-1);scene.add(lamp);}
-  const avatar:Person=createPerson('player',5,appearance);scene.add(avatar.root);
+  for(const x of [-5,5]){const lamp=new THREE.PointLight(def.id==='hq'?[0xffc879,0x79ffe0,0xc080ff][customization?.lightColor??0]!:def.theme==='club'?0xbd70ff:0xffc879,12,14);lamp.position.set(x,3,-1);scene.add(lamp);}
+  if(def.id==='hq'){
+    if(customization?.rug){box(0,.025,1.8,4,.04,4.5,0x355968);for(const x of [-1.8,1.8])box(x,.05,1.8,.08,.02,4.2,0xe0ba72);}
+    if(customization?.art){box(-6.86,2,-1,.06,1.5,2.2,0xd3b573);box(-6.8,2,-1,.06,1.25,1.9,0x35758a);}
+    for(const f of furniture){const x=f.slot%2?-5:5,z=-3+Math.floor(f.slot/2)*3;
+      if(f.id==='vault'){box(x,.8,z,1.2,1.6,1,0x3e545e,true);box(x,.8,z+.52,.7,.9,.04,0x82969c);}
+      if(f.id==='camera'){box(x,1.5,z,1.3,.9,.4,0x263b42,true);box(x,1.5,z+.23,1,.65,.02,0x4eaba6);}
+      if(f.id==='locker'){box(x,1,z,1,2,.6,0x3a4e39,true);}
+      if(f.id==='poker'){box(x,.65,z,1.7,1.3,1.5,0x266a50,true);}
+    }
+  }
+  const avatar:Person=createPerson('player',5,appearance,customization);scene.add(avatar.root);
   return {scene,avatar,obstacles,dispose(){avatar.dispose();geometries.forEach(g=>g.dispose());materials.forEach(m=>{if(m instanceof THREE.MeshBasicMaterial)m.map?.dispose();m.dispose();});}};
 }
