@@ -54,7 +54,7 @@ export function createEmpireUI(h: EmpireHooks) {
     else if(selected==='Stories & Exploration'){cityStoriesPanel(c,content,{changed:h.changed,track:h.waypoint,resume:()=>{close();h.missionStarted();}});}
     else if(selected==='Legacy & Training'){legacyPanel(c,content,{changed:h.changed,retire:h.retire,travel:h.travel,repair:h.repair,waypoint:(x,z)=>{h.waypoint(x,z,'Daily checkpoint');close();}});}
     else if (selected === 'Buildings') {
-      content.append(el('p','Signed building entrances, including three homes and all business/heist destinations. Enter on foot at the facade door. Outdoor combat and income pause while inside. Visit the back desk for services; E at the teal exit or Exit Building returns you to your original street position. Property ownership and prices remain unchanged.'));
+      content.append(el('p','Forty furnished public rooms, including a clinic, diner, florist, hardware shop, reading room, tailor, rehearsal hall and dispatch office. Inspect the floor supply emblem with E once per room: workshop parts or medkits (carry five). H / MEDKIT heals 35 health. Shift sprints indoors. Signed building entrances include three homes and all business/heist destinations. Enter on foot at the facade door. Outdoor combat and income pause while inside. Visit the back desk for services; E at the teal exit or Exit Building returns you to your original street position. Property ownership and prices remain unchanged.'));
       for(const b of h.buildings()){
         const d=distance(h.location(),b.x,b.z),near=d<=3;
         const item=card(b.name,`${d} m away · walkable furnished room · no entry fee`);

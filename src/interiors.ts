@@ -1,9 +1,19 @@
+import {surfaceTexture,furnishDetails} from './interior-decor.ts';
 import {approach,atPoint} from './navigation.ts';
 import * as THREE from 'three';
 import { createPerson, type Person } from './actors.ts';
 import type {Lifestyle} from './lifestyle.ts';
 import type { Appearance } from './campaign.ts';
 export const INTERIORS = [
+  {id:'clinic',name:'Charity Street Clinic',x:-180,z:-60,tab:'Safehouse',theme:'cafe',color:0x638d86},
+  {id:'hardware',name:'Levee Hardware & Supply',x:60,z:60,tab:'Garage',theme:'garage',color:0x6c7670},
+  {id:'library',name:'Tremé Reading Room',x:-120,z:-180,tab:'Stories & Exploration',theme:'antique',color:0x8b7354},
+  {id:'diner',name:'Canal Night Diner',x:0,z:0,tab:'Jobs & Style',theme:'cafe',color:0x99764c},
+  {id:'florist',name:'Garden District Florist',x:-180,z:120,tab:'Market',theme:'antique',color:0x557858},
+  {id:'tailor',name:'Royal Street Tailor',x:60,z:-180,tab:'Character',theme:'hq',color:0x755877},
+  {id:'music',name:'Basin Street Rehearsal Hall',x:-60,z:-180,tab:'Crew',theme:'club',color:0x664b79},
+  {id:'dispatch',name:'Westbank Dispatch Office',x:-120,z:120,tab:'Jobs & Style',theme:'warehouse',color:0x587384},
+
   {id:'dice',name:'Tremé Dice & Poker Den',x:-120,z:-120,tab:'Properties',theme:'casino',color:0x674773},
   {id:'freight',name:'Warehouse Import/Export Dock',x:60,z:120,tab:'Properties',theme:'warehouse',color:0x55715d},
   {id:'herbalist',name:'Magazine Street Herbalist',x:-60,z:60,tab:'Properties',theme:'antique',color:0x456c63},
@@ -68,15 +78,22 @@ export function createInterior(def:InteriorDefinition,appearance:Appearance,cust
     const material=new THREE.MeshBasicMaterial({map:texture,side:THREE.DoubleSide});materials.push(material);
     const geometry=new THREE.PlaneGeometry(6.5,1.35);geometries.push(geometry);const mesh=new THREE.Mesh(geometry,material);mesh.position.set(x,y,z);scene.add(mesh);
   }
-  box(0,-.15,0,14,.3,16,0x3b302c);
+  const floor=box(0,-.15,0,14,.3,16,0xffffff);
+  const floorTexture=surfaceTexture(def.theme==='garage'||def.theme==='warehouse'?'metal':def.theme==='cafe'||def.theme==='casino'?'tile':'wood');
+  (floor.material as THREE.MeshStandardMaterial).map=floorTexture;
+  const wallTexture=surfaceTexture('brick');wallTexture.repeat.set(2,2);
   for(let x=-6.5;x<7;x+=.7)box(x,.008,0,.025,.01,16,0x62503b);
   const wallColor=def.id==='hq'?[0x97623d,0x254f59,0x57365f][customization?.safehouseTheme??0]!:def.color;
-  box(-7,2,0,.2,4,16,wallColor);box(7,2,0,.2,4,16,wallColor);box(0,2,-8,14,4,.2,wallColor);
+  const walls=[box(-7,2,0,.2,4,16,wallColor),box(7,2,0,.2,4,16,wallColor),box(0,2,-8,14,4,.2,wallColor)];
+  // Materials and perimeter dressing are shared by every enterable room.
+  walls.forEach(w=>{(w.material as THREE.MeshStandardMaterial).map=wallTexture;});
+  furnishDetails(def.theme,box);
   // Front wall stays open to preserve third-person camera visibility; the exit threshold is at z=6.7.
   sign(def.name,0,3,-7.85);
   box(0,.02,6.5,3,.035,1,0x2f9c8d);
   sign('EXIT · E / INTERACT',0,1.2,7.8,'#9cebdd');
   box(0,.7,-5.4,4,1.4,1,0x9a7048,true);sign('SERVICE DESK · E',0,2.2,-7.7);
+  sign('SUPPLIES · E ON FLOOR EMBLEM',0,1.2,-7.65,'#9cebdd');
   if(def.theme==='club'){
     box(-4,.2,-2.8,3,.4,4,0x3e284c,true);
     for(let i=0;i<3;i++){box(-4+i,.8,-3.1,.3,1.2,.3,0x24252b);box(-4+i,1.5,-3.1,.18,.2,.2,0xf4d37c);}
@@ -109,6 +126,7 @@ export function createInterior(def:InteriorDefinition,appearance:Appearance,cust
       if(f.id==='poker'){box(x,.65,z,1.7,1.3,1.5,0x266a50,true);}
     }
   }
+  const attendant=createPerson('civilian',2);attendant.root.position.set(-2.8,0,-6.5);scene.add(attendant.root);
   const avatar:Person=createPerson('player',5,appearance,customization);scene.add(avatar.root);
-  return {scene,avatar,obstacles,dispose(){avatar.dispose();geometries.forEach(g=>g.dispose());materials.forEach(m=>{if(m instanceof THREE.MeshBasicMaterial)m.map?.dispose();m.dispose();});}};
+  return {scene,avatar,obstacles,dispose(){attendant.dispose();floorTexture.dispose();wallTexture.dispose();avatar.dispose();geometries.forEach(g=>g.dispose());materials.forEach(m=>{if(m instanceof THREE.MeshBasicMaterial)m.map?.dispose();m.dispose();});}};
 }

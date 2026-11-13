@@ -1,19 +1,24 @@
 import {atPoint} from './navigation.ts';
 import type {Campaign} from './campaign.ts';
 export const WORK = [
+ {id:'medical',name:'Clinic Supply Run',x:-180,z:-60,dropX:0,dropZ:0,pay:300,duration:145,description:'Collect sealed supplies at the clinic and deliver them to the diner outreach desk. Clean pay.'},
+ {id:'hardware',name:'Hardware Restock',x:60,z:60,dropX:-120,dropZ:120,pay:380,duration:165,description:'Move hardware stock to Westbank Dispatch. Clean pay.'},
+ {id:'flowers',name:'Garden Event Flowers',x:-180,z:120,dropX:60,dropZ:-60,pay:420,duration:190,description:'Collect arrangements at the florist for the Marigny cafe. Clean pay.'},
+
  {id:'catering',name:'Po-boy Catering Run',x:30,z:4,dropX:0,dropZ:60,pay:220,duration:110,description:'Collect food at Mama Nola’s and deliver it. Clean earnings; no contraband.'},
  {id:'salvage',name:'Warehouse Salvage',x:60,z:120,dropX:-60,dropZ:0,pay:350,duration:150,description:'Move salvaged mechanical supplies to the chop shop. Clean pay and two parts.'},
  {id:'jazz',name:'Jazz Club Equipment Courier',x:0,z:-60,dropX:60,dropZ:-60,pay:280,duration:120,description:'Carry a band’s equipment from the lounge to Marigny. Earn clean money.'},
  {id:'fence',name:'Recover a Missing Art Crate',x:180,z:0,dropX:-120,dropZ:60,pay:850,duration:180,description:'A high-risk recovery for the fence. Pays dirty cash and adds heat.'},
 ] as const;
-export type Lifestyle={hairStyle:number;accessory:number;beard:boolean;safehouseTheme:number;lightColor:number;rug:boolean;art:boolean;work:null|{id:string;step:number;t:number};workCooldown:number;workCompleted:number;lookSensitivity:number;invertLook:boolean;carStyle:Record<string,{spoiler:boolean;stripe:boolean;glowColor:number;rimColor:number}>};
-export function newLifestyle():Lifestyle{return {hairStyle:0,accessory:0,beard:false,safehouseTheme:0,lightColor:0,rug:false,art:false,work:null,workCooldown:0,workCompleted:0,lookSensitivity:1,invertLook:false,carStyle:{}};}
+export type Lifestyle={inspected:string[];medkits:number;hairStyle:number;accessory:number;beard:boolean;safehouseTheme:number;lightColor:number;rug:boolean;art:boolean;work:null|{id:string;step:number;t:number};workCooldown:number;workCompleted:number;lookSensitivity:number;invertLook:boolean;carStyle:Record<string,{spoiler:boolean;stripe:boolean;glowColor:number;rimColor:number}>};
+export function newLifestyle():Lifestyle{return {inspected:[],medkits:0,hairStyle:0,accessory:0,beard:false,safehouseTheme:0,lightColor:0,rug:false,art:false,work:null,workCooldown:0,workCompleted:0,lookSensitivity:1,invertLook:false,carStyle:{}};}
 export function restoreLifestyle(v:any):Lifestyle{
  const s=newLifestyle();if(!v||typeof v!=='object')return s;
  const num=(v:any,f=0,max=1e9)=>typeof v==='number'&&Number.isFinite(v)?Math.max(0,Math.min(max,v)):f;
  for(const k of ['hairStyle','accessory','safehouseTheme','lightColor'] as const)s[k]=Math.floor(num(v[k],0,k==='accessory'?3:k==='hairStyle'?3:2));
  for(const k of ['beard','rug','art','invertLook'] as const)s[k]=v[k]===true;
  s.lookSensitivity=Math.max(.4,num(v.lookSensitivity,1,2));s.workCooldown=num(v.workCooldown,0,120);s.workCompleted=Math.floor(num(v.workCompleted));
+ s.medkits=Math.floor(num(v.medkits,0,5));s.inspected=Array.isArray(v.inspected)?[...new Set<string>(v.inspected.filter((id:unknown)=>typeof id==='string'&&/^[a-z-]{1,40}$/.test(id)))].slice(0,100):[];
  const work=WORK.find(w=>w.id===v.work?.id);if(work)s.work={id:work.id,step:Math.floor(num(v.work.step,0,1)),t:num(v.work.t,work.duration,work.duration)};
  if(v.carStyle&&typeof v.carStyle==='object')for(const key of Object.keys(v.carStyle).filter(k=>/^[0-7]$/.test(k))){const c=v.carStyle[key];if(c&&typeof c==='object')s.carStyle[key]={spoiler:c.spoiler===true,stripe:c.stripe===true,glowColor:Math.floor(num(c.glowColor,0,2)),rimColor:Math.floor(num(c.rimColor,0,2))};}return s;
 }

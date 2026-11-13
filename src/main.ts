@@ -32,6 +32,7 @@ import {recon,HEISTS,plan} from './expansion.ts';
 import {applyBodyStyle} from './car-style.ts';
 import {workObjective,workInteract,tickWork} from './lifestyle.ts';
 import {STORIES,DISCOVERIES,storyInteract,storyObjective,discover,tacticalHeading,coverReduction} from './city-stories.ts';
+import {inspectSupplies,atSupply,useMedkit} from './building-activities.ts';
 import {addEntranceArt} from './entrance-art.ts';
 import {createStreetLife} from './street-life.ts';
 import { createWeather } from './weather.ts';
@@ -303,6 +304,7 @@ function updateHud() {
   $("cityTime").textContent = inside ? "INTERIOR · CITY PAUSED" : `${hours}:${minutes} · ${clock.label}`;
   $("demand").textContent = `HOT DROP · ${DROPS[demandIndex(time, DROPS.length)]!.name}`;
   $("streak").textContent = `Delivery streak ${P.streak} · +${Math.min(5, P.streak) * 10}% contract pay`;
+  $('useMedkit').textContent=`MEDKIT · H (${C.lifestyle.medkits})`;
   const reserve = P.car ? P.boost : P.stamina;
   $("reserveLabel").textContent = `${P.car ? "NITRO" : "STAMINA"} · ${reserve.exhausted ? "RECOVERING" : "SHIFT"}`;
   ($("reserve").firstElementChild as HTMLElement).style.width = `${reserve.value}%`;
@@ -360,6 +362,7 @@ addEventListener("keydown", (e) => {
   keys.add(e.code);
   if (!playing || shopOpen || managing) return;
   if (e.code === "KeyE") interact();
+  if(e.code==='KeyH'&&!e.repeat)healWithMedkit();
   if(e.code==='KeyC'&&!e.repeat)crouched=!crouched;
   if (e.code === "KeyR") reloadWeapon();
   if (/^Digit[1-6]$/.test(e.code)) {
@@ -987,7 +990,7 @@ function updateEconomy(dt: number) {
 function prompt() {
   let t = "";
   if (inside) {
-    t=inside.z>5?'E / INTERACT: exit building':inside.z < -3.6 && Math.abs(inside.x)<3?'E / INTERACT: service desk':'Walk to the desk · Exit at the teal doorway';
+    t=atSupply(inside.x,inside.z)?`E / INTERACT: ${C.lifestyle.inspected.includes(inside.def.id)?'supplies already searched':'inspect supplies'} · H medkit (${C.lifestyle.medkits})`:inside.z>5?'E / INTERACT: exit building':inside.z < -3.6 && Math.abs(inside.x)<3?'E / INTERACT: service desk':'E at floor emblem: inspect supplies · Shift: sprint · Back desk: services · Teal doorway: exit';
   } else if (!P.car && P.deadT <= 0) {
     const corner = BLOCKS.find(b => atPoint(P.x,P.z,b,14) && (!C.owned.includes(b.id) || C.defense?.block === b.id));
     const work=workObjective(C);
@@ -1268,14 +1271,17 @@ function enterInterior(def:InteriorDefinition){
   inside={room:createInterior(def,C.avatar,C.lifestyle,C.expansion.furniture),def,arrival:selectedLocation,x:0,z:5.8};
   joystick.reset();keys.clear();mouseDown=aimHeld=false;walkVelocity.set(0,0);sound.engine(null);sound.siren(false);
   target=null;selectedLocation=null;$('exitInterior').hidden=false;$('insideLabel').textContent=def.name;
-  feed(`Entered ${def.name}. Walk to the desk for ${def.tab}, or E at the exit. Outdoor simulation paused.`);
+  feed(`Entered ${def.name}. E at the floor emblem to inspect supplies; back desk for ${def.tab}. Shift to sprint, H for medkit. E at the exit leaves.`);
 }
 function leaveInterior(){if(!inside)return;inside.room.dispose();inside=null;renderPass.scene=scene;joystick.reset();keys.clear();mouseDown=aimHeld=false;$('exitInterior').hidden=true;$('insideLabel').textContent='';feed('Back on the street.');}
 $('exitInterior').onclick=leaveInterior;
 $('contextAction').onclick=interact;
+function healWithMedkit(){if(!playing||managing||shopOpen||P.deadT>0)return;const hp=useMedkit(C,P.hp);if(hp===P.hp){feed(P.hp>=100?'Health is already full.':'No medkits. Inspect supplies inside buildings.');return;}P.hp=hp;feed('Medkit used · +35 health (maximum 100).');saveGame();}
+$('useMedkit').onclick=healWithMedkit;
 $('clearWaypoint').onclick=()=>{selectedLocation=null;target=null;feed('Manual route cleared. Active mission objectives remain tracked.');};
 function interiorInteract(){
  if(!inside)return;
+ if(atSupply(inside.x,inside.z)){feed(inspectSupplies(C,inside.def.id,inside.x,inside.z)??'Supplies already searched. Explore another building.');saveGame();return;}
  if(inside.z>5){leaveInterior();return;}
  if(inside.z<-3.6&&Math.abs(inside.x)<3){
   if(inside.arrival?.id.startsWith('heist:')){handleRecon(inside.arrival.id.slice(6));return;}
@@ -1288,7 +1294,9 @@ function updateIndoor(dt:number){
   const dx=Math.max(-1,Math.min(1,(keys.has('KeyD')||keys.has('ArrowRight')?1:0)-(keys.has('KeyA')||keys.has('ArrowLeft')?1:0)+joystick.value.x));
   const forward=Math.max(-1,Math.min(1,(keys.has('KeyW')||keys.has('ArrowUp')?1:0)-(keys.has('KeyS')||keys.has('ArrowDown')?1:0)+joystick.value.y));
   const magnitude=Math.max(1,Math.hypot(dx,forward));
-  const next=indoorMove(inside.x,inside.z,dx/magnitude*4*dt,-forward/magnitude*4*dt,inside.room.obstacles);
+  const running=updateReserve(P.stamina,(dx!==0||forward!==0)&&(keys.has('ShiftLeft')||keys.has('ShiftRight')),dt,22,16);
+  const pace=running?6:4;
+  const next=indoorMove(inside.x,inside.z,dx/magnitude*pace*dt,-forward/magnitude*pace*dt,inside.room.obstacles);
   const speed=Math.hypot(next.x-inside.x,next.z-inside.z)/Math.max(dt,.001);
   if(speed>.1)inside.room.avatar.root.rotation.y=Math.atan2(next.x-inside.x,next.z-inside.z);
   inside.x=next.x;inside.z=next.z;inside.room.avatar.root.position.set(next.x,0,next.z);
