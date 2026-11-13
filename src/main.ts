@@ -325,7 +325,7 @@ function updateHud() {
   const work=inside?null:workObjective(C);if(work)obj=work.text;
   const story=inside?null:storyObjective(C);if(story){obj=story.text;if(C.cityStories.active?.step===1){const enemies=foes.filter(f=>!f.dead&&f.blockId===`story:${C.cityStories.active!.id}`);obj+=` · ${enemies.length} rivals left${enemies[0]?` · lead HP ${Math.ceil(enemies[0].hp)}`:''}`;}}
   if(crouched&&!inside)obj=(coverStations.some(p=>dist2(P.x,P.z,p.x,p.z)<2.4)?'COVERED (-60% damage) · ':'CROUCHED · ')+obj;
-  if(C.legacy.tutorial<3)obj=TUTORIAL[C.legacy.tutorial]!;
+  if(C.legacy.tutorial<3&&!inside)obj=TUTORIAL[C.legacy.tutorial]!;
   $('questTracker').textContent=C.legacy.tutorial<3?`TUTORIAL ${C.legacy.tutorial+1}/3`:C.legacy.daily&&!C.legacy.daily.finished?`DAILY: checkpoint ${C.legacy.daily.step+1}/3 · ${C.legacy.daily.elapsed.toFixed(1)}s`:`EMPIRE OBJECTIVE · Launder $${Math.max(0,10000-C.stats.cleaned).toLocaleString()} more · Capture ${Math.max(0,5-C.owned.length)} more corners · $${Math.floor(C.clean).toLocaleString()} / $1,000,000 clean`;
   $("obj").textContent = obj;
   $("obj").style.display = obj ? "block" : "none";
@@ -516,6 +516,7 @@ function closeShop() {
 // ───────── interaction ─────────
 function interact() {
   if(P.deadT>0)return;
+  if(inside){interiorInteract();return;}
   if(!inside&&selectedLocation&&atPoint(P.x,P.z,selectedLocation,8)){
     const id=selectedLocation.id;
     if(id.startsWith('door:')){if(P.car){feed('Exit your vehicle first: E / INTERACT or GET OUT.');exitCar();return;}const door=INTERIORS.find(b=>b.id===id.slice(5));if(door){enterInterior(door);return;}}
@@ -547,8 +548,7 @@ function interact() {
   const heist=HEISTS.find(h=>atPoint(P.x,P.z,h,10)&&target?.name.toLowerCase().includes(h.name.toLowerCase()));
   if(heist){handleRecon(heist.id);return;}
   const entrance=nearestEntrance(P.x,P.z,6);
-  if(!P.car&&entrance&&C.legacy.tutorial>=3){enterInterior(entrance);return;}
-  if(!P.car&&entrance&&C.legacy.tutorial<3){feed('Finish the guided tutorial first, or use Empire → Legacy & Training → Skip tutorial.');return;}
+  if(!P.car&&entrance){enterInterior(entrance);return;}
   const rival = foes.find(f=>f.kind==='gangster'&&!f.dead&&!f.mugged&&dist2(P.x,P.z,f.x,f.z)<2.5);
   if(!P.car&&rival){rival.mugged=true;rival.aggro=true;const pay=conditions(C.clock).night?125:100;C.dirty=Math.min(cashCap(C),C.dirty+pay);addHeat(C,8);feed(`Rival courier shaken down: +$${pay} dirty. Crew alerted!`);sfx('cash');saveGame();return;}
   const corner = BLOCKS.find(b => atPoint(P.x,P.z,b,14) && (!C.owned.includes(b.id) || C.defense?.block === b.id));
@@ -1183,7 +1183,7 @@ const empire = createEmpireUI({
   backRoom: openShop,
   buildings: () => INTERIORS.map(b=>({...b,...approach(b)})),
   trackLocation(location){selectedLocation=location;target={x:location.x,z:location.z,name:location.name};yaw=Math.atan2(location.x-P.x,location.z-P.z);feed(location.instruction);},
-  enterBuilding(id) { const def=INTERIORS.find(b=>b.id===id);if(def)enterInterior(def); },
+  enterBuilding(id) { const def=INTERIORS.find(b=>b.id===id);if(def){enterInterior(def);if(inside){wasPlaying=true;startPlaying();}} },
   campaign: C,
   pause(open) {
     if (open) { if(balcony){balcony=false;$('hud').style.display='';playing=balconyWasPlaying;$("paradeView").textContent="PARADE BALCONY";} wasPlaying = playing; managing = true; keys.clear(); joystick.reset(); lookDragging=false;mouseDown = aimHeld = false; document.exitPointerLock(); }
@@ -1314,7 +1314,7 @@ function updateStoryCity(dt:number){
 let micro:null|{kind:number;x:number;z:number;t:number;mesh:THREE.Mesh}=null;
 function updateTraining(dt:number){
  const stage=C.legacy.tutorial;
- if(stage===0){target={x:HQ.x,z:HQ.z,name:'➜ Mama Nola — walk here, then E'};}
+ if(stage===0&&!selectedLocation){target={x:HQ.x,z:HQ.z,name:'➜ Mama Nola — walk here, then E'};}
  if(stage===1&&!tutorialRival){const [x,z]=freeSpot(10,12,3);tutorialRival=spawnFoe('gangster',x,z,0);tutorialRival.blockId='tutorial';tutorialRival.aggro=true;}
  if(stage===1&&tutorialRival?.dead){
   advanceTutorial(C,1);tutorialCar=addVehicle(0,12,0,Math.PI/2,0xc79a44);target={x:12,z:0,name:'First delivery sedan · E to enter'};
