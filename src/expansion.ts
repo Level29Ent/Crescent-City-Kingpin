@@ -1,3 +1,4 @@
+import {atPoint} from './navigation.ts';
 import type { Campaign } from './campaign.ts';
 import { cityClock } from './dynamics.ts';
 export const DISTRICT_NAMES = ['French Quarter', 'Skidrow', 'Uptown', 'Warehouse', 'Port of NOLA'];
@@ -115,7 +116,7 @@ export function startRun(c: Campaign, index: number) {
 export function plan(c: Campaign, id: string) { return c.expansion.plans[id] ??= { phase: 0, intel: 0, assigned: [], step: 0, score: 0, cooldown: 0 }; }
 export function recon(c: Campaign, id: string, x: number, z: number) {
   const h = HEISTS.find(h => h.id === id); if (!h) return false;
-  const p = plan(c,id); if (p.phase !== 0 || p.cooldown > 0 || Math.hypot(x-h.x,z-h.z)>14) return false;
+  const p = plan(c,id); if (p.phase !== 0 || p.cooldown > 0 || !atPoint(x,z,h,10)) return false;
   p.intel = 100; p.phase = 1; return true;
 }
 export function assemble(c: Campaign, id: string) {
@@ -157,7 +158,7 @@ export function startMission(c: Campaign, id: string) {
 }
 export function missionInteract(c: Campaign, x: number, z: number): string | null {
   const current = c.expansion.mission; const m = MISSIONS.find(m => m.id === current?.id); if (!m || !current) return null;
-  const step = m.steps[current.step]; if (!step || Math.hypot(step.x-x,step.z-z)>8) return null;
+  const step = m.steps[current.step]; if (!step || !atPoint(x,z,step,8)) return null;
   if(m.id==='parade' && current.step===4 && (current.escort??0)<40) return 'Stay within 18m of the lead jester float until its 40-second escort reaches the finale.';
   current.step++;
   if (current.step < m.steps.length) return `Mission advanced: ${m.steps[current.step]!.name}`;

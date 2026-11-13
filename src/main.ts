@@ -26,6 +26,8 @@ import { INTERIORS, nearestEntrance, indoorMove, createInterior, type InteriorDe
 import { conditions, VEHICLES, MISSIONS, missionInteract, tickExpansion, inventoryCap, cashCap, furnished } from './expansion.ts';
 import { createFestival } from './festival.ts';
 import { createMoneyBundle } from './money.ts';
+import {approach,atPoint,mapLocations,type MapLocation} from './navigation.ts';
+import {recon,HEISTS,plan} from './expansion.ts';
 import {applyBodyStyle} from './car-style.ts';
 import {workObjective,workInteract,tickWork} from './lifestyle.ts';
 import {STORIES,DISCOVERIES,storyInteract,storyObjective,discover,tacticalHeading,coverReduction} from './city-stories.ts';
@@ -87,7 +89,7 @@ const tireSmoke=createImpacts(scene,true);
 let lastCleaned=C.stats.cleaned;
 const doorwayGeometry=new THREE.RingGeometry(1.1,1.45,24);
 const doorwayMaterial=new THREE.MeshBasicMaterial({color:0x82e6d1,side:THREE.DoubleSide,transparent:true,opacity:.8,depthWrite:false});
-for(const entry of INTERIORS){const marker=new THREE.Mesh(doorwayGeometry,doorwayMaterial);marker.rotation.x=-Math.PI/2;marker.position.set(entry.x,.08,entry.z);scene.add(marker);}
+for(const entry of INTERIORS){const marker=new THREE.Mesh(doorwayGeometry,doorwayMaterial);marker.rotation.x=-Math.PI/2;marker.position.set(approach(entry).x,.08,approach(entry).z);scene.add(marker);}
 const streetLife=createStreetLife(scene);
 const coverStations=[{x:0,z:-115},{x:120,z:175},{x:-180,z:6},{x:60,z:6}];
 const coverGeo=new THREE.BoxGeometry(3,1.1,1),coverMat=new THREE.MeshStandardMaterial({color:0x706e51,roughness:1});
@@ -139,6 +141,8 @@ let balcony = false;
 let balconyWasPlaying = false;
 let pausedForHidden = false;
 let resetting = false;
+let selectedLocation:MapLocation|null=null;
+let previousAuto=false;
 let target: null | { x: number; z: number; name: string } = null;
 let battle: null | { block: string; defending: boolean } = null;
 let roadblock: null | { vehicle: Vehicle; t: number } = null;
@@ -270,7 +274,8 @@ function drawMini() {
   if (P.job) dot(P.job.x, P.job.z, "#40f0ff", 4);
   if (target) dot(target.x, target.z, '#ffffff', 5);
   for(const p of pickups)dot(p.x,p.z,p.kind===0?'#f5c34a':p.kind===1?'#9c52e0':'#47d7c1',2);
-  for(const b of INTERIORS)dot(b.x,b.z,'#82e6d1',2.5);
+  for(const b of mapLocations())dot(b.x,b.z,b.category==='Heists'?'#ffbe79':b.category==='Buildings & homes'?'#82e6d1':'#b9adce',1.5);
+  for(const b of INTERIORS)dot(approach(b).x,approach(b).z,'#82e6d1',2.5);
   for (const b of BLOCKS) dot(b.x, b.z, C.owned.includes(b.id) ? '#8cf08c' : '#dd8bff', 3);
   mg.restore();
   mg.fillStyle = "#fff";
@@ -446,7 +451,7 @@ function buy(id: number) {
 }
 
 function startJob(priority = false) {
-  if (P.job || C.lifestyle.work || C.cityStories.active) {feed('Finish the active job or story before starting an import run.');return;}
+  if (P.job || C.lifestyle.work || C.cityStories.active || C.expansion.mission || (C.legacy.daily&&!C.legacy.daily.finished) || C.legacy.tutorial<3) {feed('Finish the active job or story before starting an import run.');return;}
   const d = DROPS[priority ? demandIndex(time, DROPS.length) : Math.floor(Math.random() * DROPS.length)]!;
   const len = dist2(HQ.x, HQ.z, d.x, d.z);
   const duration = (30 + len / 9) * (priority ? 0.8 : 1);
@@ -511,39 +516,44 @@ function closeShop() {
 // ───────── interaction ─────────
 function interact() {
   if(P.deadT>0)return;
-  const worked=inside?null:workInteract(C,P.x,P.z);if(worked){feed(worked);sfx('cash');saveGame();return;}
+  if(!inside&&selectedLocation&&atPoint(P.x,P.z,selectedLocation,8)){
+    const id=selectedLocation.id;
+    if(id.startsWith('door:')){if(P.car){feed('Exit your vehicle first: E / INTERACT or GET OUT.');exitCar();return;}const door=INTERIORS.find(b=>b.id===id.slice(5));if(door){enterInterior(door);return;}}
+    if(id.startsWith('heist:')){handleRecon(id.slice(6));return;}
+    if(id.startsWith('property:')){empire.open('Properties');return;}
+    if(id.startsWith('turf:')&&!P.car){startBattle(id.slice(5));return;}
+    if(id.startsWith('mission:')&&!C.expansion.mission){feed('Accept this mission first in Empire → Missions.');empire.open('Missions');return;}
+    if(id.startsWith('work:')&&!C.lifestyle.work){feed('Accept a work order first in Empire → Jobs & Style.');empire.open('Jobs & Style');return;}
+    if(id.startsWith('story:')&&!C.cityStories.active){feed('Choose this chapter first in Stories & Exploration.');empire.open('Stories & Exploration');return;}
+    if(id.startsWith('drop:')&&!P.job){feed('No active import contract. Take an import job at Mama Nola’s first.');return;}
+  }
+  const worked=inside?null:workInteract(C,P.x,P.z);if(worked){if(!C.lifestyle.work){target=null;selectedLocation=null;}feed(worked);sfx('cash');saveGame();return;}
   if(!inside&&C.legacy.tutorial>=3){
     const story=storyInteract(C,P.x,P.z);
     if(story==='fight'){spawnStoryEncounter();feed('Encounter started. Use C / COVER beside sandbags to reduce damage.');saveGame();return;}
-    if(story==='complete'){feed('Chapter complete! Return to Stories & Exploration for the next dialogue.');sfx('capture');saveGame();return;}
-    const cache=DISCOVERIES.find(d=>!C.cityStories.discovered.includes(d.id)&&dist2(P.x,P.z,d.x,d.z)<6);
+    if(story==='complete'){target=null;selectedLocation=null;feed('Chapter complete! Return to Stories & Exploration for the next dialogue.');sfx('capture');saveGame();return;}
+    const cache=DISCOVERIES.find(d=>!C.cityStories.discovered.includes(d.id)&&atPoint(P.x,P.z,d,6));
     if(cache&&discover(C,cache.id)){feed(`Discovered ${cache.name}! One-time cache recovered.`);sfx('cash');saveGame();return;}
   }
   if(micro?.kind===0&&dist2(P.x,P.z,micro.x,micro.z)<5){if(C.dirty>=100){C.dirty-=100;C.heat=Math.max(0,C.heat-8);micro.t=0;feed('Checkpoint bribe paid.');saveGame();}else feed('Need $100 dirty cash, or find another route.');return;}
-  if(C.legacy.tutorial===0&&dist2(P.x,P.z,HQ.x,HQ.z)<8){
+  if(C.legacy.tutorial===0&&atPoint(P.x,P.z,HQ,8)){
     advanceTutorial(C,0);feed('Mama Nola: a rival is shaking down our corner. Defend yourself — aim, fire and reload.');
     const [x,z]=freeSpot(10,12,4);tutorialRival=spawnFoe('gangster',x,z,0);tutorialRival.blockId='tutorial';tutorialRival.aggro=true;target={x,z,name:'First rival · aim and shoot'};saveGame();return;
   }
   if (inside) {interiorInteract();return;}
   if (P.deadT > 0) return;
   const advanced = missionInteract(C,P.x,P.z);
-  if(advanced) {feed(advanced); sfx('cash'); saveGame(); return;}
-  const entrance=nearestEntrance(P.x,P.z);
+  if(advanced) {if(!C.expansion.mission){target=null;selectedLocation=null;}feed(advanced); sfx('cash'); saveGame(); return;}
+  const heist=HEISTS.find(h=>atPoint(P.x,P.z,h,10)&&target?.name.toLowerCase().includes(h.name.toLowerCase()));
+  if(heist){handleRecon(heist.id);return;}
+  const entrance=nearestEntrance(P.x,P.z,6);
   if(!P.car&&entrance&&C.legacy.tutorial>=3){enterInterior(entrance);return;}
+  if(!P.car&&entrance&&C.legacy.tutorial<3){feed('Finish the guided tutorial first, or use Empire → Legacy & Training → Skip tutorial.');return;}
   const rival = foes.find(f=>f.kind==='gangster'&&!f.dead&&!f.mugged&&dist2(P.x,P.z,f.x,f.z)<2.5);
   if(!P.car&&rival){rival.mugged=true;rival.aggro=true;const pay=conditions(C.clock).night?125:100;C.dirty=Math.min(cashCap(C),C.dirty+pay);addHeat(C,8);feed(`Rival courier shaken down: +$${pay} dirty. Crew alerted!`);sfx('cash');saveGame();return;}
-  const corner = BLOCKS.find(b => dist2(P.x, P.z, b.x, b.z) < 14 && (!C.owned.includes(b.id) || C.defense?.block === b.id));
+  const corner = BLOCKS.find(b => atPoint(P.x,P.z,b,14) && (!C.owned.includes(b.id) || C.defense?.block === b.id));
   if (!P.car && corner) { startBattle(corner.id); return; }
-  if (P.car) {
-    const c = P.car;
-    P.x = c.x + Math.cos(c.h) * 2.4;
-    P.z = c.z - Math.sin(c.h) * 2.4;
-    if (pushOut(P.x, P.z, 0.5).hit || !walkable(P.x, P.z)) { P.x = c.x - Math.cos(c.h) * 2.4; P.z = c.z + Math.sin(c.h) * 2.4; }
-    P.car = null;
-    c.speed = 0;
-    sfx("door");
-    return;
-  }
+  if(P.car){exitCar();return;}
   let best: Vehicle | null = null;
   let bd = 4.5;
   for (const v of vehicles) {
@@ -555,6 +565,17 @@ function interact() {
   if (best) { P.car = best; sfx("door"); return; }
   if (dist2(P.x, P.z, HQ.x, HQ.z) < HQ.r) openShop();
 }
+
+function exitCar(){if(!P.car)return;
+    const c = P.car;
+    P.x = c.x + Math.cos(c.h) * 2.4;
+    P.z = c.z - Math.sin(c.h) * 2.4;
+    if (pushOut(P.x, P.z, 0.5).hit || !walkable(P.x, P.z)) { P.x = c.x - Math.cos(c.h) * 2.4; P.z = c.z + Math.sin(c.h) * 2.4; }
+    P.car = null;
+    c.speed = 0;
+    sfx("door");
+}
+function handleRecon(id:string){const h=HEISTS.find(h=>h.id===id);if(!h)return;if(recon(C,id,P.x,P.z)){feed(`Recon complete: ${h.name}. Assemble the required crew, then choose Execution actions.`);target=null;selectedLocation=null;saveGame();empire.open('Heists');}else{const p=plan(C,id);feed(p.cooldown>0?`Heist cooldown: ${Math.ceil(p.cooldown)}s remaining.`:p.phase>0?'Recon already gathered. Continue Crew Assembly / Execution on the Heists board.':'Move closer to the marked approach.');empire.open('Heists');}}
 
 // ───────── combat ─────────
 const tracers: { line: THREE.Line; t: number }[] = [];
@@ -890,9 +911,10 @@ function updateWalking(dt: number) {
 }
 
 const markerRing = new THREE.Mesh(
-  new THREE.CylinderGeometry(3, 3, 80, 24, 1, true),
-  new THREE.MeshBasicMaterial({ color: 0x40f0ff, transparent: true, opacity: 0.25, side: THREE.DoubleSide, depthWrite: false }),
+  new THREE.RingGeometry(1.6,2.1,40),
+  new THREE.MeshBasicMaterial({ color: 0x40f0ff, transparent: true, opacity: 0.75, side: THREE.DoubleSide, depthWrite: false }),
 );
+markerRing.rotation.x=-Math.PI/2;
 markerRing.visible = false;
 scene.add(markerRing);
 
@@ -908,11 +930,11 @@ function updateEconomy(dt: number) {
   }
   for(const msg of tickExpansion(C,dt)){feed(msg);if(msg.includes('WARNING')||msg.includes('SHOWDOWN'))sfx('wanted');}
   if (P.car?.garage !== undefined && C.expansion.runs.some(r=>r.car===P.car!.garage)) {P.car=null;player.setVisible(true);}
-  const expired=tickWork(C,dt);if(expired)feed(expired);
+  const expired=tickWork(C,dt);if(expired){target=null;feed(expired);}
   const work=workObjective(C);if(work)target={x:work.x,z:work.z,name:work.text};
   updateStoryCity(dt);
   updateTraining(dt);
-  if(C.legacy.daily&&!C.legacy.daily.finished){C.legacy.daily.elapsed+=dt;const point=dailyRoute(C.legacy.daily.date)[C.legacy.daily.step];if(point)target={...point,name:'Daily speedrun checkpoint'};if(dailyCheckpoint(C,P.x,P.z)){feed('Daily route complete! +$1,000 clean.');saveGame();}}
+  if(C.legacy.daily&&!C.legacy.daily.finished){C.legacy.daily.elapsed+=dt;const point=dailyRoute(C.legacy.daily.date)[C.legacy.daily.step];if(point)target={...point,name:'Daily speedrun checkpoint'};if(dailyCheckpoint(C,P.x,P.z)){target=null;selectedLocation=null;feed('Daily route complete! +$1,000 clean.');saveGame();}}
   milestoneRewards(C);
   updateMicroEvents(dt);
   updateRoadblock(dt);
@@ -927,29 +949,33 @@ function updateEconomy(dt: number) {
       target={x:0,z:42+Math.min(40,C.expansion.mission.escort??0)*1.5,name:`Escort jester float ${Math.floor(Math.min(40,C.expansion.mission.escort??0))}/40s`};
     }
   }
+  const automatic=!!C.lifestyle.work||!!C.cityStories.active||!!C.expansion.mission||!!(C.legacy.daily&&!C.legacy.daily.finished)||C.legacy.tutorial<3||!!P.job;
+  if(!automatic&&(previousAuto||target?.name.startsWith('Tutorial delivery')||target?.name.startsWith('First delivery'))){target=null;selectedLocation=null;}
+  previousAuto=automatic;
+  if(target){const p=approach(target);target.x=p.x;target.z=p.z;}
   // heal at HQ
   if (dist2(P.x, P.z, HQ.x, HQ.z) < HQ.r && P.hp < MAX_HP && P.deadT <= 0) P.hp = Math.min(MAX_HP, P.hp + 6 * dt);
   const j = P.job;
   markerRing.visible = !!j || !!target;
-  if (!j && target) markerRing.position.set(target.x, 40, target.z);
+  if (!j && target) markerRing.position.set(approach(target).x,.09,approach(target).z);
   if (j) {
     j.t -= dt;
-    markerRing.position.set(j.x, 40, j.z);
-    markerRing.rotation.y = time * 0.6;
+    markerRing.position.set(approach(j).x,.09,approach(j).z);
+
     (markerRing.material as THREE.MeshBasicMaterial).color.setHex(j.priority ? 0xffb347 : 0x40f0ff);
-    if (dist2(P.x, P.z, j.x, j.z) < 6) {
+    if (atPoint(P.x,P.z,j,6)) {
       const bonus = deliveryBonus(j.pay, j.t, j.duration);
       C.dirty += Math.round((j.pay + bonus) * (1 + crewPayout()) * peakMultiplier(C.clock,C.heat));
       P.streak++;
       feed(`Delivery #${P.streak}: +$${j.pay} + $${bonus} speed bonus!`);
       sfx("cash");
-      P.job = null;saveGame();
+      P.job = null;target=null;selectedLocation=null;saveGame();
     } else if (j.t <= 0) {
       P.streak = 0;
       failMission(C);
       feed("Too late. The buyer walked. Delivery streak reset.");
       sfx("deny");
-      P.job = null;
+      P.job = null;target=null;selectedLocation=null;saveGame();
     }
   }
   if (C.clean >= GOAL && !P.won && !C.expansion.completed.includes("millionKingpin")) {
@@ -969,13 +995,13 @@ function prompt() {
   if (inside) {
     t=inside.z>5?'E / INTERACT: exit building':inside.z < -3.6 && Math.abs(inside.x)<3?'E / INTERACT: service desk':'Walk to the desk · Exit at the teal doorway';
   } else if (!P.car && P.deadT <= 0) {
-    const corner = BLOCKS.find(b => dist2(P.x, P.z, b.x, b.z) < 14 && (!C.owned.includes(b.id) || C.defense?.block === b.id));
+    const corner = BLOCKS.find(b => atPoint(P.x,P.z,b,14) && (!C.owned.includes(b.id) || C.defense?.block === b.id));
     const work=workObjective(C);
-    const cache=DISCOVERIES.find(d=>!C.cityStories.discovered.includes(d.id)&&dist2(P.x,P.z,d.x,d.z)<6);
+    const cache=DISCOVERIES.find(d=>!C.cityStories.discovered.includes(d.id)&&atPoint(P.x,P.z,d,6));
     const storyContact=storyObjective(C);
-    const entrance=nearestEntrance(P.x,P.z);
-    if(work&&dist2(P.x,P.z,work.x,work.z)<7)t='E / INTERACT: work order';
-    else if(storyContact&&C.cityStories.active?.step!==1&&dist2(P.x,P.z,storyContact.x,storyContact.z)<8)t='E / INTERACT: story contact';
+    const entrance=nearestEntrance(P.x,P.z,6);
+    if(work&&atPoint(P.x,P.z,work,7))t='E / INTERACT: work order';
+    else if(storyContact&&C.cityStories.active?.step!==1&&atPoint(P.x,P.z,storyContact,8))t='E / INTERACT: story contact';
     else if(cache)t=`E / INTERACT: discover ${cache.name}`;
     else if(entrance)t=`E / INTERACT: enter ${entrance.name}`;
     else if(foes.some(f=>f.kind==='gangster'&&!f.dead&&!f.mugged&&dist2(P.x,P.z,f.x,f.z)<2.5))t='E: shake down rival courier (raises heat)';
@@ -984,6 +1010,21 @@ function prompt() {
     if (vehicles.some((v) => dist2(v.x, v.z, P.x, P.z) < 4.5)) t = "E: get in car";
     else if (dist2(P.x, P.z, HQ.x, HQ.z) < HQ.r) t = "E: open the back room";
   } else if (P.car) t = "E: get out";
+  if(!inside&&target&&atPoint(P.x,P.z,target,10)){
+    const heist=HEISTS.find(h=>atPoint(P.x,P.z,h,10)&&target!.name.toLowerCase().includes(h.name.toLowerCase()));
+    const mission=C.expansion.mission?MISSIONS.find(m=>m.id===C.expansion.mission!.id):null;
+    if(heist)t=`ARRIVED · E / INTERACT: ${plan(C,heist.id).phase===0?'gather recon':'continue heist planning'}`;
+    else if(C.cityStories.active)t=C.cityStories.active.step===1?'ENCOUNTER: defeat remaining rivals, then return to Mama Nola':'ARRIVED · E / INTERACT: speak to story contact';
+    else if(C.lifestyle.work)t='ARRIVED · E / INTERACT: collect or deliver work cargo';
+    else if(mission)t=mission.id==='parade'&&C.expansion.mission?.step===4?`ESCORT: stay beside float (${Math.floor(C.expansion.mission.escort??0)}/40s), then E at finale`:'ARRIVED · E / INTERACT: advance mission';
+    else if(C.legacy.tutorial===2)t=P.car?'DELIVERY: drive within the ground ring — auto-completes':'Driving lesson: enter the marked sedan with E, then drive to the drop';
+    else if(C.legacy.tutorial===0)t='ARRIVED · E / INTERACT: meet Mama Nola';
+    else if(selectedLocation)t=selectedLocation.instruction;
+  }
+  if(!inside&&P.job&&atPoint(P.x,P.z,P.job,8))t='IMPORT DELIVERY · drive/walk within 6m — completes automatically';
+  $('arrivalHelp').textContent=t|| (target?`FOLLOW MARKER · ${selectedLocation?.instruction??'Reach the ground ring, then use E / INTERACT when prompted.'}`:'Use CITY MAP to choose a door, mission, job or heist.');
+  $('contextAction').hidden=!t||!playing||managing||shopOpen;
+  $('contextAction').textContent=inside?'INTERACT / EXIT':P.car?'INTERACT / GET OUT':'E · INTERACT';
   const el = $("prompt");
   el.textContent = t;
   el.style.display = t && playing && !managing && !shopOpen ? "block" : "none";
@@ -1061,7 +1102,7 @@ function clearBattle() {
 function startBattle(id: string) {
   const block = BLOCKS.find(b => b.id === id);
   if (!block || P.car || P.deadT > 0) return;
-  if (dist2(P.x, P.z, block.x, block.z) >= 14) { target = { ...block }; feed('Travel to the marked corner to fight.'); return; }
+  if (!atPoint(P.x,P.z,block,14)) { target = { ...block }; feed('Travel to the marked corner to fight.'); return; }
   if (battle) { feed('Finish your current turf fight first.'); return; }
   if (C.owned.includes(id) && C.defense?.block !== id) { feed('You already control this corner.'); return; }
   battle = { block: id, defending: C.defense?.block === id };
@@ -1129,6 +1170,7 @@ const empire = createEmpireUI({
     P.weapon=weapon;reloading=0;feed(`${WEAPONS[weapon]!.name} equipped.`);
   },
   missionStarted(){
+    if(C.expansion.mission||C.lifestyle.work||C.cityStories.active)selectedLocation=null;
     if(inside)leaveInterior();
     if(introActive){introActive=false;$('cinematic').hidden=true;}
     startPlaying();saveGame();feed('Mission started — follow the white marker. E / INTERACT advances objectives.');
@@ -1139,7 +1181,8 @@ const empire = createEmpireUI({
   repair(){if(C.clean>=50&&C.cooldown<=0){C.clean-=50;P.armor=50;C.cooldown=60;feed('Mechanic reinforced your armor.');saveGame();}},
   retire(){const inheritance=legacyInheritance(C);const next=newCampaign();next.legacy.generation=inheritance.generation;next.legacy.inherited=inheritance.inherited;next.clean+=inheritance.inherited;resetting=true;const result=store.save(next,{});void result.mirrored.then(()=>location.reload());},
   backRoom: openShop,
-  buildings: () => INTERIORS,
+  buildings: () => INTERIORS.map(b=>({...b,...approach(b)})),
+  trackLocation(location){selectedLocation=location;target={x:location.x,z:location.z,name:location.name};yaw=Math.atan2(location.x-P.x,location.z-P.z);feed(location.instruction);},
   enterBuilding(id) { const def=INTERIORS.find(b=>b.id===id);if(def)enterInterior(def); },
   campaign: C,
   pause(open) {
@@ -1149,7 +1192,7 @@ const empire = createEmpireUI({
   changed() { if(C.stats.cleaned>lastCleaned){lastCleaned=C.stats.cleaned;sfx('cash');$('cashBurst').classList.remove('animate');void $('cashBurst').offsetWidth;$('cashBurst').classList.add('animate');} if (battle?.defending && C.defense?.block !== battle.block) clearBattle(); for (const a of unlock(C)) feed(`Achievement: ${a}`); updateHud(); saveGame(); sfx('click'); },
   notice: feed, location: () => ({ x: inside?.def.x ?? P.x, z: inside?.def.z ?? P.z, district: districtAt(inside?.def.x ?? P.x, inside?.def.z ?? P.z) }),
   attack: startBattle,
-  waypoint(x, z, name) { target = { x, z, name }; yaw=Math.atan2(x-P.x,z-P.z); feed(`Route marked: ${name}. White dot on minimap.`); },
+  waypoint(x, z, name) {const p=approach({x,z}); target = { ...p, name };selectedLocation=mapLocations().find(r=>r.name===name)??null; yaw=Math.atan2(x-P.x,z-P.z); feed(`Route marked: ${name}. White dot on minimap.`); },
   appearance() {
     if(inside){inside.room.avatar.dispose();inside.room.avatar=createPerson("player",5,C.avatar,C.lifestyle);inside.room.scene.add(inside.room.avatar.root);}
     player.root.removeFromParent(); player.dispose(); player = createPerson('player', 5, C.avatar,C.lifestyle);
@@ -1225,15 +1268,17 @@ saveGame(); // Claim offline earnings immediately so a reload cannot award them 
 function enterInterior(def:InteriorDefinition){
   if(inside||P.car||P.deadT>0){feed('Exit your vehicle and finish respawning before entering.');return;}
   // HQ back-room entrance includes its sheltered approach; all other doors require standing close.
-  if(dist2(P.x,P.z,def.x,def.z)>(def.id==='hq'?24:4)){target={x:def.x,z:def.z,name:`Entrance: ${def.name}`};feed('Travel to the building entrance first.');return;}
+  if(!atPoint(P.x,P.z,def,def.id==='hq'?24:6)){target={...approach(def),name:`Entrance: ${def.name}`};feed('Travel to the building entrance first.');return;}
   balcony=false;$("hud").style.display="";
   inside={room:createInterior(def,C.avatar,C.lifestyle,C.expansion.furniture),def,x:0,z:5.8};
   joystick.reset();keys.clear();mouseDown=aimHeld=false;walkVelocity.set(0,0);sound.engine(null);sound.siren(false);
-  $('exitInterior').hidden=false;$('insideLabel').textContent=def.name;
+  target=null;selectedLocation=null;$('exitInterior').hidden=false;$('insideLabel').textContent=def.name;
   feed(`Entered ${def.name}. Walk to the desk for ${def.tab}, or E at the exit. Outdoor simulation paused.`);
 }
 function leaveInterior(){if(!inside)return;inside.room.dispose();inside=null;renderPass.scene=scene;joystick.reset();keys.clear();mouseDown=aimHeld=false;$('exitInterior').hidden=true;$('insideLabel').textContent='';feed('Back on the street.');}
 $('exitInterior').onclick=leaveInterior;
+$('contextAction').onclick=interact;
+$('clearWaypoint').onclick=()=>{selectedLocation=null;target=null;feed('Manual route cleared. Active mission objectives remain tracked.');};
 function interiorInteract(){if(!inside)return;if(inside.z>5){leaveInterior();return;}if(inside.z<-3.6&&Math.abs(inside.x)<3){empire.open(inside.def.tab);return;}feed('Walk to the back service desk, or return to the teal exit.');}
 function updateIndoor(dt:number){
   if(!inside)return;
@@ -1276,7 +1321,7 @@ function updateTraining(dt:number){
   feed('Driving unlocked. Take the marked sedan to the nearby drop at x=0, z=60.');saveGame();
  }
  if(stage===2){if(!tutorialCar)tutorialCar=addVehicle(0,12,0,Math.PI/2,0xc79a44);
-  if(P.car){target={x:0,z:60,name:'Tutorial delivery drop'};if(dist2(P.x,P.z,0,60)<8){advanceTutorial(C,2);C.dirty+=250;feed('Tutorial complete! +$250 dirty. Launder cash and capture turf to grow your empire.');saveGame();}}
+  if(P.car){target={x:0,z:60,name:'Tutorial delivery drop'};if(atPoint(P.x,P.z,{x:0,z:60},8)){advanceTutorial(C,2);C.dirty+=250;target=null;selectedLocation=null;feed('Tutorial complete! +$250 dirty. Launder cash and capture turf to grow your empire.');saveGame();}}
  }
  C.legacy.lieutenantClock+=dt;
  if(C.legacy.lieutenantClock>60){C.legacy.lieutenantClock=0;if(C.defense&&C.crew.some(m=>m.id==='muscle'&&m.loyalty>=25&&!m.owed)){const success=Math.random()<.6;if(success){resolveDefense(C,true);feed('Your Enforcer automatically held the corner.');saveGame();}}}

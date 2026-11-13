@@ -1,3 +1,4 @@
+import {atPoint} from './navigation.ts';
 import type { Campaign } from './campaign.ts';
 export const TRAITS = [
   {id:'balanced',name:'Streetwise',description:'Balanced: no bonus or penalty.'},
@@ -28,7 +29,7 @@ export function advanceTutorial(c:Campaign,stage:number){if(c.legacy.tutorial===
 export function peakMultiplier(time:number,heat:number){const hour=(18+time/40)%24;return (hour>=19||hour<6?1.35:hour>=17?1.15:1)*(heat>=60?1.2:1);}
 export function dailyRoute(date:string){let hash=0;for(const ch of date)hash=(Math.imul(hash,31)+ch.charCodeAt(0))>>>0;const options=[{x:0,z:60},{x:60,z:0},{x:-60,z:0},{x:0,z:-60}];const offset=hash%4;return [options[offset]!,options[(offset+1)%4]!,{x:30,z:4}];}
 export function startDaily(c:Campaign,date=new Date().toISOString().slice(0,10)){if(c.legacy.daily?.date===date&&!c.legacy.daily.finished)return false;c.legacy.daily={date,step:0,elapsed:0,best:c.legacy.daily?.date===date?c.legacy.daily.best:null,finished:false};return true;}
-export function dailyCheckpoint(c:Campaign,x:number,z:number){const d=c.legacy.daily;if(!d||d.finished)return false;const point=dailyRoute(d.date)[d.step];if(!point||Math.hypot(x-point.x,z-point.z)>7)return false;d.step++;if(d.step===3){d.finished=true;d.best=Math.min(d.best??Infinity,d.elapsed);c.clean+=1000;return true;}return false;}
+export function dailyCheckpoint(c:Campaign,x:number,z:number){const d=c.legacy.daily;if(!d||d.finished)return false;const point=dailyRoute(d.date)[d.step];if(!point||!atPoint(x,z,point,7))return false;d.step++;if(d.step===3){d.finished=true;d.best=Math.min(d.best??Infinity,d.elapsed);c.clean+=1000;return true;}return false;}
 export function milestoneRewards(c:Campaign){const s=c.legacy;const awards=[['first',c.stats.captured>=1,'First turf secured — +$150 clean',150],['clean10',c.stats.cleaned>=10000,'$10,000 laundered — +$500 clean',500],['million',c.clean>=1000000,'Million-dollar Kingpin — legacy retirement unlocked',0]] as const;for(const [id,ready,text,cash]of awards)if(ready&&!s.milestones.includes(id)){s.milestones.push(id);s.pending.push(text);c.clean+=cash;}}
 export function legacyInheritance(c:Campaign){return {generation:c.legacy.generation+1,inherited:Math.min(100000,Math.floor(c.clean*.05))};}
 export function shareCard(c:Campaign):HTMLCanvasElement{
