@@ -99,3 +99,52 @@ test('activity settlement rejects expired/depleted states before the next simula
 test('a driver can exit the wrong car at a race checkpoint instead of getting stuck in an error loop',()=>{
  const c=ready();startPursuit(c,'race','canal');pursuitInteract(c,ctx(c,{driving:true,vehicleKey:'first'}));const p=pursuitObjective(c),car={recovery:false,condition:100,passengerBoarded:false,taxi:false,vehicleKey:'other'};assert.ok(exitBeforeActivity(c,p.x,p.z,car));assert.equal(exitBeforeActivity(c,p.x,p.z,{...car,vehicleKey:'first'}),false);
 });
+
+test('expired taxi fails immediately even when the driver leaves the assigned vehicle',()=>{
+ const c=ready();startPursuit(c,'taxi','jazz');pursuitInteract(c,ctx(c,{driving:true,taxi:true}));c.pursuits.active.remaining=.01;
+ assert.match(tickPursuits(c,.1,idle),/failed/);assert.equal(c.pursuits.active,null);
+});
+test('destroyed assigned cars cannot complete a race or fare before the next tick',()=>{
+ for(const kind of ['race','taxi']){const c=ready();startPursuit(c,kind,kind==='race'?'canal':'jazz');pursuitInteract(c,ctx(c,{driving:true,taxi:true}));if(kind==='race')c.pursuits.active.step=4;const before=c.clean;
+ assert.match(pursuitInteract(c,ctx(c,{driving:true,taxi:true,condition:0})),/failed/);assert.equal(c.clean,before);assert.equal(c.pursuits.active,null);}
+});
+test('fishing consumes time past the bite transition instead of extending the reaction window',()=>{
+ const c=ready();startPursuit(c,'fishing','river');pursuitInteract(c,ctx(c));
+ assert.match(tickPursuits(c,4.81,ctx(c)),/slipped/);assert.equal(c.pursuits.active,null);
+ const d=ready();startPursuit(d,'fishing','river');pursuitInteract(d,ctx(d));tickPursuits(d,3.3,ctx(d));assert.ok(Math.abs(d.pursuits.active.window-1.5)<1e-8);
+});
+test('fare summary reports the same reduced care that determines its final payout',()=>{
+ const c=ready();startPursuit(c,'taxi','jazz');pursuitInteract(c,ctx(c,{driving:true,taxi:true}));const before=c.clean;
+ const result=pursuitInteract(c,ctx(c,{driving:true,taxi:true,fired:true}));assert.match(result,/care 75%/);assert.equal(c.clean,before+280);
+});
+
+test('stagger cancels the boss windup without storing an instant shot',()=>{
+ const p=newBossPattern();tickBoss(p,2,1.8,0,true,20);assert.equal(p.phase,'windup');
+ const interrupted=tickBoss(p,2,2,0,true,20,false);assert.equal(interrupted.fire,false);assert.equal(interrupted.telegraph,false);
+ assert.equal(tickBoss(p,2,.05,0,true,20,true).fire,false,'no stored instant shot after stun');
+});
+test('a different taxi remains exitable at the assigned passenger drop',()=>{
+ const c=ready();startPursuit(c,'taxi','jazz');pursuitInteract(c,ctx(c,{driving:true,taxi:true,vehicleKey:'assigned'}));const p=approach(pursuitObjective(c));
+ assert.equal(exitBeforeActivity(c,p.x,p.z,{recovery:false,condition:100,passengerBoarded:false,taxi:true,vehicleKey:'other'}),true);
+});
+test('finishing the final race checkpoint clears the live HUD/waypoint before saving',async()=>{
+ const fs=await import('node:fs'),vm=await import('node:vm'),ts=await import('typescript');
+ const source=fs.readFileSync(new URL('../src/main.ts',import.meta.url),'utf8');
+ const body=source.slice(source.indexOf('function updateCityPursuits('),source.indexOf('function syncDisguiseAppearance('));
+ const c=ready();startPursuit(c,'race','canal');c.pursuits.active.step=4;c.pursuits.active.vehicleKey='car-1';const position=ctx(c,{driving:true});const status={hidden:false,textContent:''},snapshots=[];
+ const env={C:c,P:{},time:0,RACES,THREE:{Vector3:class{}},tickPursuits,pursuitObjective,pursuitInteract,cityPursuitContext:()=>position,paceRival:{root:{position:{set(){}},rotation:{}},motion(){},detail(){}},feed(){},$:()=>status,target:{name:'old'},selectedLocation:{},missionCompletionKey:null,cleanupCityPursuitActors(){status.hidden=true;},saveGame(){snapshots.push(env.target);}};
+ vm.createContext(env);vm.runInContext(ts.transpileModule(body+'\nupdateCityPursuits(.01);',{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText,env);
+ assert.equal(c.pursuits.active,null);assert.equal(env.missionCompletionKey,'pursuit:race:canal');assert.equal(env.target,null);assert.equal(status.hidden,true);assert.equal(snapshots.at(-1),null);
+});
+
+test('a final burst that exhausts fare care cannot settle for a partial payout',()=>{
+ const c=ready();startPursuit(c,'taxi','jazz');pursuitInteract(c,ctx(c,{driving:true,taxi:true}));c.pursuits.active.condition=20;const before=c.clean;
+ assert.match(pursuitInteract(c,ctx(c,{driving:true,taxi:true,fired:true})),/failed/);assert.equal(c.clean,before);assert.equal(c.pursuits.active,null);
+});
+test('boss cover pauses never fire while hidden but still allow long-windup attacks across peek cycles',()=>{
+ const p=newBossPattern();let shots=0;for(let i=0;i<600;i++){const exposed=i%72>=44;const result=tickBoss(p,2,.05,0,true,20,true,exposed);if(!exposed){assert.equal(result.fire,false);assert.equal(result.telegraph,false);}if(result.fire)shots++;}assert.ok(shots>0);
+});
+test('a wreck cannot start a fresh race or board a fare, and fishing timing is frame-split invariant',()=>{
+ for(const kind of ['race','taxi']){const c=ready();startPursuit(c,kind,kind==='race'?'canal':'jazz');assert.match(pursuitInteract(c,ctx(c,{driving:true,taxi:true,condition:0})),/failed/);assert.equal(c.pursuits.active,null);}
+ const make=()=>{const c=ready();startPursuit(c,'fishing','river');pursuitInteract(c,ctx(c));return c;};const a=make(),b=make();tickPursuits(a,3.3,ctx(a));for(let i=0;i<66;i++)tickPursuits(b,.05,ctx(b));assert.ok(Math.abs(a.pursuits.active.window-b.pursuits.active.window)<1e-8);
+});

@@ -52,7 +52,7 @@ export type PursuitContext={x:number;z:number;driving:boolean;taxi:boolean;speed
 export function pursuitInteract(c:Campaign,ctx:PursuitContext){
  const a=c.pursuits.active,p=pursuitObjective(c);if(!a||!p)return null;const radius=a.kind==='race'?7:6;
  const near=a.kind==='race'||a.kind==='fishing'?Math.hypot(ctx.x-p.x,ctx.z-p.z)<=radius:atPoint(ctx.x,ctx.z,p,radius);if(!near)return null;
- if(a.remaining<=0||a.condition<=0){c.pursuits.active=null;c.pursuits.cooldown=30;return 'City activity failed. No payout; entry fees are not refunded.';}
+ if(a.remaining<=0||a.condition<=0||(a.kind==='taxi'&&ctx.fired&&a.condition<=25)||((a.kind==='race'||a.kind==='taxi')&&ctx.driving&&(!a.vehicleKey||ctx.vehicleKey===a.vehicleKey)&&ctx.condition<=0)){c.pursuits.active=null;c.pursuits.cooldown=30;return 'City activity failed. No payout; entry fees are not refunded.';}
  if(a.kind==='race'){
   if(!ctx.driving)return 'Enter a road vehicle before taking the checkpoint.';
   if(!a.vehicleKey)a.vehicleKey=ctx.vehicleKey;if(a.vehicleKey!==ctx.vehicleKey)return 'Finish the circuit in the vehicle you started in.';
@@ -63,7 +63,7 @@ export function pursuitInteract(c:Campaign,ctx:PursuitContext){
   if(!ctx.driving||!ctx.taxi)return 'Use a Crescent City Taxi, not another vehicle.';if(Math.abs(ctx.speed)>1.5)return 'Stop the taxi for pickup or drop-off.';
   if(a.step===0){a.step=1;a.boarded=true;a.vehicleKey=ctx.vehicleKey;return 'Passenger boarded. Drive carefully; gunfire or crashes reduce fare care.';}
   if(!a.boarded||a.vehicleKey!==ctx.vehicleKey)return 'Return to the pickup in your taxi and collect the passenger again.';
-  const m=FARES.find(m=>m.id===a.id)!,pay=Math.round(m.pay*(.5+Math.max(0,a.condition-(ctx.fired?25:0))/200));c.clean+=pay;c.pursuits.active=null;c.pursuits.cooldown=45;return `FARE COMPLETE · +$${pay} clean · care ${Math.ceil(a.condition)}%.`;
+  const care=Math.max(0,a.condition-(ctx.fired?25:0));const m=FARES.find(m=>m.id===a.id)!,pay=Math.round(m.pay*(.5+care/200));c.clean+=pay;c.pursuits.active=null;c.pursuits.cooldown=45;return `FARE COMPLETE · +$${pay} clean · care ${Math.ceil(care)}%.`;
  }
  if(a.kind==='fishing'){
   if(ctx.driving)return 'Exit your vehicle before casting.';
@@ -80,10 +80,18 @@ export function tickPursuits(c:Campaign,dt:number,ctx:PursuitContext){
  const s=c.pursuits;s.cooldown=Math.max(0,s.cooldown-dt);s.bondCooldown=Math.max(0,s.bondCooldown-dt);s.rivalClock+=dt;
  if(s.rivalClock>=120){s.rivalClock%=120;for(const p of PROPERTIES)if(owns(c,p.id))s.rivalry[p.id]=Math.min(100,(s.rivalry[p.id]??0)+10);}
  const a=s.active;if(!a)return null;a.elapsed+=dt;a.remaining-=dt;
- if(a.kind==='taxi'&&a.step===1&&(!ctx.driving||ctx.vehicleKey!==a.vehicleKey)){a.boarded=false;a.step=0;a.vehicleKey='';return 'Fare paused: passenger returned to pickup after you left the assigned taxi. Collect them again; timer continues.';}
  if(ctx.fired&&(a.kind==='taxi'||a.kind==='race'))a.condition=Math.max(0,a.condition-25);
- if(a.kind==='fishing'&&a.cast>0){a.cast=Math.max(.001,a.cast-dt);if(a.cast<=.001&&a.window===0)a.window=1.8;else if(a.window>0){a.window=Math.max(0,a.window-dt);if(a.window===0){s.active=null;s.cooldown=20;return 'The fish slipped the hook. No payout; try another cast later.';}}}
- if(a.remaining<=0||a.condition<=0){s.active=null;s.cooldown=30;return 'City activity failed. No payout; entry fees are not refunded.';}return null;
+ if(a.remaining<=0||a.condition<=0||((a.kind==='race'||a.kind==='taxi')&&ctx.driving&&(!a.vehicleKey||ctx.vehicleKey===a.vehicleKey)&&ctx.condition<=0)){s.active=null;s.cooldown=30;return 'City activity failed. No payout; entry fees are not refunded.';}
+ if(a.kind==='taxi'&&a.step===1&&(!ctx.driving||ctx.vehicleKey!==a.vehicleKey)){a.boarded=false;a.step=0;a.vehicleKey='';return 'Fare paused: passenger returned to pickup after you left the assigned taxi. Collect them again; timer continues.';}
+ if(a.kind==='fishing'&&a.cast>0){
+  // Account for the part of this frame after the bite begins, not a fresh window next frame.
+  const waiting=a.window>0?0:a.cast;
+  a.cast=Math.max(Number.EPSILON,a.cast-dt);
+  if(dt>=waiting){const biteTime=dt-waiting;a.window=(a.window>0?a.window:1.8)-biteTime;
+   if(a.window<=0){s.active=null;s.cooldown=20;return 'The fish slipped the hook. No payout; try another cast later.';}
+  }
+ }
+ return null;
 }
 export function buyOutfit(c:Campaign,id:string){const o=OUTFITS.find(o=>o.id===id);if(!o||c.pursuits.wardrobe.includes(id)||c.clean<o.cost)return false;c.clean-=o.cost;c.pursuits.wardrobe.push(id);c.pursuits.wearing=id;return true;}
 export function equipOutfit(c:Campaign,id:string){if(id!==''&&!c.pursuits.wardrobe.includes(id))return false;c.pursuits.wearing=id;return true;}
