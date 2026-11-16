@@ -213,3 +213,13 @@ export function restoreCampaign(value: unknown): Campaign | null {
   c.intervention = ['Informant','Patrol roadblock','Precinct raid'].includes(v.intervention) ? v.intervention : '';
   return c;
 }
+
+/** Death ends the pursuit, not ownership or long-term progression. */
+export function resetAfterDeath(c: Campaign) {
+  c.heat = 0;
+  c.intervention = '';
+  c.policeClock = 0;
+  // A hospital reset is not a successful escape for training rewards.
+  c.legacy.lastHeat = 0;
+  c.lifestyle.work = null;
+}

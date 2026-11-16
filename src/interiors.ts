@@ -6,6 +6,12 @@ import { createPerson, type Person } from './actors.ts';
 import type {Lifestyle} from './lifestyle.ts';
 import type { Appearance } from './campaign.ts';
 export const INTERIORS = [
+  {id:'bakery',name:'Basin Street Patisserie',x:-180,z:-120,tab:'Jobs & Style',theme:'cafe',color:0xa57962},
+  {id:'post-office',name:'Crescent Post Office',x:120,z:-180,tab:'Jobs & Style',theme:'warehouse',color:0x667c8e},
+  {id:'auto-parts',name:'Levee Auto Parts',x:180,z:120,tab:'Garage',theme:'garage',color:0x5d7b73},
+  {id:'gallery',name:'Royal Street Gallery',x:-120,z:180,tab:'Stories & Exploration',theme:'antique',color:0x886c80},
+  {id:'hotel',name:'Marigny Guest House',x:60,z:180,tab:'Safehouse',theme:'hq',color:0x8c785c},
+  {id:'arcade',name:'Canal Neon Arcade',x:-60,z:180,tab:'Jobs & Style',theme:'club',color:0x58508a},
   {id:'karma',name:'Karma',x:10,z:-16,tab:'Market',theme:'dispensary',color:0x131614},
   {id:'clinic',name:'Charity Street Clinic',x:-180,z:-60,tab:'Safehouse',theme:'cafe',color:0x638d86},
   {id:'hardware',name:'Levee Hardware & Supply',x:60,z:60,tab:'Garage',theme:'garage',color:0x6c7670},
@@ -78,7 +84,7 @@ export function createInterior(def:InteriorDefinition,appearance:Appearance,cust
     g.fillStyle='#14232e';g.fillRect(0,0,768,160);g.strokeStyle=color;g.lineWidth=5;g.strokeRect(8,8,752,144);g.fillStyle=color;g.textAlign='center';g.font='bold 38px sans-serif';g.fillText(text,384,92,730);
     const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;
     const material=new THREE.MeshBasicMaterial({map:texture,side:THREE.DoubleSide});materials.push(material);
-    const geometry=new THREE.PlaneGeometry(6.5,1.35);geometries.push(geometry);const mesh=new THREE.Mesh(geometry,material);mesh.position.set(x,y,z);scene.add(mesh);
+    const geometry=new THREE.PlaneGeometry(6.5,1.35);geometries.push(geometry);const mesh=new THREE.Mesh(geometry,material);mesh.position.set(x,y,z);scene.add(mesh);return mesh;
   }
   const floor=box(0,-.15,0,14,.3,16,0xffffff);
   const floorTexture=surfaceTexture(def.theme==='dispensary'?'marble':def.theme==='garage'||def.theme==='warehouse'?'metal':def.theme==='cafe'||def.theme==='casino'?'tile':'wood');
@@ -102,7 +108,17 @@ export function createInterior(def:InteriorDefinition,appearance:Appearance,cust
     box(0,.7,-5.4,4,1.4,1,0x9a7048,true);sign('SERVICE DESK · E',0,2.2,-7.7);
     sign('SUPPLIES · E ON FLOOR EMBLEM',0,1.2,-7.65,'#9cebdd');
   }
-  if(def.theme==='club'){
+  if(def.id==='arcade'){
+    // Dedicated cabinet layout replaces the nightclub stage/bar furniture.
+    for(const x of [-5,5])for(const z of [-3,0,3])box(x,.9,z,1.1,1.8,.85,0x202434,true);
+  }else if(def.id==='auto-parts'){
+    for(const x of [-5,5])box(x,.65,0,1.6,1.3,8,0x4b5d63,true);
+  }else if(def.id==='hotel'){
+    for(const x of [-4,4]){
+      box(x,.4,1,2.4,.8,2,0x5b6d64,true);box(x,.95,.1,2.4,.5,.3,0x5b6d64);
+      box(x,.4,3,1.4,.8,.8,0x8b6945,true);
+    }
+  }else if(def.theme==='club'){
     box(-4,.2,-2.8,3,.4,4,0x3e284c,true);
     for(let i=0;i<3;i++){box(-4+i,.8,-3.1,.3,1.2,.3,0x24252b);box(-4+i,1.5,-3.1,.18,.2,.2,0xf4d37c);}
     box(4,.7,1,2,1.4,4,0x493357,true);
@@ -120,6 +136,30 @@ export function createInterior(def:InteriorDefinition,appearance:Appearance,cust
   }else if(def.theme!=='dispensary'){
     for(const x of [-4,4])for(const z of [-1,3]){box(x,.65,z,1.8,1.3,1.3,0x956a46,true);box(x,.35,z+1.1,.7,.7,.6,0x395c5a,true);}
     for(let i=0;i<5;i++)box(-4+i*2,.1,-7,1,.2,.5,0xe8b866);
+  }
+  // Landmark-specific props stay at the perimeter, away from the shared walking aisle.
+  if(def.id==='arcade')for(const x of [-5,5])for(const z of [-3,0,3]){
+    box(x,1.4,z+.44,.85,.55,.03,0x61dbc9);
+    box(x,.92,z+.54,1,.08,.35,0x9d54bd);
+    sign('PLAY',x,2.05,z+.45,'#7ef5d5').scale.setScalar(.15);
+  }
+  if(def.id==='bakery')for(const x of [-4,4]){
+    box(x,1.4,-1,1.6,.12,1.2,0xe6d7b8);
+    for(let i=0;i<4;i++)box(x-.5+i*.33,1.52,-1,.25,.16,.5,0xd09a52);
+  }
+  if(def.id==='post-office')for(const x of [-5,5])for(let z=-3;z<=3;z+=1.5){
+    box(x,2.3,z,.8,.7,.9,0x426c92);box(x,2.35,z+.46,.4,.05,.025,0x192c40);
+  }
+  if(def.id==='gallery')for(const x of [-6.86,6.86])for(const z of [-4,0,4]){
+    box(x,2.4,z,.08,1.5,1.7,0xc6a45f);box(x+(x<0?.05:-.05),2.4,z,.02,1.25,1.4,0x3d8994);
+  }
+  if(def.id==='auto-parts')for(const x of [-5,5])for(const z of [-3,0,3]){
+    box(x,1.6,z,1.3,.12,1.3,0xa0adb1);box(x,1.9,z,.8,.5,.8,0x282f39);
+  }
+  if(def.id==='hotel'){
+    box(-5,.8,-4,1.5,1.6,.5,0x765233);
+    for(let i=0;i<8;i++)box(-5.5+i*.15,1,-3.73,.07,.14,.04,0xdbbd65);
+    sign('GUEST RECEPTION',0,2.7,-7.65,'#f4d5a0').scale.setScalar(.7);
   }
   const hemi=new THREE.HemisphereLight(0xf9e4c4,0x6a7594,2.5);scene.add(hemi);
   const light=new THREE.DirectionalLight(0xffe2b2,3);light.position.set(2,7,4);scene.add(light);

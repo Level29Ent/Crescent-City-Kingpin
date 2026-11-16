@@ -39,6 +39,13 @@ function lam(c: number): THREE.MeshStandardMaterial {
   if (!m) { m = new THREE.MeshStandardMaterial({ color: c }); mats.set(k, m); }
   return m;
 }
+// Vehicle finishes are cached independently: polishing a car must not change city props.
+function vehicleFinish(color:number,metalness:number,roughness:number){
+  const key=`vehicle:${color}:${metalness}:${roughness}`;
+  let material=mats.get(key) as THREE.MeshStandardMaterial|undefined;
+  if(!material){material=new THREE.MeshStandardMaterial({color,metalness,roughness});mats.set(key,material);}
+  return material;
+}
 function emi(c: number, i: number): THREE.MeshStandardMaterial {
   const k = "e" + c + "_" + i;
   let m = mats.get(k) as THREE.MeshStandardMaterial | undefined;
@@ -359,19 +366,58 @@ export function carColors(): number[] { return COLORS.slice(); }
 
 export function createCar(style: number, color: number): Car {
   if(style === 6) return createMotorcycle(color);
-  const police = style === 3, sports = style === 2;
+  const roadster = style === 11, estate = style === 12, offroad = style === 13;
+  const police = style === 3, sports = style === 2 || roadster;
   const root = new THREE.Group();
   const body = new THREE.Group(); root.add(body);
-  const paint = lam(police ? 0x14161b : color);
-  const white = lam(0xf2f2f2), glass = lam(0x1d2c3a), dark = lam(0x1a1a1a), chrome = lam(0xc8ccd2);
-  const van = style === 4, truck = style === 1, suv = style === 5, muscle = style === 7, freight = style === 8, bus = style === 9, taxi = style === 10;
-  const len = freight ? 7.2 : bus ? 6.7 : van ? 5.5 : muscle ? 5.1 : sports ? 4.4 : 4.6, w = freight || bus || van ? 2.4 : suv ? 2.2 : 2;
+  const paint = vehicleFinish(police ? 0x14161b : color,.35,.32);
+  const white = lam(0xf2f2f2), glass = lam(0x1d2c3a), dark = lam(0x1a1a1a), chrome = vehicleFinish(0xc8ccd2,.8,.24);
+  const van = style === 4, truck = style === 1 || offroad, suv = style === 5 || estate, muscle = style === 7, freight = style === 8, bus = style === 9, taxi = style === 10;
+  const len = estate ? 5.6 : offroad ? 5.4 : freight ? 7.2 : bus ? 6.7 : van ? 5.5 : muscle ? 5.1 : sports ? 4.4 : 4.6, w = freight || bus || van ? 2.4 : suv ? 2.2 : 2;
   const h0 = sports ? 0.38 : 0.45, ch = van || suv || freight || bus ? .85 : sports ? .42 : .55;
   part(box(), paint, w, ch, len, 0, h0 + ch / 2, 0, body); // chassis
-  const cabH = freight || bus ? 1.1 : suv ? .85 : sports ? .5 : .62, cabLen = bus ? 4.9 : suv ? 3 : sports ? 1.9 : 2.3;
+  const cabH = freight || bus ? 1.1 : estate ? .7 : suv ? .85 : sports ? .5 : .62, cabLen = bus ? 4.9 : suv ? 3 : sports ? 1.9 : 2.3;
   const cabZ = freight ? 2.1 : truck ? 1 : sports ? -.25 : -.2;
-  part(box(), glass, w - 0.2, cabH, cabLen, 0, h0 + ch + cabH / 2, cabZ, body);
-  part(box(), police ? white : paint, w - 0.1, 0.07, cabLen - 0.5, 0, h0 + ch + cabH + 0.03, cabZ, body); // roof
+  if (!roadster) part(box(), glass, w - 0.2, cabH, cabLen, 0, h0 + ch + cabH / 2, cabZ, body);
+  else {
+    part(box(), dark, w-.25,.08,2.2,0,h0+ch+.04,-.15,body);
+    part(box(), glass,w-.2,.5,.08,0,h0+ch+.3,.75,body).rotation.x=-.2;
+    for(const x of [-.46,.46]){
+      part(box(),dark,.6,.16,.65,x,h0+ch+.14,-.3,body);
+      part(box(),lam(0xba8860),.6,.55,.16,x,h0+ch+.35,-.6,body);
+      part(box(),chrome,.08,.5,.08,x,h0+ch+.5,-.85,body);
+    }
+  }
+  if (!roadster) part(box(), police ? white : paint, w - 0.1, 0.07, cabLen - 0.5, 0, h0 + ch + cabH + 0.03, cabZ, body); // roof
+  // Readable panels, window pillars, mirrors and lamps on the entire procedural fleet.
+  for (const side of [-1,1]) {
+    if (!roadster) for (const z of [cabZ-cabLen/2+.08,cabZ,cabZ+cabLen/2-.08])
+      part(box(),paint,.09,cabH,.09,side*(w/2-.08),h0+ch+cabH/2,z,body).name='window-pillar';
+    part(box(),chrome,.1,.06,cabLen,side*(w/2+.015),h0+ch,cabZ,body);
+    part(box(),dark,.035,ch*.8,.035,side*(w/2+.02),h0+ch/2,cabZ,body).name='door-seam';
+    part(box(),chrome,.18,.045,.08,side*(w/2+.03),h0+ch-.12,cabZ-.25,body).name='door-handle';
+    part(box(),paint,.27,.16,.24,side*(w/2+.14),h0+ch+.14,cabZ+cabLen/2-.2,body).name='side-mirror';
+    part(box(),glass,.22,.12,.025,side*(w/2+.14),h0+ch+.14,cabZ+cabLen/2-.33,body);
+    part(box(),dark,.07,.1,len-1,side*w/2,h0-.02,0,body);
+    part(box(),emi(0xffa72d,.4),.16,.08,.04,side*(w/2-.15),h0+ch-.12,len/2+.07,body);
+    part(box(),chrome,.15,.12,.3,side*.65,h0-.08,-len/2,body).name='exhaust-tip';
+  }
+  part(box(),dark,w*.5,.22,.055,0,h0+ch*.45,len/2+.11,body).name='front-grille';
+  for(const side of [-1,1]){
+    part(box(),lam(0xe8dfc8),.55,.16,.035,0,h0+.16,side*(len/2+.12),body).name='license-plate';
+    part(box(),dark,.35,.025,.04,0,h0+.16,side*(len/2+.14),body);
+  }
+  if(estate){
+    for(const side of [-1,1])part(box(),lam(0x946847),.04,.27,3.8,side*(w/2+.03),h0+ch*.5,-.3,body);
+  }
+  if(offroad){
+    part(box(),dark,w+.1,.23,.18,0,h0+.25,len/2+.25,body);
+    for(const x of [-.6,.6]){
+      part(box(),dark,.09,.65,.09,x,h0+ch+.3,-.3,body);
+      part(box(),emi(0xffe9b6,1),.32,.22,.13,x,h0+ch+.7,-.3,body);
+    }
+    part(box(),dark,1.5,.1,.1,0,h0+ch+.58,-.3,body);
+  }
   if(truck){
     part(box(),dark,w-.2,.15,2.3,0,h0+ch,-1.1,body);
     for(const side of [-1,1])part(box(),paint,.12,.55,2.5,side*(w/2-.06),h0+ch+.25,-1.1,body);
@@ -444,13 +490,18 @@ export function createCar(style: number, color: number): Car {
     barMeshes.push(part(box(), barB, 0.6, 0.14, 0.3, 0.35, y, cabZ, body));
   }
   const wheels: { pivot: THREE.Group; spin: THREE.Group; front: boolean }[] = [];
-  const wr = suv || freight ? .46 : .38;
+  const wr = offroad ? .49 : suv || freight ? .46 : .38;
   for (const sx of [-1, 1]) for (const fz of [1, -1]) {
     const pivot = new THREE.Group();
     pivot.position.set(sx * (w / 2 - 0.1), wr, fz * (len / 2 - 0.85));
     const spin = new THREE.Group(); pivot.add(spin);
     const tire = part(cyl(), dark, wr * 2, 0.3, wr * 2, 0, 0, 0, spin); tire.rotation.z = Math.PI / 2;
     const hub = part(cyl(), chrome, wr * 1.1, 0.32, wr * 1.1, 0, 0, 0, spin); hub.rotation.z = Math.PI / 2;
+    // Contrasting five-spoke rims and a visible center cap rotate with each wheel.
+    for(let i=0;i<5;i++){
+      const spoke=part(box(),lam(0x5e6978),.025,wr*1.05,.055,sx*.17,0,0,spin);
+      spoke.rotation.x=i*Math.PI*2/5;spoke.name='alloy-spoke';
+    }
     root.add(pivot);
     wheels.push({ pivot, spin, front: fz > 0 });
   }
@@ -516,7 +567,13 @@ export function createCar(style: number, color: number): Car {
 // Narrow two-wheel chassis with its own steering, wheel spin and cornering lean.
 function createMotorcycle(color: number): Car {
   const root=new THREE.Group(), body=new THREE.Group();root.add(body);
-  const paint=lam(color),dark=lam(0x171b20),metal=lam(0x9da7ac),rubber=lam(0x101215);
+  const paint=vehicleFinish(color,.35,.32),dark=lam(0x171b20),metal=vehicleFinish(0x9da7ac,.8,.24),rubber=lam(0x101215);
+  for(const side of [-1,1]){
+    part(box(),metal,.06,.3,.06,side*.4,1.48,.73,body);
+    part(box(),dark,.21,.13,.09,side*.4,1.65,.73,body).name='side-mirror';
+    for(let z=-.12;z<=.25;z+=.09)part(box(),metal,.035,.18,.035,side*.29,.66,z,body).name='engine-fin';
+    part(box(),metal,.08,.09,.9,side*.25,.4,-.35,body).name='exhaust-tip';
+  }
   part(box(),metal,.18,.28,1.5,0,.58,0,body);
   part(sph(),paint,.65,.55,.9,0,.95,.3,body);
   part(box(),dark,.45,.16,.85,0,.98,-.45,body);

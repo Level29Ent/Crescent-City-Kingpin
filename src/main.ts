@@ -1,3 +1,4 @@
+import {resetAfterDeath} from './campaign.ts';
 import {actorHit,damageFalloff,spreadMultiplier} from './gunplay.ts';
 // Crescent City Kingpin: standalone single-player game. Plain three.js, no engine, no server.
 import * as THREE from "three";
@@ -607,13 +608,26 @@ function hurt(dmg: number) {
     P.deadT = RESPAWN_SECONDS;
     P.car = null;
     C.clean = Math.floor(C.clean * 0.9);
-    C.heat = Math.max(0, C.heat - 20);
+    resetAfterDeath(C);
+    P.heat = 0;
+    // Remove the old chase immediately rather than letting officers attack the respawn.
+    for (const foe of foes) if (foe.kind === 'cop') {
+      foe.hp = 0; foe.dead = .01; foe.person.setVisible(false);
+    }
+    if (roadblock) {
+      const v = roadblock.vehicle;
+      v.rig.dispose(); vehicles.splice(vehicles.indexOf(v), 1); roadblock = null;
+    }
+    sound.siren(false);
+    target = null; selectedLocation = null;
+    mouseDown = false; reloading = 0;
     if (battle?.defending) resolveDefense(C, false); else failMission(C);
     if (battle) clearBattle();
     P.job = null;
     P.streak = 0;
     boosting = false;
-    feed("Wasted. You lost 10% of your cash.");
+    feed("Wasted. You lost 10% of your cash. Police heat cleared; active work cancelled.");
+    saveGame();
     sfx("death");
   }
 }
@@ -820,7 +834,7 @@ function updateFoes(dt: number) {
 function updateDriving(dt: number) {
   const c = P.car!;
   updateReserve(P.stamina, false, dt, 22, 16);
-  const k = c.style === 2 ? 2 : 1;
+  const k = c.style === 2 || c.style === 11 ? 2 : 1;
   const fwd = keys.has("KeyW") || keys.has("ArrowUp") || joystick.value.y>.08;
   const back = keys.has("KeyS") || keys.has("ArrowDown") || joystick.value.y<-.08;
   const brake = keys.has("Space");
@@ -916,6 +930,7 @@ markerRing.visible = false;
 scene.add(markerRing);
 
 function updateEconomy(dt: number) {
+  if (P.deadT > 0) return;
   for (const msg of tickCampaign(C, dt)) { feed(msg); if (msg.includes('ATTACK') || msg.includes('RAID')) sfx('wanted'); }
   P.heat = C.heat < 30 ? 0 : Math.min(5, Math.ceil(C.heat / 20));
   if (battle && (battle.defending && C.defense?.block !== battle.block)) clearBattle();
@@ -1128,7 +1143,9 @@ function updateRoadblock(dt: number) {
   }
 }
 function snapshotPlayer() {
-  return { x: P.x, z: P.z, heading: P.heading, hp: P.hp, armor: P.armor, owned: P.owned, weapon: P.weapon,
+  // Reloading during the death animation must not resurrect a 1-HP player at the fight.
+  const position = P.deadT > 0 ? {...SPAWN, hp: MAX_HP} : P;
+  return { x: position.x, z: position.z, heading: position.heading, hp: position.hp, armor: P.armor, owned: P.owned, weapon: P.weapon,
     captured: [...P.captured], bossOut: [...P.bossOut], streak: P.streak, jobActive: !!P.job,
     target, battle, foes: foes.filter(f => !f.dead).map(f => ({ kind: f.kind, x: f.x, z: f.z, hp: f.hp, district: f.district, aggro: f.aggro, mugged: f.mugged, blockId: f.blockId })) };
 }
@@ -1317,7 +1334,7 @@ function updateStoryCity(dt:number){
  if(a.step===1&&storySpawned&&!foes.some(f=>!f.dead&&f.blockId===`story:${a.id}`)){a.step=2;storySpawned=false;feed('Rival encounter won. Return to Mama Nola with the evidence.');saveGame();}
  const objective=storyObjective(C);if(objective)target={x:objective.x,z:objective.z,name:objective.text};}
  DISCOVERIES.forEach((d,i)=>{discoveryMeshes[i]!.visible=!C.cityStories.discovered.includes(d.id);discoveryMeshes[i]!.rotation.y=time*.7;});
- streetLife.update(dt,time,P.x,P.z,C.heat,C.legacy.tutorial>=3,Cspeed=>{C.cityStories.trafficHits++;if(P.car){P.car.speed*=.65;hurt(Cspeed*.25);addHeat(C,2);}else hurt(4);shake=.3;},(x,z)=>{if(foes.filter(f=>f.kind==='cop'&&!f.dead).length<8){const p=freeSpot(x,z,3);spawnFoe('cop',p[0],p[1],-1);feed('Police cruiser stopped — uniformed officer deploying.');}});
+ streetLife.update(dt,time,P.x,P.z,C.heat,C.legacy.tutorial>=3,Cspeed=>{C.cityStories.trafficHits++;if(P.car){P.car.speed*=.65;hurt(Cspeed*.25);if(P.deadT<=0)addHeat(C,2);}else hurt(4);shake=.3;},(x,z)=>{if(foes.filter(f=>f.kind==='cop'&&!f.dead).length<8){const p=freeSpot(x,z,3);spawnFoe('cop',p[0],p[1],-1);feed('Police cruiser stopped — uniformed officer deploying.');}});
  if(P.car&&streetLife.near(P.x,P.z))P.car.speed*=Math.exp(-dt*3);
 }
 
@@ -1386,6 +1403,9 @@ function frame() {
         P.x = SPAWN.x;
         P.z = SPAWN.z;
         P.heading = SPAWN.heading;
+        resetAfterDeath(C); P.heat = 0;
+        P.stamina = {value:100,exhausted:false};
+        saveGame();
         player.setVisible(true);
       }
     } else if (!shopOpen) {

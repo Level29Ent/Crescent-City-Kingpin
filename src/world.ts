@@ -304,7 +304,7 @@ export const PARKED_CARS: [number, number, number, number][] = (() => {
     const z = horizontal ? line + side : along;
     if (!walkable(x, z)) continue;
     const head = horizontal ? (side > 0 ? -Math.PI / 2 : Math.PI / 2) : side > 0 ? Math.PI : 0;
-    out.push([x, z, head, r() < 0.15 ? 2 : 1]);
+    out.push([x, z, head, [0,1,2,4,5,6,7,8,9,10,11,12,13][i%13]!]);
   }
   return out;
 })();

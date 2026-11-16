@@ -1,6 +1,9 @@
 import {atPoint} from './navigation.ts';
 import type {Campaign} from './campaign.ts';
 export const WORK = [
+ {id:'pastry',name:'Morning Pastry Delivery',x:-180,z:-120,dropX:60,dropZ:180,pay:480,duration:200,description:'Collect fresh pastries from the patisserie for Marigny Guest House. Clean pay plus up to 20% for an early delivery.'},
+ {id:'post',name:'Royal Street Express Mail',x:120,z:-180,dropX:-120,dropZ:180,pay:550,duration:220,description:'Collect registered mail at the post office for Royal Street Gallery. Clean pay plus up to 20% for speed.'},
+ {id:'arcade',name:'Arcade Repair Shipment',x:180,z:120,dropX:-60,dropZ:180,pay:440,duration:180,description:'Deliver replacement components from Levee Auto Parts to Canal Neon Arcade. Clean pay plus an early-delivery bonus.'},
  {id:'medical',name:'Clinic Supply Run',x:-180,z:-60,dropX:0,dropZ:0,pay:300,duration:145,description:'Collect sealed supplies at the clinic and deliver them to the diner outreach desk. Clean pay.'},
  {id:'hardware',name:'Hardware Restock',x:60,z:60,dropX:-120,dropZ:120,pay:380,duration:165,description:'Move hardware stock to Westbank Dispatch. Clean pay.'},
  {id:'flowers',name:'Garden Event Flowers',x:-180,z:120,dropX:60,dropZ:-60,pay:420,duration:190,description:'Collect arrangements at the florist for the Marigny cafe. Clean pay.'},
@@ -24,7 +27,21 @@ export function restoreLifestyle(v:any):Lifestyle{
 }
 export function startWork(c:Campaign,id:string){const work=WORK.find(w=>w.id===id);if(!work||c.lifestyle.work||c.lifestyle.workCooldown>0||c.cityStories.active||c.expansion.mission||(c.legacy.daily&&!c.legacy.daily.finished)||c.legacy.tutorial<3)return false;c.lifestyle.work={id,step:0,t:work.duration};return true;}
 export function workObjective(c:Campaign){const active=c.lifestyle.work;if(!active)return null;const w=WORK.find(w=>w.id===active.id)!;return {x:active.step?w.dropX:w.x,z:active.step?w.dropZ:w.z,text:`${w.name} · ${active.step?'Deliver':'Collect'} · ${Math.ceil(active.t)}s`};}
-export function workInteract(c:Campaign,x:number,z:number){const active=c.lifestyle.work,point=workObjective(c);if(!active||!point||!atPoint(x,z,point,7))return null;if(active.step===0){active.step=1;return 'Cargo collected. Follow the marked drop-off.';}const w=WORK.find(w=>w.id===active.id)!;if(w.id==='fence'){c.dirty+=w.pay;c.heat=Math.min(100,c.heat+8);}else c.clean+=w.pay;if(w.id==='salvage')c.expansion.parts+=2;c.lifestyle.work=null;c.lifestyle.workCooldown=45;c.lifestyle.workCompleted++;return `${w.name} complete: +$${w.pay} ${w.id==='fence'?'dirty':'clean'}${w.id==='salvage'?' + 2 parts':''}`;}
+/** Clean work rewards spare time; illegal recovery keeps its fixed risk/reward. */
+export function workBonus(pay:number,remaining:number,duration:number){
+ return Math.round(pay*.2*Math.max(0,Math.min(1,remaining/duration)));
+}
+export function workInteract(c:Campaign,x:number,z:number){
+ const active=c.lifestyle.work,point=workObjective(c);
+ if(!active||!point||!atPoint(x,z,point,7))return null;
+ if(active.step===0){active.step=1;return 'Cargo collected. Follow the marked drop-off.';}
+ const w=WORK.find(w=>w.id===active.id)!;
+ const bonus=w.id==='fence'?0:workBonus(w.pay,active.t,w.duration);
+ if(w.id==='fence'){c.dirty+=w.pay;c.heat=Math.min(100,c.heat+8);}else c.clean+=w.pay+bonus;
+ if(w.id==='salvage')c.expansion.parts+=2;
+ c.lifestyle.work=null;c.lifestyle.workCooldown=45;c.lifestyle.workCompleted++;
+ return `${w.name} complete: +$${w.pay} ${w.id==='fence'?'dirty':'clean'}${bonus?` + $${bonus} early bonus`:''}${w.id==='salvage'?' + 2 parts':''}`;
+}
 export function tickWork(c:Campaign,dt:number){c.lifestyle.workCooldown=Math.max(0,c.lifestyle.workCooldown-dt);if(c.lifestyle.work){c.lifestyle.work.t-=dt;if(c.lifestyle.work.t<=0){c.lifestyle.work=null;c.lifestyle.workCooldown=30;return 'Work order expired. No payout; try again at the Jobs board.';}}return null;}
 export function buyDecor(c:Campaign,key:'rug'|'art'){if(c.lifestyle[key]||c.clean<100)return false;c.clean-=100;c.lifestyle[key]=true;return true;}
 export function styleCar(c:Campaign,index:number,key:'spoiler'|'stripe'){if(!c.expansion.cars[index]||c.clean<200)return false;const style=c.lifestyle.carStyle[index]??={spoiler:false,stripe:false,glowColor:0,rimColor:0};if(style[key])return false;c.clean-=200;style[key]=true;return true;}
