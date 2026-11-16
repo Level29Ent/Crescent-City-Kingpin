@@ -21,7 +21,7 @@ export function restoreKingpin(v:any):Kingpin{
  for(let i=0;i<8;i++){const car=v.vehicles?.[i];if(car&&typeof car==='object')s.vehicles[i]={plate:Math.floor(number(car.plate,0,9999)),insured:car.insured===true,impounded:car.impounded===true,reported:car.reported===true};}
  s.streetReports=Array.isArray(v.streetReports)?[...new Set<string>(v.streetReports.filter((id:unknown)=>typeof id==='string'&&/^street-\d{1,4}$/.test(id)))].slice(0,100):[];
  for(const key of ['businessWins','disguise','distraction','toolCooldown','ambienceClock','eventClock','retaliation'] as const)s[key]=number(v[key],0,key==='businessWins'?1e6:key==='retaliation'?600:300);
- const companion=v.companion;if(companion&&SPECIALISTS.some(m=>m.id===companion.id))s.companion={id:companion.id,command:['follow','hold','retreat'].includes(companion.command)?companion.command:'follow',hp:number(companion.hp,100,100),x:number(companion.x,30,238,-238),z:number(companion.z,4,232,-238),injury:number(companion.injury,0,120)};
+ const companion=v.companion;if(companion&&(companion.id===''||SPECIALISTS.some(m=>m.id===companion.id)))s.companion={id:companion.id,command:['follow','hold','retreat'].includes(companion.command)?companion.command:'follow',hp:number(companion.hp,100,100),x:number(companion.x,30,238,-238),z:number(companion.z,4,232,-238),injury:number(companion.injury,0,120)};
  s.radio=['jazz','bounce','news','off'].includes(v.radio)?v.radio:'jazz';s.ending=['coalition','kingpin','broker'].includes(v.ending)?v.ending:'';s.takeoverWon=v.takeoverWon===true;s.report=typeof v.report==='string'?v.report.slice(0,500):'';
  const a=v.active;const kinds:VentureKind[]=['story','club','shipment','protection','personal','takeover','event'];
  const valid=a&&kinds.includes(a.kind)&&['assault','bribe','lockpick','disguise'].includes(a.method)&&['protect','profit'].includes(a.choice)&&(
@@ -59,7 +59,7 @@ export type VentureContext={x:number;z:number;driving:boolean;guards:number;heat
 export function guardsRequired(a:Venture){return a.kind==='takeover'&&a.step<5||a.step===1&&(a.kind==='personal'||a.kind==='story'&&a.method==='assault'||a.kind==='event'&&a.id==='witness'||a.kind==='protection');}
 export function ventureInteract(c:Campaign,ctx:VentureContext){
  const a=c.kingpin.active,p=venturePoint(c);if(!a||!p||!atPoint(ctx.x,ctx.z,p,8))return null;
- if(a.remaining<=0)return 'Activity expired.';
+ if(a.remaining<=0||a.kind==='shipment'&&a.cargo<=0){c.kingpin.active=null;return 'Activity failed. No payout; setup costs/cargo are not refunded.';}
  if(['club','shipment','protection'].includes(a.kind)&&!owns(c,a.id))return 'Restore the business upkeep before completing this venture.';
  if(a.kind==='personal'&&!activeCrew(c).some(m=>m.id===a.id))return 'Pay or restore loyalty to your specialist first.';
  if(a.kind==='shipment'&&a.step===1&&!ctx.driving)return 'Bring the shipment in a vehicle.';

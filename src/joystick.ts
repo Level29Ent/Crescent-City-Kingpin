@@ -5,6 +5,12 @@ export function joystickVector(dx: number, dy: number, radius: number, deadzone 
   const scale = length ? strength / length : 0;
   return { x: dx * scale, y: -dy * scale || 0, knobX: length ? dx / length * amount * radius : 0, knobY: length ? dy / length * amount * radius : 0 };
 }
+/** Pointer offsets are screen pixels; the knob transform is in unscaled local pixels. */
+export function joystickPointer(dx:number,dy:number,renderedWidth:number,layoutWidth:number){
+ if(renderedWidth<=0||layoutWidth<=0)return joystickVector(0,0,0);
+ const scale=renderedWidth/layoutWidth;
+ return joystickVector(dx/scale,dy/scale,layoutWidth*.32);
+}
 export function mountJoystick(element: HTMLElement, enabled: () => boolean) {
   const knob = element.querySelector<HTMLElement>('.joystick-knob')!;
   const value = { x: 0, y: 0 };
@@ -13,8 +19,8 @@ export function mountJoystick(element: HTMLElement, enabled: () => boolean) {
   const move = (e: PointerEvent) => {
     if (e.pointerId !== pointer) return;
     if (!enabled()) { reset(); return; }
-    const rect = element.getBoundingClientRect(), radius = rect.width * .32;
-    const result = joystickVector(e.clientX - rect.left - rect.width / 2, e.clientY - rect.top - rect.height / 2, radius);
+    const rect = element.getBoundingClientRect();
+    const result = joystickPointer(e.clientX - rect.left - rect.width / 2, e.clientY - rect.top - rect.height / 2, rect.width,element.offsetWidth||rect.width);
     value.x = result.x; value.y = result.y;
     knob.style.transform = `translate(calc(-50% + ${result.knobX}px), calc(-50% + ${result.knobY}px))`;
     element.setAttribute('aria-valuetext',`Right ${result.x.toFixed(1)}, forward ${result.y.toFixed(1)}`);

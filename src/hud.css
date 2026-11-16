@@ -184,9 +184,14 @@ body.touch-enabled.left-handed .touchMove { left:auto; right:0; }
 body.touch-enabled.left-handed .touchActions { right:auto; left:0; transform-origin:bottom left; }
 body.left-handed #moveJoystick { transform-origin:bottom right; }
 
-/* Nine driving/combat actions occupy three rows instead of overflowing five rows. */
+/* Twelve actions occupy four portrait / three landscape rows; JS measures the scaled height. */
 body.touch-enabled .touchActions { grid-template-columns:repeat(3,minmax(0,1fr)); }
 @media (max-height:520px) and (orientation:landscape) {
   body.touch-enabled { --touch-height:140px; }
   body.touch-enabled .touchActions { grid-template-columns:repeat(4,minmax(0,1fr)); }
 }
+
+body.touch-enabled .touchActions { column-gap:4px; row-gap:4px; }
+body.touch-enabled #touchControls button { line-height:1.15; }
+#storyEpilogue { z-index:30; padding:24px; box-sizing:border-box; }
+#storyEpilogue p { max-height:50vh; overflow:auto; }

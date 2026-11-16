@@ -41,6 +41,8 @@ export function operationObjective(c:Campaign){const a=c.living.active;if(!a)ret
 export type OperationContext={x:number;z:number;driving:boolean;bike:boolean;recoveryCar:boolean;condition:number;guards:number;fired:boolean;searching:boolean;passengerBoarded?:boolean};
 export function operationInteract(c:Campaign,ctx:OperationContext){
  const a=c.living.active,point=operationObjective(c);if(!a||!point||!atPoint(ctx.x,ctx.z,point,8))return null;
+ const quiet=a.id==='stealth'||a.id==='heist'&&a.choice==='quiet';
+ if(a.remaining<=0||quiet&&(ctx.fired||c.heat>=30)){c.living.active=null;return quiet&&(ctx.fired||c.heat>=30)?'Operation failed: the quiet approach was compromised.':'Operation expired. No payout.';}
  if(a.id==='recovery'&&a.step===0&&!ctx.driving)return null;
  if(a.id==='recovery'&&(!ctx.recoveryCar||ctx.condition<=20))return 'Use the marked wagon and keep its condition above 20%.';
  if(a.id==='rescue'&&a.passenger.hp<=0)return 'The musician cannot be delivered: rescue failed.';
@@ -73,7 +75,7 @@ export function localService(c:Campaign,id:string,action:'meal'|'treatment'|'rep
  c.clean-=cost;c.living.serviceCooldown=30;if(action==='meal')c.living.rested=120;
  return {hp:action==='treatment'?100:player.hp,stamina:action==='meal'?100:player.stamina,condition:action==='repair'?100:player.condition,cost};
 }
-export function upgradeTires(c:Campaign,index:number){const level=c.living.tires[index]??0;if(!c.expansion.cars[index]||c.expansion.runs.some(r=>r.car===index)||level>=3||c.living.completed.length<1||c.clean<300*(level+1)||c.expansion.parts<1)return false;c.clean-=300*(level+1);c.expansion.parts--;c.living.tires[index]=level+1;return true;}
+export function upgradeTires(c:Campaign,index:number){const level=c.living.tires[index]??0;if(!c.expansion.cars[index]||c.kingpin.vehicles[index]?.impounded||c.expansion.runs.some(r=>r.car===index)||level>=3||c.living.completed.length<1||c.clean<300*(level+1)||c.expansion.parts<1)return false;c.clean-=300*(level+1);c.expansion.parts--;c.living.tires[index]=level+1;return true;}
 export function trainCrew(c:Campaign,id:string){const level=c.living.training[id]??0;if(!activeCrew(c).some(m=>m.id===id)||level>=3||c.living.completed.length<2||c.clean<400*(level+1))return false;c.clean-=400*(level+1);c.living.training[id]=level+1;return true;}
 export function upgradeBusiness(c:Campaign,id:string){const level=c.living.businessLevels[id]??0;if(!owns(c,id)||level>=3||c.living.completed.length<3||c.clean<600*(level+1))return false;c.clean-=600*(level+1);c.living.businessLevels[id]=level+1;return true;}
 export function businessMultiplier(c:Campaign,id:string){return 1+(c.living.businessLevels[id]??0)*.15;}

@@ -3,7 +3,7 @@ export type FrameBudget={scale:number;slow:number;fast:number;sample:number;seco
 export function newFrameBudget():FrameBudget{return {scale:1,slow:0,fast:0,sample:0,seconds:0,fps:60};}
 /** Hysteresis prevents oscillation. Paused/loading frames never lower quality. */
 export function sampleFrame(b:FrameBudget,dt:number,active:boolean){
- if(!active||dt<=0||dt>.25){b.slow=b.fast=0;return false;}
+ if(!active||dt<=0||dt>.25){b.slow=b.fast=b.sample=b.seconds=0;return false;}
  b.sample++;b.seconds+=dt;if(b.seconds<2)return false;
  b.fps=b.sample/b.seconds;const span=b.seconds;b.sample=0;b.seconds=0;
  b.slow=b.fps<34?b.slow+span:0;b.fast=b.fps>54?b.fast+span:0;
