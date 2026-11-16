@@ -11,3 +11,10 @@ export function actorHit(ox:number,oy:number,oz:number,dx:number,dy:number,dz:nu
 }
 export function damageFalloff(distance:number,range:number){return Math.max(.55,1-Math.max(0,distance/range-.35)*.6);}
 export function spreadMultiplier(aim:boolean,crouch:boolean,moving:boolean,bloom:number){return (aim?.4:1)*(crouch?.65:1)*(moving?1.35:1)*(1+Math.min(1.5,Math.max(0,bloom)));}
+
+/** Route around a sandbag end instead of trying to walk straight through it. */
+export function coverWaypoint(x:number,z:number,wall:{x:number;z:number},playerZ:number){
+ const target={x:wall.x,z:wall.z+(playerZ>wall.z?-1.3:1.3)};
+ if((z-wall.z)*(target.z-wall.z)<0&&Math.abs(x-wall.x)<2.3)return {x:wall.x+(x>=wall.x?2.3:-2.3),z};
+ return target;
+}

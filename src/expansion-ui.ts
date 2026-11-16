@@ -1,3 +1,4 @@
+import {businessMultiplier} from './living-city.ts';
 import {atPoint,approach} from './navigation.ts';
 import { mountShowroom } from './showroom.ts';
 import { banknoteCanvas } from './money.ts';
@@ -20,7 +21,7 @@ export function renderExpansion(tab:string,c:Campaign,container:HTMLElement,h:Ho
     const state=conditions(c.clock);
     container.append(text('p',`${state.weather} · ${state.night?'Night rewards +30% on deliveries, +25% recoveries':'Daylight'} · Rain cuts police sight to 60% and heat generation by 35%. Fog cuts sight to 45%. Heatwaves drain sprint stamina 40% faster. No owned turf or businesses means zero idle income.`));
     if(e.mission){const m=MISSIONS.find(m=>m.id===e.mission!.id)!;const step=m.steps[e.mission.step]!;const active=card(`ACTIVE: ${m.name}`,`${step.name} · ${Math.ceil(e.mission.remaining)}s. Travel to the white marker and press E. Parade finale requires staying beside the lead float for 40 seconds.`);button(active,'Track current objective',()=>mark(step.x,step.z,step.name));button(active,'Abandon (crew loyalty -12)',()=>{c.crew.forEach(m=>m.loyalty=Math.max(0,m.loyalty-12));e.mission=null;});}
-    for(const m of MISSIONS){const item=card(m.name,`${m.desc} · $${m.pay} dirty base · ${m.duration}s${e.completed.includes(m.id)?' · previously completed':''}`);button(item,m.id==='parade'?'Join Mardi Gras parade':'Accept side mission',()=>{if(startMission(c,m.id)){mark(m.steps[0].x,m.steps[0].z,m.steps[0].name);h.missionStarted();}},!!c.lifestyle.work||!!e.mission||!!c.cityStories.active||c.legacy.tutorial<3);}
+    for(const m of MISSIONS){const item=card(m.name,`${m.desc} · $${m.pay} dirty base · ${m.duration}s${e.completed.includes(m.id)?' · previously completed':''}`);button(item,m.id==='parade'?'Join Mardi Gras parade':'Accept side mission',()=>{if(startMission(c,m.id)){mark(m.steps[0].x,m.steps[0].z,m.steps[0].name);h.missionStarted();}},!!c.living.active||!!c.lifestyle.work||!!e.mission||!!c.cityStories.active||c.legacy.tutorial<3);}
     container.append(text('p','Dynamic pickup stashes and contraband boxes appear near traversable streets every 22 seconds (maximum 12). Walk within 1.8m to collect; they never pay you for simply waiting at spawn. Purple = goods, gold = cash, teal = mechanical parts.'));
   }else if(tab==='Garage'){
     container.append(text('p',`Stored vehicles ${e.cars.length}/8 · Parts ${e.parts}. Buy a vehicle, deploy it at the HQ garage, or send it on an automated contraband run. Runs consume unmarked crates upfront, carry roadblock risk, and pay dirty cash only after completion. You cannot drive a vehicle while it is dispatched.`));
@@ -37,7 +38,7 @@ export function renderExpansion(tab:string,c:Campaign,container:HTMLElement,h:Ho
       button(item,`Auto delivery · ${model.capacity} crates`,()=>{startRun(c,i);},!!run||c.inventory[0]!<model.capacity);
       for(const [label,color]of [['Purple',0x682db5],['Gold',0xe7b449],['Green',0x237c60],['Black',0x17202a]] as const)button(item,label,()=>{car.color=color;});
     });
-    const police=card('Police recognition guide','Patrol officers wear navy uniforms, duty vests, badges, shoulder patches and radios. Cruisers are marked POLICE with push bars and red/blue lightbars. Heat 40+ switches street patrols to pursuit; nearby cruisers can deploy officers. These previews are informational, not purchasable disguises.');
+    const police=card('Police recognition guide','Patrol officers wear navy uniforms, duty vests, badges, shoulder patches and radios. Cruisers are marked POLICE with push bars and red/blue lightbars. Heat 30+ starts detection. Sustained officer/cruiser line of sight starts pursuit; nearby pursuing cruisers can deploy officers. Break sight to force a last-known-position search. These previews are informational, not purchasable disguises.');
     const mode=document.createElement('select');mode.setAttribute('aria-label','Police preview');for(const [value,label]of [['car','Marked police cruiser'],['officer','Uniformed patrol officer']]){const option=document.createElement('option');option.value=value!;option.textContent=label!;mode.append(option);}police.append(mode);const policeStage=document.createElement('div');police.append(policeStage);mountShowroom(policeStage,3);mode.onchange=()=>{policeStage.replaceChildren();mountShowroom(policeStage,mode.value==='officer'?'officer':3);};
   }else if(tab==='Cash'){
     container.append(text('p','Detailed paper money with engraved-style borders, serial numbers, a cathedral vignette, note edges and currency straps. These are fictional Crescent Reserve game props, not real legal tender. Viewing this display never awards money.'));
@@ -60,7 +61,7 @@ export function renderExpansion(tab:string,c:Campaign,container:HTMLElement,h:Ho
       if(!owned)button(item,'Buy property',()=>{buyProperty(c,p.id);},c.clean<p.cost);
       else if(!enabled)button(item,`Pay daily bill · $${p.upkeep}`,()=>{c.clean-=p.upkeep;e.disabled=e.disabled.filter(id=>id!==p.id);},c.clean<p.upkeep);
       button(item,'Mark location',()=>mark(p.x,p.z,p.name));
-      if(enabled&&p.capacity){const left=p.capacity*(loyal(c,'accountant').length?1.25:1)-(e.frontsUsed[p.id]??0);const fee=Math.max(.03,p.fee-(loyal(c,'hacker').length ? .03 : 0)-(loyal(c,'accountant').length?.03:0)-(c.legacy.trait==='accountant'?.05:0));item.append(text('p',`Laundering $${Math.floor(left)} remaining this minute · fee ${Math.round(fee*100)}%.`));button(item,'Launder available dirty cash',()=>{const n=frontLaunder(c,p.id);h.notice(`Front laundered $${n} clean.`);},c.dirty<1||left<1);}
+      if(enabled&&p.capacity){const left=p.capacity*businessMultiplier(c,p.id)*(loyal(c,'accountant').length?1.25:1)-(e.frontsUsed[p.id]??0);const fee=Math.max(.03,p.fee-(loyal(c,'hacker').length ? .03 : 0)-(loyal(c,'accountant').length?.03:0)-(c.legacy.trait==='accountant'?.05:0));item.append(text('p',`Laundering $${Math.floor(left)} remaining this minute · fee ${Math.round(fee*100)}%.`));button(item,'Launder available dirty cash',()=>{const n=frontLaunder(c,p.id);h.notice(`Front laundered $${n} clean.`);},c.dirty<1||left<1);}
       if(enabled&&p.id==='airboat')button(item,'Bayou lay-low · $50 / -50 heat',()=>{c.clean-=50;c.heat=Math.max(0,c.heat-50);c.cooldown=60;},c.clean<50||c.cooldown>0||c.heat<=0);
     }
   }else if(tab==='Interior'){

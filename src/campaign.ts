@@ -1,3 +1,4 @@
+import {newLivingCity,restoreLivingCity,trained,type LivingCity} from './living-city.ts';
 import {newLifestyle,restoreLifestyle,type Lifestyle} from './lifestyle.ts';
 import {newCityStories,restoreCityStories,type CityStories} from './city-stories.ts';
 import { newLegacy, restoreLegacy, type LegacyState } from './legacy.ts';
@@ -27,7 +28,7 @@ export const GOODS = [
 export const EVENTS = ['Quiet streets', 'Port blockade', 'Rival crew war', 'Police crackdown', 'Festival demand'] as const;
 export type Appearance = { gender: string; heritage: string; skin: number; outfit: number; hair: number };
 export type Campaign = {
-  lifestyle:Lifestyle; cityStories:CityStories; legacy: LegacyState; expansion: Expansion; clean: number; dirty: number; heat: number; owned: string[]; crew: { id: string; loyalty: number; owed: number }[];
+  living:LivingCity; lifestyle:Lifestyle; cityStories:CityStories; legacy: LegacyState; expansion: Expansion; clean: number; dirty: number; heat: number; owned: string[]; crew: { id: string; loyalty: number; owed: number }[];
   inventory: number[]; upgrades: number; avatar: Appearance; clock: number; wageClock: number; marketClock: number;
   marketEvent: number; defenseClock: number; defense: null | { block: string; remaining: number };
   policeClock: number; intervention: string; cooldown: number; heistCooldown: number;
@@ -35,7 +36,7 @@ export type Campaign = {
   achievements: string[]; audio: { music: number; ambient: number; sfx: number; muted: boolean }; alias: string;
 };
 export function newCampaign(): Campaign {
-  return { lifestyle:newLifestyle(), cityStories:newCityStories(), legacy:newLegacy(), expansion: newExpansion(), clean: 300, dirty: 0, heat: 0, owned: [], crew: [], inventory: [0, 0, 0, 0], upgrades: 0,
+  return { living:newLivingCity(), lifestyle:newLifestyle(), cityStories:newCityStories(), legacy:newLegacy(), expansion: newExpansion(), clean: 300, dirty: 0, heat: 0, owned: [], crew: [], inventory: [0, 0, 0, 0], upgrades: 0,
     avatar: { gender: 'Man', heritage: 'Not specified', skin: 2, outfit: 0, hair: 0 }, clock: 0, wageClock: 0,
     marketClock: 0, marketEvent: 0, defenseClock: 100, defense: null, policeClock: 0, intervention: '', cooldown: 0, heistCooldown: 0,
     stats: { cleaned: 0, captured: 0, maxHeat: 0, defended: 0, deals: 0, heists: 0 }, achievements: [],
@@ -45,9 +46,9 @@ export const clamp = (n: number, min = 0, max = 100) => Math.max(min, Math.min(m
 export function activeCrew(c: Campaign) { return c.crew.filter(m => m.loyalty >= 25 && m.owed === 0); }
 export function bonus(c: Campaign) {
   const active = activeCrew(c);
-  return { defense: active.reduce((v, m) => v + SPECIALISTS.find(s => s.id === m.id)!.defense, furnished(c,'locker') ? 15 : 0),
+  return { defense: active.reduce((v, m) => v + SPECIALISTS.find(s => s.id === m.id)!.defense + (c.living.training[m.id]??0)*3, furnished(c,'locker') ? 15 : 0),
     payout: active.reduce((v, m) => v + SPECIALISTS.find(s => s.id === m.id)!.payout, 0),
-    cooling: active.some(m => m.id === 'smuggler') ? 0.5 : 0, muscle: active.some(m => m.id === 'muscle') };
+    cooling: active.some(m => m.id === 'smuggler') ? 0.5+trained(c,'smuggler')*.05 : 0, muscle: active.some(m => m.id === 'muscle') };
 }
 export function revenuePerMinute(c: Campaign): number {
   const base = BLOCKS.filter(b => c.owned.includes(b.id) && c.defense?.block !== b.id).reduce((v, b) => v + b.rate * (1 + .25 * c.expansion.levels[b.district]!), 0);
@@ -113,7 +114,7 @@ export function trade(c: Campaign, good: number, district: number, sell: boolean
 function loyalHacker(c: Campaign) { return activeCrew(c).some(m=>m.id==='hacker'); }
 export function launder(c: Campaign, amount: number): number {
   const n = Math.min(c.dirty, Math.max(0, Math.floor(amount)));
-  const clean = Math.floor(n * (.8+(loyalHacker(c)?.03:0)+(c.legacy.trait==='accountant'?.05:0))); if (!clean) return 0;
+  const clean = Math.floor(n * (.8+(loyalHacker(c)?.03:0)+(c.legacy.trait==='accountant'?.05:0)+trained(c,'accountant')*.01)); if (!clean) return 0;
   c.dirty -= n; c.clean += clean; c.stats.cleaned += clean; addHeat(c, 2); return clean;
 }
 export function layLow(c: Campaign): boolean {
@@ -195,6 +196,7 @@ export function restoreCampaign(value: unknown): Campaign | null {
   c.legacy=restoreLegacy(v.legacy);
   c.cityStories=restoreCityStories(v.cityStories);
   c.lifestyle=restoreLifestyle(v.lifestyle);
+  c.living=restoreLivingCity(v.living);
   const num = (v: unknown, fallback = 0, max = 1e9) => typeof v === 'number' && Number.isFinite(v) ? clamp(v, 0, max) : fallback;
   for (const key of ['clean','dirty','heat','clock','wageClock','marketClock','marketEvent','defenseClock','policeClock','cooldown','heistCooldown','upgrades'] as const) c[key] = num(v[key], c[key], key === 'heat' ? 100 : key === 'upgrades' ? 5 : 1e9);
   c.marketEvent = Math.floor(c.marketEvent) % EVENTS.length;
@@ -222,4 +224,5 @@ export function resetAfterDeath(c: Campaign) {
   // A hospital reset is not a successful escape for training rewards.
   c.legacy.lastHeat = 0;
   c.lifestyle.work = null;
+  c.living.active = null;
 }

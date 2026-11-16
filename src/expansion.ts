@@ -1,3 +1,4 @@
+import {businessMultiplier} from './living-city.ts';
 import {atPoint} from './navigation.ts';
 import type { Campaign } from './campaign.ts';
 import { cityClock } from './dynamics.ts';
@@ -83,7 +84,7 @@ export function loyal(c: Campaign, id?: string) { return c.crew.filter(m => m.lo
 export function inventoryCap(c: Campaign) { return 20 + (owns(c,'dock') ? 40 : 0); }
 export function cashCap(c: Campaign) { return furnished(c, 'vault') ? 500000 : 100000; }
 export function propertyRevenue(c: Campaign) {
-  return PROPERTIES.filter(p => owns(c,p.id) && p.id !== 'cafe' && (p.kind !== 'racket' || loyal(c).length > 0)).reduce((n,p) => n + p.rate, 0) * (c.achievements.includes('tycoon') ? 1.05 : 1);
+  return PROPERTIES.filter(p => owns(c,p.id) && p.id !== 'cafe' && (p.kind !== 'racket' || loyal(c).length > 0)).reduce((n,p) => n + p.rate*businessMultiplier(c,p.id), 0) * (c.achievements.includes('tycoon') ? 1.05 : 1);
 }
 export function buyProperty(c: Campaign, id: string) {
   const p = PROPERTIES.find(p => p.id === id);
@@ -156,7 +157,7 @@ export const MISSIONS = [
   { id: 'mechanic', name: 'Chop Shop Parts Run', desc: 'Collect mechanical crates for garage upgrades. +6 parts on completion.', pay: 450, duration: 180, steps: [{x:-60,z:0,name:'Meet the mechanic'}, {x:-120,z:0,name:'Collect the parts crate'}, {x:-60,z:0,name:'Return the parts'}] },
 ] as const;
 export function startMission(c: Campaign, id: string) {
-  const m = MISSIONS.find(m => m.id === id); if (!m || c.expansion.mission) return false;
+  const m = MISSIONS.find(m => m.id === id); if (!m || c.living.active || c.expansion.mission) return false;
   c.expansion.mission = { id, step: 0, remaining: m.duration }; return true;
 }
 export function missionInteract(c: Campaign, x: number, z: number): string | null {
@@ -174,7 +175,7 @@ export function missionInteract(c: Campaign, x: number, z: number): string | nul
 }
 export function frontLaunder(c: Campaign, id: string): number {
   const p = PROPERTIES.find(p => p.id === id); if (!p || !p.capacity || !owns(c,id)) return 0;
-  const used = c.expansion.frontsUsed[id] ?? 0; const amount = Math.min(c.dirty, p.capacity*(loyal(c,'accountant').length?1.25:1)-used);
+  const used = c.expansion.frontsUsed[id] ?? 0; const amount = Math.min(c.dirty, p.capacity*businessMultiplier(c,p.id)*(loyal(c,'accountant').length?1.25:1)-used);
   if (amount < 1) return 0;
   const fee = Math.max(.03, p.fee - (loyal(c,'hacker').length ? .03 : 0)-(loyal(c,'accountant').length?.03:0)-(c.legacy.trait==='accountant'?.05:0));
   const clean = Math.floor(amount * (1-fee)); c.dirty -= amount; c.clean += clean; c.stats.cleaned += clean;
@@ -260,7 +261,7 @@ export function restoreExpansion(value: unknown): Expansion {
   e.report=typeof v.report==='string'?v.report.slice(0,300):'';
   e.gear=[...HEISTS.map(h=>h.gear),'Krewe Captain Medallion'].filter(g=>Array.isArray(v.gear)&&v.gear.includes(g));
   for(const h of HEISTS) if(v.plans?.[h.id]) {const p=v.plans[h.id];e.plans[h.id]={phase:Math.floor(n(p.phase,2)),intel:n(p.intel,100),assigned:h.roles.filter(r=>Array.isArray(p.assigned)&&p.assigned.includes(r)),step:Math.floor(n(p.step,2)),score:n(p.score,3),cooldown:n(p.cooldown,600)};}
-  for(const p of PROPERTIES) if(v.frontsUsed?.[p.id] !== undefined)e.frontsUsed[p.id]=n(v.frontsUsed[p.id],p.capacity*1.25);
+  for(const p of PROPERTIES) if(v.frontsUsed?.[p.id] !== undefined)e.frontsUsed[p.id]=n(v.frontsUsed[p.id],p.capacity*1.25*1.45);
   const m=MISSIONS.find(m=>m.id===v.mission?.id); if(m)e.mission={id:m.id,step:Math.floor(n(v.mission.step,m.steps.length-1)),remaining:n(v.mission.remaining,m.duration),escort:n(v.mission.escort,40)};
   if(v.poker&&Array.isArray(v.poker.cards)&&v.poker.cards.length===5&&new Set(v.poker.cards).size===5&&v.poker.cards.every((n:any)=>Number.isInteger(n)&&n>=0&&n<52))e.poker={cards:v.poker.cards,held:[0,1,2,3,4].filter(i=>v.poker.held?.includes(i))};
   return e;

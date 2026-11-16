@@ -1,3 +1,4 @@
+import {OPERATIONS} from './living-city.ts';
 import {walkable,pushOut,DROPS,HQ,BUSINESSES} from './world.ts';
 import {facadeDoor} from './doorways.ts';
 import {INTERIORS} from './interiors.ts';
@@ -30,6 +31,7 @@ export function mapLocations():MapLocation[]{
  const building=category==='Buildings & homes'||category==='Businesses'||category==='Heists';
  rows.push({id,name,category,...approach(p),instruction:building?'ON FOOT · E / INTERACT at the signed door to enter. Walk to the service desk inside.':instruction,...(entry?{interiorId:entry.id}:{})});
  };
+ OPERATIONS.forEach(m=>m.stages.forEach((p,i)=>add(`operation:${m.id}:${i}`,`${m.name} · ${p.name}`,'City operations',p,'Accept in Empire → City Life first. Follow the active stage, then E / INTERACT; recovery/rescue need the correct vehicle, protection needs defeated guards.')));
  INTERIORS.forEach(b=>add(`door:${b.id}`,b.name,'Buildings & homes',b,'ON FOOT · E / INTERACT to enter. Exit via the HUD button.'));
  HEISTS.forEach(h=>add(`heist:${h.id}`,`${h.name} — Recon`,'Heists',h,'E / INTERACT to gather recon. Crew Assembly and Execution continue in Empire → Heists.'));
  BUSINESSES.forEach(b=>add(`business:${b.id}`,b.name,'Businesses',b,'Enter the signed facade door to visit.'));
