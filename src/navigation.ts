@@ -1,3 +1,4 @@
+import {CHAPTERS} from './kingpin.ts';
 import {OPERATIONS} from './living-city.ts';
 import {walkable,pushOut,DROPS,HQ,BUSINESSES} from './world.ts';
 import {facadeDoor} from './doorways.ts';
@@ -31,6 +32,7 @@ export function mapLocations():MapLocation[]{
  const building=category==='Buildings & homes'||category==='Businesses'||category==='Heists';
  rows.push({id,name,category,...approach(p),instruction:building?'ON FOOT · E / INTERACT at the signed door to enter. Walk to the service desk inside.':instruction,...(entry?{interiorId:entry.id}:{})});
  };
+ CHAPTERS.forEach(ch=>{add(`kingpin:${ch.id}`,ch.name,'Kingpin story contacts',ch,'Accept the chapter in Kingpin Stories first, choose your approach, then follow its active objective.');add(`kingpin:${ch.id}:return`,`${ch.name} · evidence return`,'Kingpin story contacts',{x:ch.returnX,z:ch.returnZ},'Only the active return stage grants the one-time chapter payout.');});
  OPERATIONS.forEach(m=>m.stages.forEach((p,i)=>add(`operation:${m.id}:${i}`,`${m.name} · ${p.name}`,'City operations',p,'Accept in Empire → City Life first. Follow the active stage, then E / INTERACT; recovery/rescue need the correct vehicle, protection needs defeated guards.')));
  INTERIORS.forEach(b=>add(`door:${b.id}`,b.name,'Buildings & homes',b,'ON FOOT · E / INTERACT to enter. Exit via the HUD button.'));
  HEISTS.forEach(h=>add(`heist:${h.id}`,`${h.name} — Recon`,'Heists',h,'E / INTERACT to gather recon. Crew Assembly and Execution continue in Empire → Heists.'));

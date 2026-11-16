@@ -1,3 +1,4 @@
+import {kingpinPanel} from './kingpin-ui.ts';
 import {livingCityPanel} from './living-city-ui.ts';
 import {locationMap} from './location-map.ts';
 import type {MapLocation} from './navigation.ts';
@@ -9,7 +10,7 @@ import { owns } from './expansion.ts';
 import { EXPANSION_TABS, renderExpansion } from './expansion-ui.ts';
 import { ACHIEVEMENTS, BLOCKS, EVENTS, GOODS, SPECIALISTS, activeCrew, bonus, heist, hire, launder, layLow, price, salePrice, resolveDefense, revenuePerMinute, settleWages, trade, type Campaign } from './campaign.ts';
 export type EmpireHooks = {
-  room():string|null;service(action:'meal'|'treatment'|'repair'):void; trackLocation(p:MapLocation):void; retire():void;travel(x:number,z:number):void;repair():void; milestone():void; missionStarted():void; characterConfirmed():void; backRoom():void; buildings(): readonly {id:string;name:string;x:number;z:number}[]; enterBuilding(id:string):void; campaign: Campaign; pause(open: boolean): void; changed(): void; notice(text: string): void;
+  garage():boolean;room():string|null;service(action:'meal'|'treatment'|'repair'):void; trackLocation(p:MapLocation):void; retire():void;travel(x:number,z:number):void;repair():void; milestone():void; missionStarted():void; characterConfirmed():void; backRoom():void; buildings(): readonly {id:string;name:string;x:number;z:number}[]; enterBuilding(id:string):void; campaign: Campaign; pause(open: boolean): void; changed(): void; notice(text: string): void;
   location(): { x: number; z: number; district: number }; attack(id: string): void; waypoint(x: number, z: number, name: string): void;
   deploy(index: number): void; armory(weapon: number): void; gearOwned(weapon: number): boolean; appearance(): void; save(): void; reset(): Promise<void>; audio(): void;
 };
@@ -21,7 +22,7 @@ export function createEmpireUI(h: EmpireHooks) {
   const overlay = document.getElementById('empire')!;
   const content = document.getElementById('empireContent')!;
   const summary = document.getElementById('empireSummary')!;
-  const tabs = ['City Life', ...EXPANSION_TABS, 'Turf', 'Crew', 'Market', 'Safehouse', 'Character', 'Achievements', 'Leaderboard', 'Buildings', 'Legacy & Training', 'Stories & Exploration', 'Jobs & Style', 'City Map', 'Settings'];
+  const tabs = ['Kingpin Stories','City Life', ...EXPANSION_TABS, 'Turf', 'Crew', 'Market', 'Safehouse', 'Character', 'Achievements', 'Leaderboard', 'Buildings', 'Legacy & Training', 'Stories & Exploration', 'Jobs & Style', 'City Map', 'Settings'];
   let selected = 'Turf'; let opened = false;
   function button(parent: HTMLElement, text: string, fn: () => void, disabled = false) {
     const b = document.createElement('button'); b.textContent = text; b.disabled = disabled;
@@ -50,7 +51,8 @@ export function createEmpireUI(h: EmpireHooks) {
     Array.from(nav.children).forEach((b, i) => b.setAttribute('aria-pressed', String(tabs[i] === selected)));
     if (renderExpansion(selected,c,content,{location:h.location,waypoint:h.waypoint,close,notice:h.notice,deploy:h.deploy,armory:h.armory,gearOwned:h.gearOwned,missionStarted:h.missionStarted,reload:h.changed})) return;
     content.append(el('h2', selected));
-    if(selected==='City Life'){livingCityPanel(c,content,{notice:h.notice,changed:h.changed,room:h.room,service:h.service,track:h.waypoint,resume:()=>{close();h.missionStarted();}});}
+    if(selected==='Kingpin Stories'){kingpinPanel(c,content,{notice:h.notice,changed:h.changed,track:h.waypoint,location:h.location,garage:h.garage,room:h.room,resume:()=>{close();h.missionStarted();}});}
+    else if(selected==='City Life'){livingCityPanel(c,content,{notice:h.notice,changed:h.changed,room:h.room,service:h.service,track:h.waypoint,resume:()=>{close();h.missionStarted();}});}
     else if(selected==='City Map'){locationMap(content,h.location(),p=>{h.trackLocation(p);close();h.missionStarted();});}
     else if(selected==='Jobs & Style'){lifestylePanel(c,content,{changed:h.changed,track:h.waypoint,resume:()=>{close();h.missionStarted();}});}
     else if(selected==='Stories & Exploration'){cityStoriesPanel(c,content,{changed:h.changed,track:h.waypoint,resume:()=>{close();h.missionStarted();}});}

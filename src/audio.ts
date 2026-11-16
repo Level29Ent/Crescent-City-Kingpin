@@ -1,3 +1,4 @@
+import {radioPattern} from './city-atmosphere.ts';
 import type { SfxName } from './world.ts';
 export type AudioSettings = { music: number; ambient: number; sfx: number; muted: boolean };
 // Procedural audio: no unavailable external clips, one context and three independent volume buses.
@@ -15,6 +16,9 @@ export class AudioController {
   private action=0;
   private actionTarget=0;
   private night=false;
+  private radio:'jazz'|'bounce'|'news'|'off'='jazz';
+  private district=0;
+  private worldPlaying=false;
   private timer: ReturnType<typeof setInterval> | undefined;
   constructor(signal: AbortSignal) { signal.addEventListener('abort', () => this.dispose(), { once: true }); }
   start() {
@@ -39,20 +43,20 @@ export class AudioController {
     this.engineOsc.connect(filter).connect(this.engineGain).connect(this.buses.sfx); this.engineOsc.start();
     // Sparse jazz-like bass and chord voicings; interval is disposed on page teardown.
     this.timer = setInterval(() => {
-      if (!this.ctx || this.ctx.state !== 'running') return;
+      if (!this.ctx || this.ctx.state !== 'running'||!this.worldPlaying) return;
       this.action+=(this.actionTarget-this.action)*.3;
-      if(this.action>.03){const bass=this.beat%2?82.41:65.41;this.tone(this.buses.music,bass,bass*.5,.16,.1*this.action,'sawtooth');this.tone(this.buses.music,120,35,.12,.15*this.action,'sine');if(this.beat%2===0)this.tone(this.buses.music,329.63,392,.12,.06*this.action,'square');}
+      if(this.action>.03&&this.radio!=='off'&&this.radio!=='news'){const bass=this.beat%2?82.41:65.41;this.tone(this.buses.music,bass,bass*.5,.16,.1*this.action,'sawtooth');this.tone(this.buses.music,120,35,.12,.15*this.action,'sine');if(this.beat%2===0)this.tone(this.buses.music,329.63,392,.12,.06*this.action,'square');}
       if(this.night&&this.beat%4===0)this.tone(this.buses.ambient,2600,2300,.08,.025,'sine');
-      const notes = [130.81, 155.56, 196, 233.08, 174.61, 207.65, 261.63, 311.13];
-      const root = notes[this.beat % notes.length]!;
-      if(this.beat%2===0)this.tone(this.buses.music, root / 2, root / 2, .32, .12*(1-this.action*.6), 'triangle');
-      if (this.beat % 4 === 0) [1, 1.25, 1.5].forEach(v => this.tone(this.buses.music, root * v, root * v, .65, .025, 'sine'));
+      for(const note of radioPattern(this.radio,this.beat))this.tone(this.buses.music,note.frequency,note.frequency,note.duration,note.volume*(1-this.action*.6),note.shape);
+      if(this.beat%16===0){const pitch=[520,190,680,115,320][Math.max(0,Math.min(4,this.district))]!;this.tone(this.buses.ambient,pitch,pitch*.8,.22,.018,'sine');}
       if (this.sirenWanted) this.tone(this.buses.sfx, this.beat % 2 ? 660 : 880, this.beat % 2 ? 880 : 660, .35, .1, 'sine');
       if (this.beat % 8 === 0 && this.ambience.frequency.value > 700) this.tone(this.buses.ambient, 1800, 1200, .15, .025, 'sine');
       this.beat++;
     }, 225);
     void c.resume();
   }
+  world(active:boolean){this.worldPlaying=active;}
+  station(radio:'jazz'|'bounce'|'news'|'off',district:number){this.radio=radio;this.district=district;}
   intensity(active:boolean,night:boolean){this.actionTarget=active?1:0;this.night=night;}
   nitro(){if(this.ctx){this.tone(this.buses.sfx,140,1100,.35,.14,'sawtooth');}}
   configure(settings: AudioSettings) {

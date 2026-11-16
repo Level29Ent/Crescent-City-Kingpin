@@ -28,7 +28,7 @@ export function restoreLivingCity(v:any):LivingCity{
  if(m&&!s.completed.includes(m.id)&&['quiet','loud'].includes(a.choice))s.active={id:m.id,step:Math.floor(n(a.step,m.stages.length-1)),remaining:n(a.remaining,m.duration,m.duration),choice:a.choice,spawned:a.spawned===true,vehicleCondition:n(a.vehicleCondition,100,100),passenger:restorePassenger(a.passenger??{...approach(m.stages[0]!)})};
  s.controls={scale:Math.max(.8,n(v.controls?.scale,1.25,1)),opacity:Math.max(.35,n(v.controls?.opacity,1,.95)),leftHanded:v.controls?.leftHanded===true,aimAssist:v.controls?.aimAssist===true};return s;
 }
-export function activityBusy(c:Campaign){return !!(c.living.active||c.lifestyle.work||c.expansion.mission||c.cityStories.active||(c.legacy.daily&&!c.legacy.daily.finished));}
+export function activityBusy(c:Campaign){return !!(c.kingpin.active||c.living.active||c.lifestyle.work||c.expansion.mission||c.cityStories.active||(c.legacy.daily&&!c.legacy.daily.finished));}
 export function trained(c:Campaign,id:string){return activeCrew(c).some(m=>m.id===id)?c.living.training[id]??0:0;}
 export function reputationGain(c:Campaign,district:number,amount:number){if(district>=0&&district<5)c.living.reputation[district]=Math.max(0,Math.min(100,c.living.reputation[district]!+amount));}
 export function startOperation(c:Campaign,id:string,choice:'quiet'|'loud'='loud'){
