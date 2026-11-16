@@ -55,7 +55,7 @@ test('rivals expand and trigger a showdown on lightly defended player corners',(
   assert.equal(c.expansion.influence[0]-before,3);
 });
 test('Mardi Gras has spatial objectives and a required escorted float finale; rewards claimed once',()=>{
-  const c=newCampaign();assert.ok(startMission(c,'parade'));assert.equal(startMission(c,'courier'),false);
+  const c=newCampaign();c.legacy.tutorial=3;assert.ok(startMission(c,'parade'));assert.equal(startMission(c,'courier'),false);
   assert.equal(missionInteract(c,200,200),null);
   for(const step of MISSIONS[0].steps.slice(0,4))assert.match(missionInteract(c,...Object.values(approach(step))),/advanced/);
   assert.match(missionInteract(c,...Object.values(approach({x:0,z:102}))),/Stay within/);assert.equal(c.dirty,0);
@@ -64,7 +64,7 @@ test('Mardi Gras has spatial objectives and a required escorted float finale; re
   assert.equal(missionInteract(c,...Object.values(approach({x:0,z:102}))),null);assert.equal(c.dirty,funds);
 });
 test('night courier pays more and mechanical side mission grants garage resources',()=>{
-  const c=newCampaign();c.clock=100;startMission(c,'courier');for(const s of MISSIONS[1].steps)missionInteract(c,...Object.values(approach(s)));
+  const c=newCampaign();c.legacy.tutorial=3;c.clock=100;startMission(c,'courier');for(const s of MISSIONS[1].steps)missionInteract(c,...Object.values(approach(s)));
   assert.equal(c.dirty,1170);startMission(c,'mechanic');for(const s of MISSIONS[3].steps)missionInteract(c,...Object.values(approach(s)));assert.equal(c.expansion.parts,6);
 });
 test('offline property revenue is reduced, capped and paired with upkeep; empty saves migrate safely',()=>{

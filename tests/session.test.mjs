@@ -4,7 +4,7 @@ import { missionSession, introShot, INTRO_SHOTS } from '../src/session.ts';
 import { startMission, missionInteract, tickExpansion } from '../src/expansion.ts';
 import { newCampaign, resetAfterDeath, restoreCampaign } from '../src/campaign.ts';
 test('mission handoff clears all pause/menu flags and permits the first mission to advance',()=>{
-  const c=newCampaign();
+  const c=newCampaign();c.legacy.tutorial=3;
   const paused={playing:false,managing:true,shopOpen:true,balcony:true};
   assert.ok(startMission(c,'parade'));
   const active={...paused,...missionSession()};

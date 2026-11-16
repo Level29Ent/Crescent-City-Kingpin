@@ -157,7 +157,7 @@ export const MISSIONS = [
   { id: 'mechanic', name: 'Chop Shop Parts Run', desc: 'Collect mechanical crates for garage upgrades. +6 parts on completion.', pay: 450, duration: 180, steps: [{x:-60,z:0,name:'Meet the mechanic'}, {x:-120,z:0,name:'Collect the parts crate'}, {x:-60,z:0,name:'Return the parts'}] },
 ] as const;
 export function startMission(c: Campaign, id: string) {
-  const m = MISSIONS.find(m => m.id === id); if (!m || c.kingpin.active || c.living.active || c.expansion.mission) return false;
+  const m = MISSIONS.find(m => m.id === id); if (!m || c.legacy.tutorial<3 || c.kingpin.active || c.living.active || c.expansion.mission || c.lifestyle.work || c.cityStories.active || (c.legacy.daily&&!c.legacy.daily.finished)) return false;
   c.expansion.mission = { id, step: 0, remaining: m.duration }; return true;
 }
 export function missionInteract(c: Campaign, x: number, z: number): string | null {
