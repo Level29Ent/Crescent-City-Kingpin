@@ -6,9 +6,9 @@ import { createMoneyBundle, createMoneyStack } from '../src/money.ts';
 import { VEHICLES, buyVehicle, startRun, tickExpansion } from '../src/expansion.ts';
 import { newCampaign, restoreCampaign } from '../src/campaign.ts';
 
-test('ten vehicle classes have valid prices, separate styles and transport capacities',()=>{
-  assert.equal(VEHICLES.length,10);assert.equal(new Set(VEHICLES.map(v=>v.id)).size,10);
-  assert.equal(new Set(VEHICLES.map(v=>v.style)).size,10);
+test('thirteen vehicle classes have valid prices, separate styles and transport capacities',()=>{
+  assert.equal(VEHICLES.length,13);assert.equal(new Set(VEHICLES.map(v=>v.id)).size,13);
+  assert.equal(new Set(VEHICLES.map(v=>v.style)).size,13);
   for(const model of VEHICLES){assert.ok(model.price>0);assert.ok(model.capacity>0&&model.capacity<=20);assert.ok(model.speed>0);assert.ok(model.armor>=0&&model.armor<1);}
 });
 test('new vehicle silhouettes and wheel motion are valid, motorcycle stays narrow',()=>{
@@ -26,7 +26,7 @@ test('new vehicle silhouettes and wheel motion are valid, motorcycle stays narro
   assert.ok(dimensions.get('minibus').z>dimensions.get('sedan').z);
 });
 test('new vehicles buy/store, carry their own cargo count, settle runs once and survive saves',()=>{
-  for(const id of ['bike','muscle','suv','taxi','boxtruck','minibus']){
+  for(const id of ['bike','muscle','suv','taxi','boxtruck','minibus','roadster','estate','offroad']){
     const c=newCampaign();c.clean=100000;c.inventory[0]=20;
     const model=VEHICLES.find(v=>v.id===id);
     assert.ok(buyVehicle(c,id));assert.equal(c.clean,100000-model.price);
@@ -55,4 +55,10 @@ test('rider pose hides the weapon and normal pose restores it',()=>{
   assert.equal(person.root.getObjectByName('weapon-0').visible,false);
   assert.equal(person.root.getObjectByName('weapon-1').visible,false);
   person.pose('walk',5,2,1,.1);assert.equal(person.root.getObjectByName('weapon-1').visible,true);person.dispose();assert.equal(person.root.parent,null);
+});
+
+test('all fleet models have mirrors and exhausts; new silhouettes remain distinct',()=>{
+ for(const model of VEHICLES){const car=createCar(model.style,0x326559);assert.ok(car.root.getObjectByName('side-mirror'),model.id);assert.ok(car.root.getObjectByName('exhaust-tip'),model.id);car.dispose();}
+ const sizes=Object.fromEntries(['roadster','estate','offroad'].map(id=>{const model=VEHICLES.find(v=>v.id===id);const car=createCar(model.style,0x326559);const size=new THREE.Box3().setFromObject(car.root).getSize(new THREE.Vector3());car.dispose();return [id,size];}));
+ assert.ok(sizes.estate.y>sizes.roadster.y);assert.ok(sizes.estate.z>sizes.roadster.z);assert.ok(sizes.offroad.y>sizes.roadster.y);
 });

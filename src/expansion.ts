@@ -9,6 +9,9 @@ export function conditions(time: number) {
     heat: weather === 'Rainstorm' ? .65 : weather === 'Heatwave' ? 1.2 : 1, stamina: weather === 'Heatwave' ? 1.4 : 1 };
 }
 export const VEHICLES = [
+  { id: 'roadster', name: 'Frenchmen Open-Top Roadster', price: 3700, style: 11, capacity: 2, speed: 1.35, armor: .05 },
+  { id: 'estate', name: 'Garden District Estate Wagon', price: 2900, style: 12, capacity: 6, speed: 1.05, armor: .15 },
+  { id: 'offroad', name: 'Bayou Trail Utility 4×4', price: 5600, style: 13, capacity: 7, speed: .95, armor: .35 },
   { id: 'sedan', name: 'Beat-up Sedan', price: 350, style: 0, capacity: 2, speed: 1, armor: 0 },
   { id: 'coupe', name: 'Getaway Coupe', price: 2500, style: 2, capacity: 3, speed: 1.3, armor: .1 },
   { id: 'truck', name: 'Smuggling Truck', price: 4000, style: 1, capacity: 8, speed: .8, armor: .2 },

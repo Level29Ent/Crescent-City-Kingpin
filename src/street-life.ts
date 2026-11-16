@@ -5,7 +5,7 @@ export function trafficStep(car:{x:number;z:number;heading:number},dt:number,spe
 export function createStreetLife(scene:THREE.Scene){
  const cars:{rig:Car;x:number;z:number;heading:number;speed:number;police:boolean;turn:number}[]=[];
  const routes=[[-120,-180,0],[-60,180,Math.PI],[0,-180,0],[60,180,Math.PI],[120,-180,0],[-180,60,Math.PI/2]];
- routes.forEach(([x,z,h],i)=>{const rig=createCar(i===5?10:0,[0x457487,0xc69b43,0x6c384c,0x43765b][i%4]!);scene.add(rig.root);cars.push({rig,x:x!+2,z:z!,heading:h!,speed:5+i*.5,police:false,turn:0});});
+ routes.forEach(([x,z,h],i)=>{const rig=createCar([0,12,7,5,11,10][i]!,[0x457487,0xc69b43,0x6c384c,0x43765b][i%4]!);scene.add(rig.root);cars.push({rig,x:x!+2,z:z!,heading:h!,speed:5+i*.5,police:false,turn:0});});
  for(let i=0;i<2;i++){const rig=createCar(3,0x172536);scene.add(rig.root);cars.push({rig,x:i?122:-118,z:-180,heading:0,speed:0,police:true,turn:0});}
  cars.forEach(c=>{c.rig.root.visible=false;c.rig.root.position.set(c.x,0,c.z);c.rig.root.rotation.y=c.heading;});
  let collisionCooldown=0;let deployCooldown=0;
