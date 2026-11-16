@@ -27,7 +27,7 @@ export function restoreLifestyle(v:any):Lifestyle{
  const work=WORK.find(w=>w.id===v.work?.id);if(work)s.work={id:work.id,step:Math.floor(num(v.work.step,0,1)),t:num(v.work.t,work.duration,work.duration)};
  if(v.carStyle&&typeof v.carStyle==='object')for(const key of Object.keys(v.carStyle).filter(k=>/^[0-7]$/.test(k))){const c=v.carStyle[key];if(c&&typeof c==='object')s.carStyle[key]={spoiler:c.spoiler===true,stripe:c.stripe===true,glowColor:Math.floor(num(c.glowColor,0,2)),rimColor:Math.floor(num(c.rimColor,0,2))};}return s;
 }
-export function startWork(c:Campaign,id:string){const work=WORK.find(w=>w.id===id);if(!work||c.kingpin.active||c.living.active||c.lifestyle.work||c.lifestyle.workCooldown>0||c.cityStories.active||c.expansion.mission||(c.legacy.daily&&!c.legacy.daily.finished)||c.legacy.tutorial<3)return false;c.lifestyle.work={id,step:0,t:work.duration};return true;}
+export function startWork(c:Campaign,id:string){const work=WORK.find(w=>w.id===id);if(!work||c.pursuits.active||c.kingpin.active||c.living.active||c.lifestyle.work||c.lifestyle.workCooldown>0||c.cityStories.active||c.expansion.mission||(c.legacy.daily&&!c.legacy.daily.finished)||c.legacy.tutorial<3)return false;c.lifestyle.work={id,step:0,t:work.duration};return true;}
 export function workObjective(c:Campaign){const active=c.lifestyle.work;if(!active)return null;const w=WORK.find(w=>w.id===active.id)!;return {x:active.step?w.dropX:w.x,z:active.step?w.dropZ:w.z,text:`${w.name} · ${active.step?'Deliver':'Collect'} · ${Math.ceil(active.t)}s`};}
 /** Clean work rewards spare time; illegal recovery keeps its fixed risk/reward. */
 export function workBonus(pay:number,remaining:number,duration:number){

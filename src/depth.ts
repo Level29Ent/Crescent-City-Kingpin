@@ -31,7 +31,7 @@ export function guidedTabs(c:Campaign){
  if(!c.depth.guided)return null;
  if(c.legacy.tutorial<3)return ['City Journal','Character','Legacy & Training','Polish & Replays','Buildings','City Map','Settings'];
  const established=c.stats.captured>0||c.cityStories.completed.length>0||c.living.completed.length>0||c.expansion.properties.length>0||Object.keys(c.kingpin.chapters).length>0;
- if(!established&&c.lifestyle.workCompleted===0)return ['City Journal','Jobs & Style','Garage','Turf','Crew','Market','Safehouse','Character','Legacy & Training','City Map','Polish & Replays','Settings'];
+ if(!established&&c.lifestyle.workCompleted===0)return ['City Journal','City Pursuits','Jobs & Style','Garage','Turf','Crew','Market','Safehouse','Character','Legacy & Training','City Map','Polish & Replays','Settings'];
  return null;
 }
 export function openingAdvice(c:Campaign){

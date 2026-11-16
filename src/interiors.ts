@@ -1,3 +1,4 @@
+import {dressAnnex} from './pursuits-art.ts';
 import {furnishKarma} from './karma-interior.ts';
 import {surfaceTexture,furnishDetails} from './interior-decor.ts';
 import {approach,atPoint} from './navigation.ts';
@@ -6,6 +7,10 @@ import { createPerson, type Person } from './actors.ts';
 import type {Lifestyle} from './lifestyle.ts';
 import type { Appearance } from './campaign.ts';
 export const INTERIORS = [
+  {id:'roof-royal',name:'Royal Quarter Rooftop',x:0,z:-210,tab:'City Pursuits',theme:'cafe',color:0x8f7d68},
+  {id:'roof-treme',name:'Tremé Sky Garden',x:-60,z:-210,tab:'City Pursuits',theme:'antique',color:0x668167},
+  {id:'levee-pavilion',name:'Levee Waterfront Pavilion',x:180,z:180,tab:'City Pursuits',theme:'cafe',color:0x607f8b},
+  {id:'rail-exchange',name:'Eastbank Rail Exchange Market',x:-180,z:180,tab:'City Pursuits',theme:'warehouse',color:0x897356},
   {id:'bakery',name:'Basin Street Patisserie',x:-180,z:-120,tab:'Jobs & Style',theme:'cafe',color:0xa57962},
   {id:'post-office',name:'Crescent Post Office',x:120,z:-180,tab:'Jobs & Style',theme:'warehouse',color:0x667c8e},
   {id:'auto-parts',name:'Levee Auto Parts',x:180,z:120,tab:'Garage',theme:'garage',color:0x5d7b73},
@@ -70,7 +75,7 @@ export function indoorMove(x:number,z:number,dx:number,dz:number,obstacles:Obsta
 export function nearestEntrance(x:number,z:number,range=3):InteriorDefinition|undefined {
   return [...INTERIORS].sort((a,b)=>Math.hypot(x-approach(a).x,z-approach(a).z)-Math.hypot(x-approach(b).x,z-approach(b).z)).find(b=>atPoint(x,z,b,range));
 }
-export function createInterior(def:InteriorDefinition,appearance:Appearance,customization?:Lifestyle,furniture:readonly {id:string;slot:number}[]=[]) {
+export function createInterior(def:InteriorDefinition,appearance:Appearance,customization?:Lifestyle,furniture:readonly {id:string;slot:number}[]=[],apartmentDecor=0) {
   const scene=new THREE.Scene();scene.background=new THREE.Color(0x101a24);
   const geometries:THREE.BufferGeometry[]=[],materials:THREE.Material[]=[];
   const obstacles:Obstacle[]=[];
@@ -174,6 +179,8 @@ export function createInterior(def:InteriorDefinition,appearance:Appearance,cust
       if(f.id==='poker'){box(x,.65,z,1.7,1.3,1.5,0x266a50,true);}
     }
   }
+  dressAnnex(def.id,scene,box,apartmentDecor);
+  if(def.id.startsWith('roof-')){for(const wall of walls){wall.scale.y=.25;wall.position.y=.5;}sign('ROOFTOP ACCESS · PUBLIC VISIT',0,1.5,-7.6);}
   const attendant=createPerson('civilian',2);attendant.root.position.set(-2.8,0,-6.5);scene.add(attendant.root);
   const avatar:Person=createPerson('player',5,appearance,customization);scene.add(avatar.root);
   return {scene,avatar,obstacles,dispose(){disposeDressing();attendant.dispose();floorTexture.dispose();wallTexture.dispose();avatar.dispose();geometries.forEach(g=>g.dispose());materials.forEach(m=>{if(m instanceof THREE.MeshBasicMaterial)m.map?.dispose();m.dispose();});}};

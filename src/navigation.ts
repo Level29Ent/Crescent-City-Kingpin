@@ -1,3 +1,4 @@
+import {RACES,FARES,BOUNTIES,FISHING_SPOT} from './pursuits.ts';
 import {CHAPTERS} from './kingpin.ts';
 import {OPERATIONS} from './living-city.ts';
 import {walkable,pushOut,DROPS,HQ,BUSINESSES} from './world.ts';
@@ -32,6 +33,10 @@ export function mapLocations():MapLocation[]{
  const building=category==='Buildings & homes'||category==='Businesses'||category==='Heists';
  rows.push({id,name,category,...approach(p),instruction:building?'ON FOOT · E / INTERACT at the signed door to enter. Walk to the service desk inside.':instruction,...(entry?{interiorId:entry.id}:{})});
  };
+ RACES.forEach(r=>r.points.forEach((p,i)=>rows.push({id:`pursuit:race:${r.id}:${i}`,name:`${r.name} · checkpoint ${i+1}`,category:'City pursuits',...p,instruction:'Accept in City Pursuits first. Drive the same vehicle through each checkpoint, in order.'})));
+ FARES.forEach(f=>add(`pursuit:taxi:${f.id}`,`Taxi · ${f.name}`,'City pursuits',f,'Accept fare first, stop an actual taxi at pickup and use Interact.'));
+ BOUNTIES.forEach(b=>add(`pursuit:bounty:${b.id}`,`Bounty · ${b.name}`,'City pursuits',b,'Accept contract first. Resolve the marked target and return proof.'));
+ rows.push({id:'pursuit:fishing:river',name:'Levee fishing pier',category:'City pursuits',...FISHING_SPOT,instruction:'Accept fishing first, walk onto the pier, Interact to cast then react to the bite.'});
  CHAPTERS.forEach(ch=>{add(`kingpin:${ch.id}`,ch.name,'Kingpin story contacts',ch,'Accept the chapter in Kingpin Stories first, choose your approach, then follow its active objective.');add(`kingpin:${ch.id}:return`,`${ch.name} · evidence return`,'Kingpin story contacts',{x:ch.returnX,z:ch.returnZ},'Only the active return stage grants the one-time chapter payout.');});
  OPERATIONS.forEach(m=>m.stages.forEach((p,i)=>add(`operation:${m.id}:${i}`,`${m.name} · ${p.name}`,'City operations',p,'Accept in Empire → City Life first. Follow the active stage, then E / INTERACT; recovery/rescue need the correct vehicle, protection needs defeated guards.')));
  INTERIORS.forEach(b=>add(`door:${b.id}`,b.name,'Buildings & homes',b,'ON FOOT · E / INTERACT to enter. Exit via the HUD button.'));

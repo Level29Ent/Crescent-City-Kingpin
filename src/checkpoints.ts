@@ -24,7 +24,7 @@ export function captureCheckpoint(c:Campaign){
 export function invalidateCompletedCheckpoint(c:Campaign,completedKey?:string){const p=c.depth.checkpoint;if(p&&(completedKey===p.key||missionProof(c,p.key)>p.proof)){c.depth.checkpoint=null;return true;}return false;}
 export function retryCheckpoint(c:Campaign){
  const p=c.depth.checkpoint;if(!p||invalidateCompletedCheckpoint(c))return null;
- const active=missionCard(c);if(active&&active.key!==p.key||c.lifestyle.work||c.legacy.daily&&!c.legacy.daily.finished||c.defense||c.clean<50)return null;
+ const active=missionCard(c);if(c.pursuits.active||active&&active.key!==p.key||c.lifestyle.work||c.legacy.daily&&!c.legacy.daily.finished||c.defense||c.clean<50)return null;
  // Verify identity and completion proof independently of the UI; a tampered/stale key cannot revive a different stage.
  const snapshot=copy(p.snapshot),a=snapshot.active;
  const expected=snapshot.family==='venture'?`venture:${snapshot.active.kind}:${snapshot.active.id}`:`${snapshot.family==='side'?'side':snapshot.family}:${a.id}`;

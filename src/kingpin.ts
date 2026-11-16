@@ -30,7 +30,7 @@ export function restoreKingpin(v:any):Kingpin{
  if(valid)s.active={kind:a.kind,id:a.id,step:Math.floor(number(a.step,0,a.kind==='takeover'?5:2)),remaining:number(a.remaining,300,900),choice:a.choice,method:a.method,spawned:a.spawned===true,resolved:a.resolved===true,progress:number(a.progress,0,30),cargo:number(a.cargo,100,100)};
  return s;
 }
-export function ventureBusy(c:Campaign){return !!(c.kingpin.active||c.living.active||c.cityStories.active||c.lifestyle.work||c.expansion.mission||(c.legacy.daily&&!c.legacy.daily.finished));}
+export function ventureBusy(c:Campaign){return !!(c.pursuits.active||c.kingpin.active||c.living.active||c.cityStories.active||c.lifestyle.work||c.expansion.mission||(c.legacy.daily&&!c.legacy.daily.finished));}
 export function startChapter(c:Campaign,id:string,choice:'protect'|'profit',method:Approach){
  const index=CHAPTERS.findIndex(ch=>ch.id===id);if(index<0||ventureBusy(c)||c.legacy.tutorial<3||!c.cityStories.completed.includes('crown')||c.kingpin.chapters[id]||index>0&&!c.kingpin.chapters[CHAPTERS[index-1]!.id]||!['protect','profit'].includes(choice)||!['assault','bribe','lockpick','disguise'].includes(method))return false;
  c.kingpin.active={kind:'story',id,step:0,remaining:420,choice,method,spawned:false,resolved:false,progress:0,cargo:100};return true;

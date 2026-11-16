@@ -1,3 +1,4 @@
+import {newPursuits,restorePursuits,type Pursuits} from './pursuits.ts';
 import {newDepth,restoreDepth,type Depth} from './depth.ts';
 import {newAccessibility,restoreAccessibility,NEIGHBORHOODS,type Accessibility} from './polish.ts';
 import {newKingpin,restoreKingpin,type Kingpin} from './kingpin.ts';
@@ -31,7 +32,7 @@ export const GOODS = [
 export const EVENTS = ['Quiet streets', 'Port blockade', 'Rival crew war', 'Police crackdown', 'Festival demand'] as const;
 export type Appearance = { gender: string; heritage: string; skin: number; outfit: number; hair: number };
 export type Campaign = {
-  depth:Depth;districtVisits:string[];accessibility:Accessibility;kingpin:Kingpin;living:LivingCity; lifestyle:Lifestyle; cityStories:CityStories; legacy: LegacyState; expansion: Expansion; clean: number; dirty: number; heat: number; owned: string[]; crew: { id: string; loyalty: number; owed: number }[];
+  pursuits:Pursuits;depth:Depth;districtVisits:string[];accessibility:Accessibility;kingpin:Kingpin;living:LivingCity; lifestyle:Lifestyle; cityStories:CityStories; legacy: LegacyState; expansion: Expansion; clean: number; dirty: number; heat: number; owned: string[]; crew: { id: string; loyalty: number; owed: number }[];
   inventory: number[]; upgrades: number; avatar: Appearance; clock: number; wageClock: number; marketClock: number;
   marketEvent: number; defenseClock: number; defense: null | { block: string; remaining: number };
   policeClock: number; intervention: string; cooldown: number; heistCooldown: number;
@@ -39,7 +40,7 @@ export type Campaign = {
   achievements: string[]; audio: { music: number; ambient: number; sfx: number; muted: boolean }; alias: string;
 };
 export function newCampaign(): Campaign {
-  return { depth:newDepth(),districtVisits:[],accessibility:newAccessibility(),kingpin:newKingpin(),living:newLivingCity(), lifestyle:newLifestyle(), cityStories:newCityStories(), legacy:newLegacy(), expansion: newExpansion(), clean: 300, dirty: 0, heat: 0, owned: [], crew: [], inventory: [0, 0, 0, 0], upgrades: 0,
+  return { pursuits:newPursuits(),depth:newDepth(),districtVisits:[],accessibility:newAccessibility(),kingpin:newKingpin(),living:newLivingCity(), lifestyle:newLifestyle(), cityStories:newCityStories(), legacy:newLegacy(), expansion: newExpansion(), clean: 300, dirty: 0, heat: 0, owned: [], crew: [], inventory: [0, 0, 0, 0], upgrades: 0,
     avatar: { gender: 'Man', heritage: 'Not specified', skin: 2, outfit: 0, hair: 0 }, clock: 0, wageClock: 0,
     marketClock: 0, marketEvent: 0, defenseClock: 100, defense: null, policeClock: 0, intervention: '', cooldown: 0, heistCooldown: 0,
     stats: { cleaned: 0, captured: 0, maxHeat: 0, defended: 0, deals: 0, heists: 0 }, achievements: [],
@@ -203,6 +204,7 @@ export function restoreCampaign(value: unknown): Campaign | null {
   c.kingpin=restoreKingpin(v.kingpin);
   c.accessibility=restoreAccessibility(v.accessibility);
   c.depth=restoreDepth(v.depth);
+  c.pursuits=restorePursuits(v.pursuits);
   c.districtVisits=NEIGHBORHOODS.filter(n=>Array.isArray(v.districtVisits)&&v.districtVisits.includes(n.id)).map(n=>n.id);
   const num = (v: unknown, fallback = 0, max = 1e9) => typeof v === 'number' && Number.isFinite(v) ? clamp(v, 0, max) : fallback;
   for (const key of ['clean','dirty','heat','clock','wageClock','marketClock','marketEvent','defenseClock','policeClock','cooldown','heistCooldown','upgrades'] as const) c[key] = num(v[key], c[key], key === 'heat' ? 100 : key === 'upgrades' ? 5 : 1e9);
@@ -232,6 +234,7 @@ export function resetAfterDeath(c: Campaign) {
   c.legacy.lastHeat = 0;
   c.lifestyle.work = null;
   c.living.active = null;
+  c.pursuits.active=null;
   c.kingpin.active=null;c.kingpin.disguise=0;
   if(c.kingpin.companion.id){c.kingpin.companion.id='';c.kingpin.companion.injury=90;}
 }
