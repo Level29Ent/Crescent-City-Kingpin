@@ -228,3 +228,7 @@ body[data-map-palette="accessible"] #objectiveArrow {border-bottom-color:#fff17c
 #missionPortrait canvas { width:48px;height:56px;border-radius:8px; }
 #replayLoading {z-index:45;padding:20px;box-sizing:border-box;}
 .minimap-card #mini {max-width:100%;}
+
+#openingGuide {position:absolute;left:50%;top:18%;transform:translateX(-50%);max-width:min(550px,80vw);background:#152c39ed;border:1px solid #ffe0a1;padding:8px 12px;border-radius:8px;font-size:calc(12px * var(--game-text-scale));}
+#enemyReaction {position:absolute;left:50%;top:57%;transform:translateX(-50%);padding:7px 12px;background:#183e49ef;border:2px solid #d6edcc;color:#fff0bd;font-size:calc(12px * var(--game-text-scale));}
+@media(max-width:760px){#openingGuide{top:26%;font-size:11px;max-width:92vw;}}

@@ -1,0 +1,29 @@
+import type {Campaign} from './campaign.ts';
+import {CHAPTERS} from './kingpin.ts';
+import {SPECIALISTS,BLOCKS} from './campaign.ts';
+import {STORIES,DISCOVERIES} from './city-stories.ts';
+import {INTERIORS} from './interiors.ts';
+import {NEIGHBORHOODS} from './polish.ts';
+import {missionCard} from './mission-presentation.ts';
+import {openingAdvice,choiceEffects} from './depth.ts';
+export function journalPanel(c:Campaign,root:HTMLElement,h:{retry():void;changed():void;notice(s:string):void;track(x:number,z:number,name:string):void}){
+ const el=(tag:string,text:string)=>{const e=document.createElement(tag);e.textContent=text;return e;};
+ const card=(title:string,text:string)=>{const a=el('article','');a.className='empire-card';a.append(el('h3',title),el('p',text));root.append(a);return a;};
+ const button=(box:HTMLElement,text:string,fn:()=>void,disabled=false)=>{const b=el('button',text) as HTMLButtonElement;b.disabled=disabled;b.onclick=fn;box.append(b);};
+ const opening=card('Your next chapter',openingAdvice(c));button(opening,c.depth.guided?'Show all menus':'Use guided menus',()=>{c.depth.guided=!c.depth.guided;h.changed();});
+ const active=missionCard(c);card('Unresolved objective',active?`${active.title} · step ${active.step}/${active.total}: ${active.objective}`:c.defense?`Turf defense: ${BLOCKS.find(b=>b.id===c.defense!.block)?.name??c.defense.block} · ${Math.ceil(c.defense.remaining)}s remaining.`:c.legacy.daily&&!c.legacy.daily.finished?`Daily route ${c.legacy.daily.date} · checkpoint ${c.legacy.daily.step+1}/3 · ${c.legacy.daily.elapsed.toFixed(1)}s elapsed.`:'No active tracked mission. Choose one job, story or exploration route; there is no need to accept everything.');
+ const cp=c.depth.checkpoint,checkpoint=card('Mission checkpoint',cp?`${cp.title} · stage ${cp.stage}. Retry costs $50 clean, revives this stage on foot and resets its encounter. Current money, property, gear, story decisions and already-earned rewards are NOT rolled back or refunded. Completed missions invalidate their checkpoint. Vehicle recovery/rescue/work and ambient events are not checkpointed; restart those through their own boards.`:'A checkpoint is recorded at supported story/combat/side-mission stage boundaries. Failed encounters can be retried here after respawn.');
+ if(cp){button(checkpoint,'Retry last stage · $50 clean',h.retry,c.clean<50);button(checkpoint,'Discard checkpoint',()=>{c.depth.checkpoint=null;h.changed();root.replaceChildren();journalPanel(c,root,h);});}
+ const people=card('People & loyalties','The journal reflects saved campaign facts. Biographies do not secretly grant stats.');
+ for(const speaker of ['Mama Nola','Captain June','Delphine Moreau'])people.append(el('p',`${speaker}: ${speaker==='Mama Nola'?'Your home contact and mentor.':speaker==='Captain June'?'Dockworkers’ contact; responds to Harbor Compact decisions.':'Rival leader connected to the original finale and the final ledger.'}`));
+ for(const m of SPECIALISTS){const hired=c.crew.find(p=>p.id===m.id);people.append(el('p',`${m.name} · ${m.role} · ${hired?`loyalty ${Math.ceil(hired.loyalty)}, owed $${hired.owed}`:'not hired'} · personal mission ${c.kingpin.personal.includes(m.id)?'complete':'unresolved'}`));}
+ const choices=card('Decisions & consequences','Protecting the harbor creates dockworker help; selling routes adds rival pressure. Exposing the fixer reduces later guard pressure and delays retaliation; burying the evidence brings stronger and faster retaliation. Releasing the final ledger eases late hostile pressure. A secured dockworker alliance supplies a local armed defender on later story/takeover stages; their stage health persists and they withdraw if injured. These alter later encounters as well as the ending.');
+ for(const ch of CHAPTERS)choices.append(el('p',`${ch.name}: ${c.kingpin.chapters[ch.id]??'not decided'}`));const effects=choiceEffects(c);choices.append(el('p',`Current consequences: dock allies ${effects.dockAllies?'available':'not secured'} · later guard adjustment ${effects.guardDelta>=0?'+':''}${effects.guardDelta} · retaliation every ${effects.retaliationInterval}s while eligible.`));
+ const story=card('Story progress','Original stories and new chapters remain separate; complete the original finale to unlock the new arc.');for(const m of STORIES)story.append(el('p',`${m.title}: ${c.cityStories.completed.includes(m.id)?'complete':'unresolved'}`));
+ const locations=card('City discoveries',`${c.districtVisits.length}/5 neighborhood field notes · ${c.cityStories.discovered.length}/${DISCOVERIES.length} discovery caches. Public interiors do not grant property ownership.`);
+ for(const n of NEIGHBORHOODS)button(locations,`${c.districtVisits.includes(n.id)?'✓':'○'} ${n.name} field note`,()=>h.track(n.x,n.z,`${n.name} landmark`));
+ for(const d of DISCOVERIES)locations.append(el('p',`${d.name}: ${c.cityStories.discovered.includes(d.id)?'discovered':'unexplored'}`));
+ card('Known enterable addresses',`${INTERIORS.length} public interiors. Use Buildings or City Map for individual routes. Clinics heal, cafes restore stamina, workshops repair nearby vehicles; service hours and fees still apply.`);
+ const history=card('Recent journal',c.depth.journal.length?'Latest stage/checkpoint and decision entries, newest last.':'No journal entries yet. Progress is recorded as you play.');for(const note of c.depth.journal)history.append(el('p',note));
+ const cockpit=card('Driving view','V / DRIVER CAMERA toggles a first-person driver position in four-wheel cars. Each class has dashboard/seat colors, steering and speedometer motion. Hinged door panels animate on entry/exit; these are procedural panels, not cut-out doors in the generated body shell. Motorcycles retain the chase camera.');button(cockpit,c.depth.cockpit?'Use chase camera':'Use cockpit camera',()=>{c.depth.cockpit=!c.depth.cockpit;h.changed();});
+}

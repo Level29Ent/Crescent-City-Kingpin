@@ -1,3 +1,4 @@
+import {addVehicleCabin} from './vehicle-cabin.ts';
 import * as THREE from "three";
 import type {Lifestyle} from './lifestyle.ts';
 import type { Appearance } from "./campaign.ts";
@@ -5,7 +6,7 @@ import { GLTFLoader, type GLTF } from "three/addons/loaders/GLTFLoader.js";
 import { clone as cloneModel } from "three/addons/utils/SkeletonUtils.js";
 
 export type PersonKind = "player" | "gangster" | "civilian" | "cop" | "boss";
-export type PersonMode = "idle" | "walk" | "run" | "aim" | "ride" | "seated" | "down";
+export type PersonMode = "idle" | "walk" | "run" | "aim" | "ride" | "seated" | "surrender" | "down";
 export type Person = {
   root: THREE.Group;
   pose(mode: PersonMode, speed: number, time: number, weapon: number, dt: number): void;
@@ -16,6 +17,9 @@ export type Person = {
 };
 export type Car = {
   damage(condition:number):void;
+  cockpit:THREE.Vector3|null;
+  openDoor(side:'driver'|'passenger'):void;
+  detail(visible:boolean):void;
   root: THREE.Group;
   motion(speed: number, steer: number, braking: boolean, time: number): void;
   driverSeat: THREE.Vector3;
@@ -299,7 +303,7 @@ export function createPerson(kind: PersonKind, look: number, appearance?: Appear
       const holdGun = guns.length > 0;
       if (holdGun) setW(Math.max(0, Math.min(2, weapon | 0)));
       const w = curW < 0 ? 0 : curW;
-      guns.forEach((g,i)=>g.g.visible=mode!=="ride" && mode!=="seated" && i===w);
+      guns.forEach((g,i)=>g.g.visible=mode!=="ride" && mode!=="seated" && mode!=="surrender" && i===w);
       const spread = mode === "aim" ? 0.12 : 0;
       legL.rotation.set(s * (1 - blend * 0.6), 0, -spread);
       legR.rotation.set(-s * (1 - blend * 0.6), 0, spread);
@@ -323,6 +327,7 @@ export function createPerson(kind: PersonKind, look: number, appearance?: Appear
         armL.rotation.set(-1.15,0,.08);armR.rotation.set(-1.15,0,-.08);
         legL.rotation.set(-.9,0,.25);legR.rotation.set(-.9,0,-.25);
       }
+      if(mode==='surrender'){armL.rotation.set(0,0,2.6);armR.rotation.set(0,0,-2.6);legL.rotation.set(0,0,0);legR.rotation.set(0,0,0);}
       if(mode==='seated'){armL.rotation.set(-.4,0,.08);armR.rotation.set(-.4,0,-.08);legL.rotation.set(-1.45,0,.05);legR.rotation.set(-1.45,0,-.05);}
       // down: lie on back
       const t = down;
@@ -540,8 +545,10 @@ export function createCar(style: number, color: number): Car {
   }
   const emergencyLights:THREE.PointLight[]=[];
   if(police){for(const [x,color]of [[-.4,0xff2233],[.4,0x3377ff]]){const light=new THREE.PointLight(color,0,9,2);light.position.set(x!,h0+ch+cabH+.3,0);root.add(light);emergencyLights.push(light);}}
+  const cabin=addVehicleCabin(root,style,w,cabZ,h0,ch,cabH);
   let last = -1, rot = 0;
   const car: Car = {
+    cockpit:cabin.cockpit,openDoor:side=>cabin.openDoor(side),detail:visible=>cabin.detail(visible),
     damage(condition){const severity=1-Math.max(0,Math.min(100,condition))/100;damageMaterial.opacity=severity*.9;dent.rotation.x=severity*.22;dent.position.y=h0+ch+.025-severity*.08;},
     root,
     passengerSeat:new THREE.Vector3(.45,h0+ch-.65,cabZ+.1),
@@ -549,6 +556,7 @@ export function createCar(style: number, color: number): Car {
     motion(speed, steer, braking, time) {
       const dt = last < 0 ? 0 : Math.max(0, Math.min(0.1, time - last));
       last = time;
+      cabin.update(speed,steer,dt);
       rot += (speed * dt) / wr;
       for (const wh of wheels) {
         wh.spin.rotation.x = rot;
@@ -566,6 +574,7 @@ export function createCar(style: number, color: number): Car {
       }
     },
     dispose() {
+      cabin.dispose();
       for (const m of extraMats) m.dispose();
       root.removeFromParent();
     },
@@ -604,7 +613,7 @@ function createMotorcycle(color: number): Car {
   const scarMat=new THREE.MeshStandardMaterial({color:0x29231e,transparent:true,opacity:0});
   const scar=part(box(),scarMat,.46,.025,.5,0,1.18,.3,body);scar.name='vehicle-damage';
   let last=0,spin=0;
-  return {damage(condition){scarMat.opacity=(1-Math.max(0,Math.min(100,condition))/100)*.9;},root,passengerSeat:null,driverSeat:new THREE.Vector3(0,1,-.25),motion(speed,steer,brake,time){
+  return {damage(condition){scarMat.opacity=(1-Math.max(0,Math.min(100,condition))/100)*.9;},root,cockpit:null,openDoor(){},detail(){},passengerSeat:null,driverSeat:new THREE.Vector3(0,1,-.25),motion(speed,steer,brake,time){
     const dt=Math.max(0,Math.min(.1,time-last));last=time;spin+=speed*dt/.4;
     wheels.forEach(w=>{w.spin.rotation.x=spin;});wheels[1]!.pivot.rotation.y=steer*.4;
     body.rotation.z=-steer*Math.min(.3,Math.abs(speed)*.012);tail.emissiveIntensity=brake?2.5:.4;

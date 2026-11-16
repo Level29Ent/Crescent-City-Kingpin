@@ -54,7 +54,7 @@ export function createStreetLife(scene:THREE.Scene){
   }
   const snapshot=cars.map(c=>({x:c.x,z:c.z}));
   for(const car of cars){
-   car.rig.root.visible=enabled;if(!enabled)continue;
+   car.rig.root.visible=enabled;car.rig.detail(Math.hypot(car.x-px,car.z-pz)<35);if(!enabled)continue;
    car.replan-=dt;
    const chasing=car.police&&heat>=30&&active(pursuit);
    // Only observed positions enter the route planner. Search never reads hidden player coordinates.
