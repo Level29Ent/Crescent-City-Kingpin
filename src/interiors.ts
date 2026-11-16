@@ -183,5 +183,5 @@ export function createInterior(def:InteriorDefinition,appearance:Appearance,cust
   if(def.id.startsWith('roof-')){for(const wall of walls){wall.scale.y=.25;wall.position.y=.5;}sign('ROOFTOP ACCESS · PUBLIC VISIT',0,1.5,-7.6);}
   const attendant=createPerson('civilian',2);attendant.root.position.set(-2.8,0,-6.5);scene.add(attendant.root);
   const avatar:Person=createPerson('player',5,appearance,customization);scene.add(avatar.root);
-  return {scene,avatar,obstacles,dispose(){disposeDressing();attendant.dispose();floorTexture.dispose();wallTexture.dispose();avatar.dispose();geometries.forEach(g=>g.dispose());materials.forEach(m=>{if(m instanceof THREE.MeshBasicMaterial)m.map?.dispose();m.dispose();});}};
+  return {scene,avatar,obstacles,dispose(){disposeDressing();attendant.dispose();floorTexture.dispose();wallTexture.dispose();this.avatar.dispose();geometries.forEach(g=>g.dispose());materials.forEach(m=>{if(m instanceof THREE.MeshBasicMaterial)m.map?.dispose();m.dispose();});}};
 }

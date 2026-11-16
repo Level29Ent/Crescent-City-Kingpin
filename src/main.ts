@@ -951,13 +951,6 @@ function updateFoes(dt: number) {
     } else if (alive && (C.legacy.tutorial>=3 || f===tutorialRival)) {
       const sight = f.kind === "cop" ? conditions(C.clock).visibility : 1;
       const los = d < 60*sight && hasLOS(f.x, f.z, px, pz);
-      if(f.kind==='boss'){
-        const heading=Math.atan2(px-f.x,pz-f.z),pattern=tickBoss(f.bossPattern,f.district,dt,heading,los,d);
-        if(pattern.telegraph&&d<60){$('bossWarning').hidden=false;$('bossWarning').textContent=`${bossStyle(f.district).toUpperCase()} WINDUP · dodge or break line of sight!`;bossWarningUntil=time+.2;}
-        if(pattern.fire){tracer(new THREE.Vector3(f.x,1.4,f.z),new THREE.Vector3(f.x+Math.sin(pattern.heading)*Math.min(60,d),1.2,f.z+Math.cos(pattern.heading)*Math.min(60,d)),0xffa74e);sfx('enemyShot',.65);if(insideBossCone(pattern.heading,heading,pattern.cone))hurt(pattern.damage,{x:f.x,z:f.z});}
-        f.speed=pattern.speed;
-      }
-
       const allies=foes.filter(other=>other!==f&&!other.dead&&other.kind===f.kind&&dist2(f.x,f.z,other.x,other.z)<14).length;
       const reaction=updateEnemyMind(f.mind,dt,{hp:f.hp,kind:f.kind,seen:los,aimedAt:aimHeld&&los&&Math.abs(Math.atan2(Math.sin(Math.atan2(f.x-px,f.z-pz)-yaw),Math.cos(Math.atan2(f.x-px,f.z-pz)-yaw)))<.14,playerClose:d<12,nearAllies:allies,heard:noiseThisFrame&&d<35,mission:!!f.blockId});
       if(reaction.callBackup&&gangBackupCooldown===0&&f.kind==='gangster'&&foes.filter(o=>o.blockId==='backup'&&!o.dead).length<4){
@@ -990,12 +983,19 @@ function updateFoes(dt: number) {
         if(knownDistance>(f.kind==='boss'&&bossStyle(f.district)==='brawler'?6:13)||!los||lured){destination=known;moving=f.speed;}
         if(f.kind!=='cop'&&!los&&f.wt===0&&knownDistance<2)f.aggro=false;
         f.aiTime-=dt;
-        if(f.aiTime<=0){f.aiTime=1.2+(f.serial%4)*.15;f.cover=los&&!lured?coverPlanner.choose(f.serial,f,known,time):null;}
+        if(f.aiTime<=0){f.aiTime=1.2+(f.serial%4)*.15;f.cover=los&&!lured&&!(f.kind==='boss'&&bossStyle(f.district)==='brawler')?coverPlanner.choose(f.serial,f,known,time):null;}
         if(f.cover&&f.cover.until>time&&d>10){
           const phase=coverPhase(time,f.serial),goal=phase==='hide'?f.cover.hide:f.cover.peek;
           destination=goal;moving=dist2(f.x,f.z,goal.x,goal.z)>.45?f.speed:0;
           aiming=los&&phase==='peek'&&moving===0;
         }
+        if(f.kind==='boss'){
+          const heading=Math.atan2(px-f.x,pz-f.z),pattern=tickBoss(f.bossPattern,f.district,dt,heading,los,d,f.hitT<=0,aiming);
+          if(pattern.telegraph&&d<60){$('bossWarning').hidden=false;$('bossWarning').textContent=`${bossStyle(f.district).toUpperCase()} WINDUP · dodge or break line of sight!`;bossWarningUntil=time+.2;}
+          if(pattern.fire){tracer(new THREE.Vector3(f.x,1.4,f.z),new THREE.Vector3(f.x+Math.sin(pattern.heading)*Math.min(60,d),1.2,f.z+Math.cos(pattern.heading)*Math.min(60,d)),0xffa74e);sfx('enemyShot',.65);if(insideBossCone(pattern.heading,heading,pattern.cone))hurt(pattern.damage,{x:f.x,z:f.z});}
+          f.speed=pattern.speed;
+        }
+
         f.cd -= dt;
         if (f.kind!=='boss' && f.cd <= 0 && los && aiming && f.hitT<=0 && d < 42*sight) {
           f.cd = rnd(1,1.7);
@@ -1616,7 +1616,7 @@ function updateCityPursuits(dt:number){
   if(!paceRival){paceRival=createCar(2,0xa862bd);scene.add(paceRival.root);const ghostMaterials:THREE.Material[]=[];const disposePace=paceRival.dispose;paceRival.dispose=()=>{ghostMaterials.forEach(m=>m.dispose());disposePace();};paceRival.root.traverse(o=>{if(o instanceof THREE.Mesh){const material=(o.material as THREE.Material).clone();material.transparent=true;material.opacity=.35;o.material=material;ghostMaterials.push(material);}});}
   const race=RACES.find(m=>m.id===a.id)!,fraction=Math.min(.999,a.elapsed/race.par)*(race.points.length-1),index=Math.floor(fraction),t=fraction-index,from=race.points[index]!,to=race.points[Math.min(index+1,race.points.length-1)]!;
   paceRival.root.position.set(from.x+(to.x-from.x)*t,0,from.z+(to.z-from.z)*t);paceRival.root.rotation.y=Math.atan2(to.x-from.x,to.z-from.z);paceRival.motion(12,0,false,time);paceRival.detail(false);
-  const result=pursuitInteract(C,cityPursuitContext());if(result&&result!=='Enter a road vehicle before taking the checkpoint.'&&(result!==C.pursuits.report||result==='Race checkpoint cleared.')){feed(result);C.pursuits.report=result;if(!C.pursuits.active){missionCompletionKey=`pursuit:race:${a.id}`;cleanupCityPursuitActors();}saveGame();}
+  const result=pursuitInteract(C,cityPursuitContext());if(result&&result!=='Enter a road vehicle before taking the checkpoint.'&&(result!==C.pursuits.report||result==='Race checkpoint cleared.')){feed(result);C.pursuits.report=result;if(!C.pursuits.active){if(/^RACE (WON|FINISHED)/.test(result))missionCompletionKey=`pursuit:race:${a.id}`;cleanupCityPursuitActors();target=null;selectedLocation=null;saveGame();return;}saveGame();}
  }
  if(a.kind==='taxi'){
   if(!taxiRider){taxiRider=createPerson('civilian',14);scene.add(taxiRider.root);}

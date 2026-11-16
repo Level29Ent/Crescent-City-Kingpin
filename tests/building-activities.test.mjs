@@ -59,3 +59,10 @@ test('Karma is a new public dispensary with glass cases, branded rugs, collision
   const c=newCampaign();assert.match(inspectSupplies(c,'karma',0,1),/medkit/);assert.equal(inspectSupplies(c,'karma',0,1),null);
  }finally{delete globalThis.document;}
 });
+
+test('leaving a room disposes the current replacement avatar rather than its already-disposed original',async()=>{
+ const {createPerson}=await import('../src/actors.ts');globalThis.document=canvasDocument();
+ try{const room=createInterior(INTERIORS[0],newCampaign().avatar);const original=room.avatar;let oldCalls=0;const oldDispose=original.dispose;original.dispose=()=>{oldCalls++;oldDispose();};original.dispose();
+ const replacement=createPerson('player',5);let newCalls=0;const replacementDispose=replacement.dispose;replacement.dispose=()=>{newCalls++;replacementDispose();};room.avatar=replacement;room.scene.add(replacement.root);room.dispose();assert.equal(newCalls,1);assert.equal(oldCalls,1);
+ }finally{delete globalThis.document;}
+});
