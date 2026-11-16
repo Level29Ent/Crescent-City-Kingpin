@@ -7,9 +7,10 @@ export function createWeather(scene:THREE.Scene) {
   const mat=new THREE.LineBasicMaterial({color:0xa9cbde,transparent:true,opacity:.35,depthWrite:false});
   const rain=new THREE.LineSegments(geo,mat);rain.frustumCulled=false;scene.add(rain);
   const hot=new THREE.Color(0xe7ba91);
-  return {update(time:number,dt:number,x:number,z:number){
+  return {update(time:number,dt:number,x:number,z:number,particleLimit=count){
     const state=conditions(time);rain.visible=state.weather==='Rainstorm';rain.position.set(x,0,z);
-    if(rain.visible){for(let i=0;i<count;i++){positions[i*6+1]!-=dt*22;if(positions[i*6+1]!<0)positions[i*6+1]=30;positions[i*6+4]=positions[i*6+1]!-1.1;}geo.attributes.position!.needsUpdate=true;}
+    const active=Math.max(0,Math.min(count,Math.floor(particleLimit)));geo.setDrawRange(0,active*2);
+    if(rain.visible&&dt>0){for(let i=0;i<active;i++){positions[i*6+1]!-=dt*22;if(positions[i*6+1]!<0)positions[i*6+1]=30;positions[i*6+4]=positions[i*6+1]!-1.1;}geo.attributes.position!.needsUpdate=true;}
     const fog=scene.fog as THREE.Fog;
     if(fog){fog.near=state.weather==='Fog'?12:state.weather==='Rainstorm'?40:120;fog.far=state.weather==='Fog'?115:state.weather==='Rainstorm'?320:700;if(state.weather==='Heatwave')fog.color.lerp(hot,.25);}
     return state;
