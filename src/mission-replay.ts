@@ -14,7 +14,7 @@ export function replayChoices(c:Campaign):ReplayChoice[]{return [
 export function prepareReplay(c:Campaign,key:string){
  const choice=replayChoices(c).find(r=>r.key===key);if(!choice)return null;
  const sandbox=restoreCampaign(JSON.parse(JSON.stringify(c)))!;
- sandbox.kingpin.active=null;sandbox.living.active=null;sandbox.cityStories.active=null;sandbox.lifestyle.work=null;sandbox.expansion.mission=null;sandbox.legacy.daily=null;sandbox.defense=null;sandbox.heat=0;sandbox.intervention='';sandbox.kingpin.companion.id='';sandbox.kingpin.disguise=0;
+ sandbox.pursuits.active=null;sandbox.kingpin.active=null;sandbox.living.active=null;sandbox.cityStories.active=null;sandbox.lifestyle.work=null;sandbox.expansion.mission=null;sandbox.legacy.daily=null;sandbox.defense=null;sandbox.heat=0;sandbox.intervention='';sandbox.kingpin.companion.id='';sandbox.kingpin.disguise=0;
  // Disabled ambient missions keep practice focused; all balances remain a disposable copy.
  sandbox.kingpin.eventClock=0;sandbox.depth.checkpoint=null;sandbox.depth.allyStage='';sandbox.depth.allyHp=100;
  if(choice.family==='story'){sandbox.cityStories.completed=sandbox.cityStories.completed.filter(id=>id!==choice.id);if(!startStory(sandbox,choice.id,'quiet'))return null;}

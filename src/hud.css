@@ -232,3 +232,6 @@ body[data-map-palette="accessible"] #objectiveArrow {border-bottom-color:#fff17c
 #openingGuide {position:absolute;left:50%;top:18%;transform:translateX(-50%);max-width:min(550px,80vw);background:#152c39ed;border:1px solid #ffe0a1;padding:8px 12px;border-radius:8px;font-size:calc(12px * var(--game-text-scale));}
 #enemyReaction {position:absolute;left:50%;top:57%;transform:translateX(-50%);padding:7px 12px;background:#183e49ef;border:2px solid #d6edcc;color:#fff0bd;font-size:calc(12px * var(--game-text-scale));}
 @media(max-width:760px){#openingGuide{top:26%;font-size:11px;max-width:92vw;}}
+
+#cityActivityStatus {position:absolute;left:50%;top:65%;transform:translateX(-50%);max-width:70vw;background:#1b3e4be8;color:#f8e5ad;border:1px solid #a2d7ce;padding:7px 12px;font-size:calc(12px * var(--game-text-scale));}
+#bossWarning {position:absolute;left:50%;top:48%;transform:translateX(-50%);max-width:76vw;background:#632b22ef;border:2px solid #ffd69e;color:#fff2cf;padding:8px 15px;font-weight:bold;}

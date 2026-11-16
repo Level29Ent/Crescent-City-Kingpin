@@ -1,3 +1,4 @@
+import {rivalryMultiplier} from './pursuits.ts';
 import {businessMultiplier} from './living-city.ts';
 import {atPoint} from './navigation.ts';
 import type { Campaign } from './campaign.ts';
@@ -84,7 +85,7 @@ export function loyal(c: Campaign, id?: string) { return c.crew.filter(m => m.lo
 export function inventoryCap(c: Campaign) { return 20 + (owns(c,'dock') ? 40 : 0); }
 export function cashCap(c: Campaign) { return furnished(c, 'vault') ? 500000 : 100000; }
 export function propertyRevenue(c: Campaign) {
-  return PROPERTIES.filter(p => owns(c,p.id) && p.id !== 'cafe' && (p.kind !== 'racket' || loyal(c).length > 0)).reduce((n,p) => n + p.rate*businessMultiplier(c,p.id), 0) * (c.achievements.includes('tycoon') ? 1.05 : 1);
+  return PROPERTIES.filter(p => owns(c,p.id) && p.id !== 'cafe' && (p.kind !== 'racket' || loyal(c).length > 0)).reduce((n,p) => n + p.rate*businessMultiplier(c,p.id)*rivalryMultiplier(c,p.id), 0) * (c.achievements.includes('tycoon') ? 1.05 : 1);
 }
 export function buyProperty(c: Campaign, id: string) {
   const p = PROPERTIES.find(p => p.id === id);
@@ -157,7 +158,7 @@ export const MISSIONS = [
   { id: 'mechanic', name: 'Chop Shop Parts Run', desc: 'Collect mechanical crates for garage upgrades. +6 parts on completion.', pay: 450, duration: 180, steps: [{x:-60,z:0,name:'Meet the mechanic'}, {x:-120,z:0,name:'Collect the parts crate'}, {x:-60,z:0,name:'Return the parts'}] },
 ] as const;
 export function startMission(c: Campaign, id: string) {
-  const m = MISSIONS.find(m => m.id === id); if (!m || c.legacy.tutorial<3 || c.kingpin.active || c.living.active || c.expansion.mission || c.lifestyle.work || c.cityStories.active || (c.legacy.daily&&!c.legacy.daily.finished)) return false;
+  const m = MISSIONS.find(m => m.id === id); if (!m || c.pursuits.active || c.legacy.tutorial<3 || c.kingpin.active || c.living.active || c.expansion.mission || c.lifestyle.work || c.cityStories.active || (c.legacy.daily&&!c.legacy.daily.finished)) return false;
   c.expansion.mission = { id, step: 0, remaining: m.duration }; return true;
 }
 export function missionInteract(c: Campaign, x: number, z: number): string | null {

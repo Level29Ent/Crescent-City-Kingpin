@@ -1,3 +1,5 @@
+import {OUTFITS} from './pursuits.ts';
+import {pursuitsPanel} from './pursuits-ui.ts';
 import {journalPanel} from './journal-ui.ts';
 import {guidedTabs} from './depth.ts';
 import {polishPanel} from './polish-ui.ts';
@@ -25,7 +27,7 @@ export function createEmpireUI(h: EmpireHooks) {
   const overlay = document.getElementById('empire')!;
   const content = document.getElementById('empireContent')!;
   const summary = document.getElementById('empireSummary')!;
-  const tabs = ['City Journal','Polish & Replays','Kingpin Stories','City Life', ...EXPANSION_TABS, 'Turf', 'Crew', 'Market', 'Safehouse', 'Character', 'Achievements', 'Leaderboard', 'Buildings', 'Legacy & Training', 'Stories & Exploration', 'Jobs & Style', 'City Map', 'Settings'];
+  const tabs = ['City Pursuits','City Journal','Polish & Replays','Kingpin Stories','City Life', ...EXPANSION_TABS, 'Turf', 'Crew', 'Market', 'Safehouse', 'Character', 'Achievements', 'Leaderboard', 'Buildings', 'Legacy & Training', 'Stories & Exploration', 'Jobs & Style', 'City Map', 'Settings'];
   let selected = 'City Journal'; let opened = false;
   function button(parent: HTMLElement, text: string, fn: () => void, disabled = false) {
     const b = document.createElement('button'); b.textContent = text; b.disabled = disabled;
@@ -56,7 +58,8 @@ export function createEmpireUI(h: EmpireHooks) {
     if(h.replaying()&&selected==='Leaderboard'){card('Leaderboard disabled during practice','Return to your saved campaign before viewing/submitting campaign scores. Replay balances and progress are disposable.');return;}
     if (renderExpansion(selected,c,content,{location:h.location,waypoint:h.waypoint,close,notice:h.notice,deploy:h.deploy,armory:h.armory,gearOwned:h.gearOwned,missionStarted:h.missionStarted,reload:h.changed})) return;
     content.append(el('h2', selected));
-    if(selected==='City Journal'){journalPanel(c,content,{retry:h.retryCheckpoint,changed:()=>{h.changed();render();},notice:h.notice,track:(x,z,name)=>{h.waypoint(x,z,name);close();}});}
+    if(selected==='City Pursuits'){pursuitsPanel(c,content,{changed:h.changed,notice:h.notice,track:h.waypoint,appearance:h.appearance,resume:()=>{close();h.missionStarted();}});}
+    else if(selected==='City Journal'){journalPanel(c,content,{retry:h.retryCheckpoint,changed:()=>{h.changed();render();},notice:h.notice,track:(x,z,name)=>{h.waypoint(x,z,name);close();}});}
     else if(selected==='Polish & Replays'){polishPanel(c,content,{changed:h.changed,notice:h.notice,replay:(key,challenge)=>{close();h.replay(key,challenge);},stopReplay:h.stopReplay,replaying:h.replaying,track:(x,z,name)=>{h.waypoint(x,z,name);close();}});}
     else if(selected==='Kingpin Stories'){kingpinPanel(c,content,{notice:h.notice,changed:h.changed,track:h.waypoint,location:h.location,garage:h.garage,room:h.room,resume:()=>{close();h.missionStarted();}});}
     else if(selected==='City Life'){livingCityPanel(c,content,{notice:h.notice,changed:h.changed,room:h.room,service:h.service,track:h.waypoint,resume:()=>{close();h.missionStarted();}});}
@@ -65,7 +68,7 @@ export function createEmpireUI(h: EmpireHooks) {
     else if(selected==='Stories & Exploration'){cityStoriesPanel(c,content,{changed:h.changed,track:h.waypoint,resume:()=>{close();h.missionStarted();}});}
     else if(selected==='Legacy & Training'){legacyPanel(c,content,{changed:h.changed,retire:h.retire,travel:h.travel,repair:h.repair,waypoint:(x,z)=>{h.waypoint(x,z,'Daily checkpoint');close();}});}
     else if (selected === 'Buildings') {
-      content.append(el('p','Forty-seven furnished public rooms, including the patisserie, post office, auto-parts store, gallery, guest house and arcade. Visit service desks for City Life treatments, food, repairs, contacts and operations. Inspect the floor supply emblem with E once per room: workshop parts or medkits (carry five). H / MEDKIT heals 35 health. Shift sprints indoors. Signed building entrances include three homes and all business/heist destinations. Enter on foot at the facade door. Outdoor combat and income pause while inside. Visit the back desk for services; E at the teal exit or Exit Building returns you to your original street position. Property ownership and prices remain unchanged.'));
+      content.append(el('p','Fifty-one public interiors/annexes including two rooftops, a waterfront pavilion and rail market, including the patisserie, post office, auto-parts store, gallery, guest house and arcade. Visit service desks for City Life treatments, food, repairs, contacts and operations. Inspect the floor supply emblem with E once per room: workshop parts or medkits (carry five). H / MEDKIT heals 35 health. Shift sprints indoors. Signed building entrances include three homes and all business/heist destinations. Enter on foot at the facade door. Outdoor combat and income pause while inside. Visit the back desk for services; E at the teal exit or Exit Building returns you to your original street position. Property ownership and prices remain unchanged.'));
       for(const b of h.buildings()){
         const d=distance(h.location(),b.x,b.z),near=d<=3;
         const item=card(b.name,`${d} m away · walkable furnished room · no entry fee`);
@@ -146,8 +149,9 @@ export function createEmpireUI(h: EmpireHooks) {
     } else if (selected === 'Character') {
       content.append(el('p', 'Choose your identity and style. Race/heritage is self-described; skin tone is independently selectable. All choices have identical gameplay stats. Changes apply to your 3D character immediately.'));
       const preview=el('div','','character-preview-panel');preview.append(el('p','LIVE PREVIEW · drag to rotate'));content.append(preview);
-      const live=mountShowroom(preview,'character',0,{...c.avatar},c.lifestyle);
-      function refresh(){live?.updateCharacter(c.avatar,c.lifestyle);h.appearance();h.changed();}
+      const displayedAvatar=()=>{if(c.kingpin.disguise>0)return {...c.avatar,outfit:3,hair:4};const outfit=OUTFITS.find(o=>o.id===c.pursuits.wearing);return outfit?{...c.avatar,outfit:outfit.outfit,hair:outfit.hair}:c.avatar;};
+      const live=mountShowroom(preview,'character',0,displayedAvatar(),c.lifestyle,undefined,c.kingpin.disguise>0?'':c.pursuits.wearing);
+      function refresh(){live?.updateCharacter(displayedAvatar(),c.lifestyle,c.kingpin.disguise>0?'':c.pursuits.wearing);h.appearance();h.changed();}
       function select(label: string, values: string[], current: string, change: (value: string) => void) {
         const wrap = el('label', label, 'field'); const input = document.createElement('select');
         values.forEach(v => { const option = document.createElement('option'); option.value = v; option.textContent = v; input.append(option); });

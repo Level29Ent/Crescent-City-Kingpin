@@ -1,3 +1,4 @@
+import {applyWardrobe} from './pursuits-art.ts';
 import {applyBodyStyle} from './car-style.ts';
 import * as THREE from 'three';
 import { createPerson, type Person, createCar } from './actors.ts';
@@ -5,7 +6,7 @@ import type {Appearance} from './campaign.ts';
 import type {Lifestyle} from './lifestyle.ts';
 import { createMoneyStack } from './money.ts';
 // One static preview render plus drag-to-orbit: no permanent render loop for a management panel.
-export function mountShowroom(parent: HTMLElement, style: number | 'cash' | 'character' | 'officer', color=0x355e64, appearance?:Appearance, customization?:Lifestyle,carStyle?:Lifestyle['carStyle'][string]) {
+export function mountShowroom(parent: HTMLElement, style: number | 'cash' | 'character' | 'officer', color=0x355e64, appearance?:Appearance, customization?:Lifestyle,carStyle?:Lifestyle['carStyle'][string],wardrobeId='') {
   const canvas=document.createElement('canvas');canvas.className='garage-preview';
   canvas.setAttribute('aria-label',style==='officer'?'Uniformed police officer preview':style==='character'?'Live character preview, drag to rotate':style==='cash'?'Detailed fictional banknote stacks, drag to rotate':'Vehicle 3D preview, drag to rotate');
   parent.append(canvas);
@@ -20,6 +21,7 @@ export function mountShowroom(parent: HTMLElement, style: number | 'cash' | 'cha
   let person:Person|null=style==='officer'?createPerson('cop',5):style==='character'?createPerson('player',5,appearance,customization):null;
   let object=person?.root??vehicle?.root??createMoneyStack();
   if(person){person.pose('idle',0,0,0,.1);person.root.traverse(o=>{if(o.name.startsWith('weapon-'))o.visible=false;});}
+  let disposeWardrobe=style==='character'?applyWardrobe(object,wardrobeId):()=>{};
   scene.add(object);
   const disposeStyle=vehicle?applyBodyStyle(object,carStyle):()=>{};
   object.rotation.y=-.25;
@@ -33,11 +35,11 @@ export function mountShowroom(parent: HTMLElement, style: number | 'cash' | 'cha
   canvas.onpointerdown=e=>{last=e.clientX;canvas.setPointerCapture(e.pointerId);};
   canvas.onpointermove=e=>{if(last===null)return;object.rotation.y+=(e.clientX-last)*.012;last=e.clientX;render();};
   canvas.onpointerup=canvas.onpointercancel=canvas.onlostpointercapture=()=>last=null;
-  function dispose(){if(disposed)return;disposed=true;resize.disconnect();observer.disconnect();disposeStyle();vehicle?.dispose();person?.dispose();renderer.dispose();}
+  function dispose(){if(disposed)return;disposed=true;resize.disconnect();observer.disconnect();disposeWardrobe();disposeStyle();vehicle?.dispose();person?.dispose();renderer.dispose();}
   const empire=document.getElementById('empire');
   const observer=new MutationObserver(()=>{if(!canvas.isConnected||empire?.hidden)dispose();});
   observer.observe(parent.closest('#empireContent')??parent.parentElement??parent,{childList:true,subtree:true});
   if(empire)observer.observe(empire,{attributes:true,attributeFilter:['hidden']});
   requestAnimationFrame(render);
-  return {updateCharacter(next:Appearance,look:Lifestyle){if(disposed||style!=='character')return;const rotation=object.rotation.y;person?.dispose();person=createPerson('player',5,next,look);object=person.root;object.rotation.y=rotation;person.pose('idle',0,0,0,.1);object.traverse(o=>{if(o.name.startsWith('weapon-'))o.visible=false;});scene.add(object);render();},dispose};
+  return {updateCharacter(next:Appearance,look:Lifestyle,outfitId=''){if(disposed||style!=='character')return;const rotation=object.rotation.y;disposeWardrobe();person?.dispose();person=createPerson('player',5,next,look);object=person.root;disposeWardrobe=applyWardrobe(object,outfitId);object.rotation.y=rotation;person.pose('idle',0,0,0,.1);object.traverse(o=>{if(o.name.startsWith('weapon-'))o.visible=false;});scene.add(object);render();},dispose};
 }

@@ -1,3 +1,6 @@
+import {RACES,OUTFITS,pursuitObjective,pursuitInteract,tickPursuits} from './pursuits.ts';
+import {applyLivery,applyWardrobe} from './pursuits-art.ts';
+import {newBossPattern,tickBoss,insideBossCone,bossStyle,type BossPattern} from './boss-tactics.ts';
 import {captureCheckpoint,invalidateCompletedCheckpoint,retryCheckpoint} from './checkpoints.ts';
 import {openingAdvice,encounterGuards,choiceEffects,journalNote} from './depth.ts';
 import {newEnemyMind,updateEnemyMind,hurtEnemyMind,acceptSurrender,type EnemyMind} from './enemy-reactions.ts';
@@ -140,7 +143,7 @@ const shotLight = new THREE.PointLight(0xffb760,0,8);scene.add(shotLight);
 // ───────── game state ─────────
 type Foe = {
   kind: PersonKind; person: Person; x: number; z: number; heading: number; hp: number; district: number;
-  mind:EnemyMind;animTime:number;nav:RouteAgent;cover:CoverChoice|null;aiTime:number;serial:number;staggerCooldown:number;hitT:number; blockId?: string; mugged?: boolean; cd: number; aggro: boolean; dead: number; wx: number; wz: number; wt: number; flee: number; speed: number;
+  bossPattern:BossPattern;mind:EnemyMind;animTime:number;nav:RouteAgent;cover:CoverChoice|null;aiTime:number;serial:number;staggerCooldown:number;hitT:number; blockId?: string; mugged?: boolean; cd: number; aggro: boolean; dead: number; wx: number; wz: number; wt: number; flee: number; speed: number;
 };
 type Vehicle = { plateStamp?:string;plateDispose?:()=>void;key:string;condition:number;gripHeading:number;impactCooldown:number;operation?:boolean;rig: Car; style: number; x: number; z: number; h: number; speed: number; steer: number; garage?: number };
 
@@ -158,7 +161,8 @@ let operationPassenger:Person|null=null;
 let passengerNav=routeAgent(0,0);
 let passengerVehicle:Vehicle|null=null;
 let lastNeighborhood=-1;
-let policeReinforcement=0;let gangBackupCooldown=0;
+let policeReinforcement=0;let gangBackupCooldown=0;let bossWarningUntil=0;
+let taxiRider:Person|null=null;let paceRival:Car|null=null;let wardrobeDispose:(()=>void)|null=null;
 let choiceAlly:Person|null=null;let choiceAllyKey='';let choiceAllyFire=0;
 let crewActor:Person|null=null;let crewActorId='';let crewNav=routeAgent(30,4);let crewFire=0;
 let distractionPoint:null|{x:number;z:number}=null;
@@ -217,11 +221,11 @@ const headlights = new THREE.SpotLight(0xc5e8ff, 0, 65, 0.6, 0.5, 1.3);
 scene.add(headlights, headlights.target);
 
 let disguiseVisual=C.kingpin.disguise>0;
-const playerAppearance=()=>C.kingpin.disguise>0?{...C.avatar,outfit:3,hair:4}:C.avatar;
+const playerAppearance=()=>{const outfit=OUTFITS.find(o=>o.id===C.pursuits.wearing);return C.kingpin.disguise>0?{...C.avatar,outfit:3,hair:4}:outfit?{...C.avatar,outfit:outfit.outfit,hair:outfit.hair}:C.avatar;};
 let player = createPerson("player", 5, playerAppearance(),C.lifestyle);
 player.root.position.set(P.x, 0, P.z);
 player.root.rotation.y = P.heading;
-scene.add(player.root);
+scene.add(player.root);wardrobeDispose=applyWardrobe(player.root,C.kingpin.disguise>0?'':C.pursuits.wearing);
 const foes: Foe[] = [];
 let nextFoeSerial=0;
 const vehicles: Vehicle[] = [];
@@ -249,7 +253,7 @@ function spawnFoe(kind: PersonKind, x: number, z: number, district: number): Foe
   person.root.position.set(x, 0, z);
   scene.add(person.root);
   const f: Foe = {
-    mind:newEnemyMind(),animTime:0,nav:routeAgent(x,z),cover:null,aiTime:0,serial:nextFoeSerial++,staggerCooldown:0,hitT:0, kind, person, x, z, heading: rnd(0, 6.28), hp: kind === "boss" ? 260 : kind === "cop" ? 70 : kind === "civilian" ? 30 : 55, district,
+    bossPattern:newBossPattern(),mind:newEnemyMind(),animTime:0,nav:routeAgent(x,z),cover:null,aiTime:0,serial:nextFoeSerial++,staggerCooldown:0,hitT:0, kind, person, x, z, heading: rnd(0, 6.28), hp: kind === "boss" ? 260 : kind === "cop" ? 70 : kind === "civilian" ? 30 : 55, district,
     cd: rnd(0.5, 1.5), aggro: kind === "cop", dead: 0, wx: x, wz: z, wt: 0, flee: 0, speed: kind === "boss" ? 3.2 : kind === "cop" ? 5 : 3.6,
   };
   foes.push(f);
@@ -270,12 +274,13 @@ if (loaded && Array.isArray(loaded.player.foes)) {
   for (const raw of loaded.player.foes.slice(0, 160)) {
     if(raw?.blockId==='operation'&&!C.living.active)continue;
     if(raw?.blockId==='venture'&&!C.kingpin.active)continue;
+    if(raw?.blockId==='city-pursuit'&&!C.pursuits.active)continue;
     if (!raw || !['boss','cop','civilian','gangster'].includes(raw.kind) || typeof raw.x !== 'number' || typeof raw.z !== 'number') continue;
     const x = bounded(raw.x, 0, -238, 238), z = bounded(raw.z, 0, -238, 232);
     const f = spawnFoe(raw.kind, x, z, Math.floor(bounded(raw.district, -1, -1, 4)));
     f.mugged = raw.mugged === true;
     f.hp = bounded(raw.hp, 55, 1, 260); f.aggro = raw.aggro === true;
-    if (BLOCKS.some(b => b.id === raw.blockId)||['tutorial','ambush','operation','venture','backup',...STORIES.map(m=>`story:${m.id}`)].includes(raw.blockId)) f.blockId = raw.blockId;
+    if (BLOCKS.some(b => b.id === raw.blockId)||['tutorial','ambush','operation','venture','backup','city-pursuit',...STORIES.map(m=>`story:${m.id}`)].includes(raw.blockId)) f.blockId = raw.blockId;
   }
 } else for (const d of DISTRICTS) {
   if (P.captured.has(d.id)) continue;
@@ -396,6 +401,7 @@ function updateHud() {
   const work=inside?null:workObjective(C);if(work)obj=work.text;
   const story=inside?null:storyObjective(C);if(story){obj=story.text;if(C.cityStories.active?.step===1){const enemies=foes.filter(f=>!f.dead&&f.blockId===`story:${C.cityStories.active!.id}`);obj+=` · ${enemies.length} rivals left${enemies[0]?` · lead HP ${Math.ceil(enemies[0].hp)}`:''}`;}}
   if(crouched&&!inside)obj=(coverStations.some(p=>dist2(P.x,P.z,p.x,p.z)<2.4)?'COVERED (-60% damage) · ':'CROUCHED · ')+obj;
+  const cityTask=pursuitObjective(C);if(cityTask&&!inside)obj=cityTask.name;
   const operation=operationObjective(C);if(operation&&!inside)obj=operation.text;
   const venture=venturePoint(C);if(venture&&!inside)obj=`${venture.name} · ${Math.ceil(C.kingpin.active!.remaining)}s · ${C.kingpin.active!.progress.toFixed(0)}s progress`;
   if(C.kingpin.companion.id)$('streak').textContent+=` · CREW ${Math.ceil(C.kingpin.companion.hp)} HP ${C.kingpin.companion.command.toUpperCase()}`;
@@ -545,7 +551,7 @@ function startJob(priority = false) {
   const d = DROPS[priority ? demandIndex(time, DROPS.length) : Math.floor(Math.random() * DROPS.length)]!;
   const len = dist2(HQ.x, HQ.z, d.x, d.z);
   const duration = (30 + len / 9) * (priority ? 0.8 : 1);
-  if(C.kingpin.active||C.living.active){feed('Finish or abandon your City Life operation first.');return;}
+  if(C.pursuits.active||C.kingpin.active||C.living.active){feed('Finish or abandon your City Life operation first.');return;}
   P.job = { name: d.name, x: d.x, z: d.z, t: duration, duration, priority, pay: deliveryPay(len, P.streak, priority) };
   addHeat(C, 4);
   feed(`Import job: take the crates to ${d.name}.`);
@@ -605,9 +611,18 @@ function closeShop() {
 }
 
 // ───────── interaction ─────────
+function boardCityVehicle(v:Vehicle){
+ if(v.garage!==undefined&&vehicleRecord(C,v.garage).impounded){feed('Vehicle impounded.');return;}
+ P.car=v;lastDriven=v;v.rig.openDoor('driver');
+ if(!v.operation&&v!==tutorialCar&&C.legacy.tutorial>=3&&v.garage===undefined&&reportTheft(C,v.key)){feed('Vehicle theft reported. Heat +8; use owned garage cars for legal travel.');saveGame();}sfx('door');
+}
 function interact() {
   if(P.deadT>0||practice?.finished||replayPreparing)return;
   if(inside){interiorInteract();return;}
+  if(!P.car&&(C.pursuits.active?.kind==='race'||C.pursuits.active?.kind==='taxi')){
+    const nearby=vehicles.filter(v=>v!==roadblock?.vehicle&&(v.garage===undefined||!C.expansion.runs.some(r=>r.car===v.garage))&&dist2(P.x,P.z,v.x,v.z)<4.5).sort((a,b)=>dist2(P.x,P.z,a.x,a.z)-dist2(P.x,P.z,b.x,b.z))[0];
+    if(nearby){boardCityVehicle(nearby);return;}
+  }
   if(!P.car){const surrender=foes.find(f=>!f.dead&&acceptSurrender(f.mind,dist2(P.x,P.z,f.x,f.z),!aimHeld&&!mouseDown));
     if(surrender){surrender.hp=0;surrender.dead=8;surrender.aggro=false;coverPlanner.release(surrender.serial);if(!surrender.blockId)checkDistrictProgress(surrender.district);journalNote(C,'Accepted a rival’s surrender without a kill reward.');feed('Surrender accepted. Rival secured nonlethally; no kill cash.');saveGame();return;}}
   if(!P.car&&!P.job&&!(C.legacy.daily&&!C.legacy.daily.finished)&&!missionCard(C)&&C.legacy.tutorial>=3&&NEIGHBORHOODS.some(n=>!C.districtVisits.includes(n.id)&&atPoint(P.x,P.z,n,5))){const note=inspectNeighborhood(C,P.x,P.z);if(note){feed(note);saveGame();return;}}
@@ -616,7 +631,8 @@ function interact() {
     const wagon=vehicles.find(v=>v.operation&&dist2(P.x,P.z,v.x,v.z)<4.5);
     if(wagon){P.car=wagon;lastDriven=wagon;wagon.rig.openDoor('driver');sfx('door');return;}
   }
-  if(P.car&&exitBeforeActivity(C,P.x,P.z,{recovery:!!P.car.operation,condition:P.car.condition,passengerBoarded:!!C.living.active?.passenger.boarded&&passengerVehicle===P.car})){exitCar();return;}
+  if(P.car&&exitBeforeActivity(C,P.x,P.z,{recovery:!!P.car.operation,vehicleKey:P.car.key,condition:P.car.condition,taxi:P.car.style===10,passengerBoarded:!!C.living.active?.passenger.boarded&&passengerVehicle===P.car})){exitCar();return;}
+  if(C.pursuits.active){const key=missionCard(C)!.key,result=pursuitInteract(C,cityPursuitContext());if(result){if(result.startsWith('Passenger boarded.')&&P.car)P.car.rig.openDoor('passenger');feed(result);C.pursuits.report=result;if(!C.pursuits.active){if(/^(RACE WON|RACE FINISHED|FARE COMPLETE|FISH LANDED|CITY CONTRACT COMPLETE)/.test(result))missionCompletionKey=key;cleanupCityPursuitActors();target=null;selectedLocation=null;}saveGame();return;}}
   if(C.kingpin.active){const previousKind=C.kingpin.active.kind,previousStep=C.kingpin.active.step,previousKey=missionCard(C)?.key,result=ventureInteract(C,ventureContext());if(result){if(previousKey&&!C.kingpin.active&&(result.startsWith('Relief delivered.')||result.startsWith('Witness safe.')))missionCompletionKey=previousKey;feed(result);C.kingpin.report=result;if(!C.kingpin.active||C.kingpin.active.step!==previousStep)cleanupVentureActors();if(!C.kingpin.active){target=null;selectedLocation=null;if(previousKind==='takeover'&&C.kingpin.takeoverWon){$('storyEpilogueText').textContent=result;$('storyEpilogue').hidden=false;playing=false;keys.clear();document.exitPointerLock();}}saveGame();return;}}
   if(C.living.active){
     const result=operationInteract(C,operationContext());
@@ -626,6 +642,7 @@ function interact() {
     const id=selectedLocation.id;
     if(id.startsWith('door:')||id.startsWith('property:')||id.startsWith('business:')||id.startsWith('heist:')){if(P.car){feed('Exit your vehicle first: E / INTERACT or GET OUT.');exitCar();return;}const door=INTERIORS.find(b=>b.id===(selectedLocation!.interiorId??id.slice(5)));if(door){enterInterior(door);return;}}
     if(id.startsWith('turf:')&&!P.car){startBattle(id.slice(5));return;}
+    if(id.startsWith('pursuit:')&&!C.pursuits.active){empire.open('City Pursuits');return;}
     if(id.startsWith('kingpin:')&&!C.kingpin.active){empire.open('Kingpin Stories');return;}
     if(id.startsWith('operation:')&&!C.living.active){feed('Accept this operation in City Life first.');empire.open('City Life');return;}
     if(id.startsWith('mission:')&&!C.expansion.mission){feed('Accept this mission first in Empire → Missions.');empire.open('Missions');return;}
@@ -669,8 +686,7 @@ function interact() {
     if (d < bd) { bd = d; best = v; }
   }
   if(best&&C.legacy.tutorial<2){feed('Meet Mama Nola and finish the rival encounter before driving.');return;}
-  if (best) { if(best.garage!==undefined&&vehicleRecord(C,best.garage).impounded){feed('Vehicle impounded.');return;}P.car = best; lastDriven=best;best.rig.openDoor('driver');
-    if(!best.operation&&best!==tutorialCar&&C.legacy.tutorial>=3&&best.garage===undefined&&reportTheft(C,best.key)){feed('Vehicle theft reported. Heat +8; use owned garage cars for legal travel.');saveGame();} sfx("door"); return; }
+  if(best){boardCityVehicle(best);return;}
   if (dist2(P.x, P.z, HQ.x, HQ.z) < HQ.r) openShop();
 }
 
@@ -718,7 +734,7 @@ function hurt(dmg: number,source?:{x:number;z:number}) {
     if(P.car){P.car.speed=0;P.car.gripHeading=P.car.h;}
     P.car = null;
     C.clean = Math.floor(C.clean * 0.9);
-    resetAfterDeath(C);cleanupVentureActors();crewActor?.setVisible(false);choiceAlly?.dispose();choiceAlly=null;choiceAllyKey='';
+    resetAfterDeath(C);cleanupVentureActors();cleanupCityPursuitActors();crewActor?.setVisible(false);choiceAlly?.dispose();choiceAlly=null;choiceAllyKey='';
     Object.assign(pursuit,newPursuit());
     P.heat = 0;
     // Remove the old chase immediately rather than letting officers attack the respawn.
@@ -935,6 +951,13 @@ function updateFoes(dt: number) {
     } else if (alive && (C.legacy.tutorial>=3 || f===tutorialRival)) {
       const sight = f.kind === "cop" ? conditions(C.clock).visibility : 1;
       const los = d < 60*sight && hasLOS(f.x, f.z, px, pz);
+      if(f.kind==='boss'){
+        const heading=Math.atan2(px-f.x,pz-f.z),pattern=tickBoss(f.bossPattern,f.district,dt,heading,los,d);
+        if(pattern.telegraph&&d<60){$('bossWarning').hidden=false;$('bossWarning').textContent=`${bossStyle(f.district).toUpperCase()} WINDUP · dodge or break line of sight!`;bossWarningUntil=time+.2;}
+        if(pattern.fire){tracer(new THREE.Vector3(f.x,1.4,f.z),new THREE.Vector3(f.x+Math.sin(pattern.heading)*Math.min(60,d),1.2,f.z+Math.cos(pattern.heading)*Math.min(60,d)),0xffa74e);sfx('enemyShot',.65);if(insideBossCone(pattern.heading,heading,pattern.cone))hurt(pattern.damage,{x:f.x,z:f.z});}
+        f.speed=pattern.speed;
+      }
+
       const allies=foes.filter(other=>other!==f&&!other.dead&&other.kind===f.kind&&dist2(f.x,f.z,other.x,other.z)<14).length;
       const reaction=updateEnemyMind(f.mind,dt,{hp:f.hp,kind:f.kind,seen:los,aimedAt:aimHeld&&los&&Math.abs(Math.atan2(Math.sin(Math.atan2(f.x-px,f.z-pz)-yaw),Math.cos(Math.atan2(f.x-px,f.z-pz)-yaw)))<.14,playerClose:d<12,nearAllies:allies,heard:noiseThisFrame&&d<35,mission:!!f.blockId});
       if(reaction.callBackup&&gangBackupCooldown===0&&f.kind==='gangster'&&foes.filter(o=>o.blockId==='backup'&&!o.dead).length<4){
@@ -964,7 +987,7 @@ function updateFoes(dt: number) {
       }else if(f.aggro){
         const knownDistance=dist2(f.x,f.z,known.x,known.z);
         f.heading=Math.atan2(known.x-f.x,known.z-f.z);aiming=los&&!lured;
-        if(knownDistance>13||!los||lured){destination=known;moving=f.speed;}
+        if(knownDistance>(f.kind==='boss'&&bossStyle(f.district)==='brawler'?6:13)||!los||lured){destination=known;moving=f.speed;}
         if(f.kind!=='cop'&&!los&&f.wt===0&&knownDistance<2)f.aggro=false;
         f.aiTime-=dt;
         if(f.aiTime<=0){f.aiTime=1.2+(f.serial%4)*.15;f.cover=los&&!lured?coverPlanner.choose(f.serial,f,known,time):null;}
@@ -974,8 +997,8 @@ function updateFoes(dt: number) {
           aiming=los&&phase==='peek'&&moving===0;
         }
         f.cd -= dt;
-        if (f.cd <= 0 && los && aiming && f.hitT<=0 && d < 42*sight) {
-          f.cd = f.kind === "boss" ? rnd(0.6, 1) : rnd(1, 1.7);
+        if (f.kind!=='boss' && f.cd <= 0 && los && aiming && f.hitT<=0 && d < 42*sight) {
+          f.cd = rnd(1,1.7);
           sfx("enemyShot", Math.max(0.1, 1 - d / 50));
           const sx = f.x + Math.sin(f.heading) * 0.7;
           const sz = f.z + Math.cos(f.heading) * 0.7;
@@ -986,9 +1009,9 @@ function updateFoes(dt: number) {
           const tx=stray?rescue!.passenger.x:hitsCrew?cp.x:hitsAlly?choiceAlly!.root.position.x:px,tz=stray?rescue!.passenger.z:hitsCrew?cp.z:hitsAlly?choiceAlly!.root.position.z:pz;
           tracer(new THREE.Vector3(sx, 1.35, sz), new THREE.Vector3(tx, 1.2, tz), 0xff8a5a);
           if(hitsAlly){C.depth.allyHp=Math.max(0,C.depth.allyHp-10);if(C.depth.allyHp===0){choiceAlly?.dispose();choiceAlly=null;feed('Your dockworker ally withdrew after being injured.');}saveGame();}
-          else if(hitsCrew){if(injureCompanion(C,f.kind==='boss'?12:8)){feed('Companion injured. They withdrew; 90s recovery and -8 loyalty.');saveGame();}}
+          else if(hitsCrew){if(injureCompanion(C,8)){feed('Companion injured. They withdrew; 90s recovery and -8 loyalty.');saveGame();}}
           else if(stray)hurtRescue(8);
-          else if (Math.random() < 0.5 - d / 150) hurt(f.kind === "boss" ? 9 : f.kind === "cop" ? 5 : 6,{x:f.x,z:f.z});
+          else if (Math.random() < 0.5 - d / 150) hurt(f.kind === "cop" ? 5 : 6,{x:f.x,z:f.z});
         }
       }
     }
@@ -1038,6 +1061,7 @@ function updateDriving(dt: number) {
   if(hit){
     const damage=impactVehicle(c,speed,(model?.armor??0)+(stored?.armor??0)*.07);
     if(damage>0){
+      if(C.pursuits.active?.kind==='taxi'||C.pursuits.active?.kind==='race')C.pursuits.active.condition=Math.max(0,C.pursuits.active.condition-damage*.5);
       if(C.kingpin.active?.kind==='shipment')C.kingpin.active.cargo=Math.max(0,C.kingpin.active.cargo-damage*.8);
       if(speed>10)hurtRescue(speed*.9);
       if(speed>14)hurt(speed*.4);
@@ -1131,6 +1155,7 @@ function updateEconomy(dt: number) {
   }
   for(const msg of tickExpansion(C,dt)){feed(msg);if(msg.includes('WARNING')||msg.includes('SHOWDOWN'))sfx('wanted');}
   if (P.car?.garage !== undefined && C.expansion.runs.some(r=>r.car===P.car!.garage)) {P.car=null;player.setVisible(true);}
+  updateCityPursuits(dt);
   updateKingpin(dt);
   updateOperations(dt);
   const expired=tickWork(C,dt);if(expired){target=null;feed(expired);}
@@ -1152,15 +1177,15 @@ function updateEconomy(dt: number) {
       target={x:0,z:42+Math.min(40,C.expansion.mission.escort??0)*1.5,name:`Escort jester float ${Math.floor(Math.min(40,C.expansion.mission.escort??0))}/40s`};
     }
   }
-  const automatic=!!C.kingpin.active||!!C.living.active||!!C.lifestyle.work||!!C.cityStories.active||!!C.expansion.mission||!!(C.legacy.daily&&!C.legacy.daily.finished)||C.legacy.tutorial<3||!!P.job;
+  const automatic=!!C.pursuits.active||!!C.kingpin.active||!!C.living.active||!!C.lifestyle.work||!!C.cityStories.active||!!C.expansion.mission||!!(C.legacy.daily&&!C.legacy.daily.finished)||C.legacy.tutorial<3||!!P.job;
   if(!automatic&&(previousAuto||target?.name.startsWith('Tutorial delivery')||target?.name.startsWith('First delivery'))){target=null;selectedLocation=null;}
   previousAuto=automatic;
-  if(target){const p=approach(target);target.x=p.x;target.z=p.z;}
+  if(target&&C.pursuits.active?.kind!=='race'&&C.pursuits.active?.kind!=='fishing'){const p=approach(target);target.x=p.x;target.z=p.z;}
   // heal at HQ
   if (dist2(P.x, P.z, HQ.x, HQ.z) < HQ.r && P.hp < MAX_HP && P.deadT <= 0) P.hp = Math.min(MAX_HP, P.hp + 6 * dt);
   const j = P.job;
   markerRing.visible = !!j || (!!target && !(selectedLocation?.interiorId&&['Buildings & homes','Businesses','Heists'].includes(selectedLocation.category)));
-  if (!j && target) markerRing.position.set(approach(target).x,.09,approach(target).z);
+  if(!j&&target){const point=C.pursuits.active?.kind==='race'||C.pursuits.active?.kind==='fishing'?target:approach(target);markerRing.position.set(point.x,.09,point.z);}
   if (j) {
     j.t -= dt;
     markerRing.position.set(approach(j).x,.09,approach(j).z);
@@ -1221,6 +1246,7 @@ function prompt() {
     if(selectedLocation?.interiorId&&['Buildings & homes','Businesses','Heists'].includes(selectedLocation.category))t=P.car?'Exit your vehicle, then walk to the signed entrance':`E / INTERACT at the signed door: enter ${INTERIORS.find(b=>b.id===selectedLocation!.interiorId)!.name}`;
     else if(heist)t='ARRIVED · enter the signed building; recon is at the service desk';
     else if(C.cityStories.active)t=C.cityStories.active.step===1?'ENCOUNTER: defeat remaining rivals, then return to Mama Nola':'ARRIVED · E / INTERACT: speak to story contact';
+    else if(C.pursuits.active)t=pursuitObjective(C)?.name??'CITY ACTIVITY · follow marker';
     else if(C.kingpin.active)t='VENTURE · E to advance; L hold lockpick, T takedown, G distract';
     else if(C.living.active)t='OPERATION · E / INTERACT: '+(operationObjective(C)?.name??'follow the marker');
     else if(C.lifestyle.work)t='ARRIVED · E / INTERACT: collect or deliver work cargo';
@@ -1411,6 +1437,7 @@ const empire = createEmpireUI({
       if(mods.glow){const glow=new THREE.Mesh(new THREE.PlaneGeometry(2.5,4.5),new THREE.MeshBasicMaterial({color:[0xa84dff,0x42ddde,0xe6b84b][style?.glowColor??0],transparent:true,opacity:.35,depthWrite:false}));glow.rotation.x=-Math.PI/2;glow.position.y=.06;v.rig.root.add(glow);ownedResources.push(glow.geometry,glow.material);}
       v.rig.root.traverse(o=>{if((!mods.matte&&!mods.rims)||o.name==='vehicle-damage'||o.name==='vehicle-tail-light'||!(o instanceof THREE.Mesh)||!(o.material instanceof THREE.MeshStandardMaterial))return;const material=o.material.clone();ownedResources.push(material);if(mods.matte)material.roughness=1;if(mods.rims&&material.color.getHex()===0xc8ccd2)material.color.setHex([0xe7bd63,0xc8ccd2,0x16212a][style?.rimColor??0]!);o.material=material;});
     }
+    const disposeLivery=applyLivery(v.rig.root,C.pursuits.liveries[index]??'none',model.style),disposeBeforeLivery=v.rig.dispose;v.rig.dispose=()=>{disposeLivery();disposeBeforeLivery();};
     syncVehiclePlate(v);
     feed(`${model.name} deployed at garage marker. E to enter.`);target={x:gx,z:gz,name:'Your garage vehicle'};
   },
@@ -1421,8 +1448,8 @@ const empire = createEmpireUI({
     P.weapon=weapon;reloading=0;feed(`${WEAPONS[weapon]!.name} equipped.`);
   },
   missionStarted(){
-    if((C.kingpin.active||C.living.active)&&P.job){P.job=null;feed('Import contract cancelled to start the operation. No payout.');}
-    if(C.kingpin.active||C.living.active||C.expansion.mission||C.lifestyle.work||C.cityStories.active)selectedLocation=null;
+    if((C.pursuits.active||C.kingpin.active||C.living.active)&&P.job){P.job=null;feed('Import contract cancelled to start the operation. No payout.');}
+    if(C.pursuits.active||C.kingpin.active||C.living.active||C.expansion.mission||C.lifestyle.work||C.cityStories.active)selectedLocation=null;
     if(inside)leaveInterior();
     if(introActive){introActive=false;$('cinematic').hidden=true;}
     noiseThisFrame=false;operationFired=false;
@@ -1442,13 +1469,13 @@ const empire = createEmpireUI({
     if (open) { if(balcony){balcony=false;$('hud').style.display='';playing=balconyWasPlaying;$("paradeView").textContent="PARADE BALCONY";} wasPlaying = playing; managing = true; keys.clear(); joystick.reset(); lookDragging=false;mouseDown = aimHeld = false; document.exitPointerLock(); }
     else { managing = false; playing = wasPlaying; if (playing) { $('start').style.display = 'none'; lock(); } }
   },
-  changed() { syncDisguiseAppearance(); sound.station(C.kingpin.radio,districtAt(P.x,P.z)); for(const v of vehicles)if(v.garage!==undefined)syncVehiclePlate(v); if(!C.kingpin.active)cleanupVentureActors(); if(!C.living.active)cleanupOperationActors(); if(C.stats.cleaned>lastCleaned){lastCleaned=C.stats.cleaned;sfx('cash');$('cashBurst').classList.remove('animate');void $('cashBurst').offsetWidth;$('cashBurst').classList.add('animate');} if (battle?.defending && C.defense?.block !== battle.block) clearBattle(); for (const a of unlock(C)) feed(`Achievement: ${a}`); updateHud();watchMission(); saveGame(); sfx('click'); },
+  changed() { if(!C.pursuits.active)cleanupCityPursuitActors();syncDisguiseAppearance(); sound.station(C.kingpin.radio,districtAt(P.x,P.z)); for(const v of vehicles)if(v.garage!==undefined)syncVehiclePlate(v); if(!C.kingpin.active)cleanupVentureActors(); if(!C.living.active)cleanupOperationActors(); if(C.stats.cleaned>lastCleaned){lastCleaned=C.stats.cleaned;sfx('cash');$('cashBurst').classList.remove('animate');void $('cashBurst').offsetWidth;$('cashBurst').classList.add('animate');} if (battle?.defending && C.defense?.block !== battle.block) clearBattle(); for (const a of unlock(C)) feed(`Achievement: ${a}`); updateHud();watchMission(); saveGame(); sfx('click'); },
   notice: feed, location: () => ({ x:P.x, z:P.z, district:districtAt(P.x,P.z) }),
   attack: startBattle,
   waypoint(x, z, name) {if(inside)leaveInterior();const p=approach({x,z}); target = { ...p, name };selectedLocation=namedDestination({x,z},name); yaw=Math.atan2(p.x-P.x,p.z-P.z); feed(`Route marked: ${name}. White dot on minimap.`); },
   appearance() {
-    if(inside){inside.room.avatar.dispose();inside.room.avatar=createPerson("player",5,playerAppearance(),C.lifestyle);inside.room.scene.add(inside.room.avatar.root);}
-    player.root.removeFromParent(); player.dispose(); player = createPerson('player', 5, playerAppearance(),C.lifestyle);
+    if(inside){const pos=inside.room.avatar.root.position.clone(),heading=inside.room.avatar.root.rotation.y;inside.room.avatar.dispose();inside.room.avatar=dressIndoorAvatar(createPerson("player",5,playerAppearance(),C.lifestyle));inside.room.avatar.root.position.copy(pos);inside.room.avatar.root.rotation.y=heading;inside.room.scene.add(inside.room.avatar.root);}
+    player.root.removeFromParent();wardrobeDispose?.();player.dispose(); player = createPerson('player', 5, playerAppearance(),C.lifestyle);wardrobeDispose=applyWardrobe(player.root,C.kingpin.disguise>0?'':C.pursuits.wearing);
     player.root.position.set(P.x, 0, P.z); player.root.rotation.y = P.heading; scene.add(player.root);
   },
   save: () => saveGame(true),
@@ -1521,12 +1548,16 @@ if (offline && offline.seconds > 60) showWelcome(offline);
 saveGame(); // Claim offline earnings immediately so a reload cannot award them twice.
 
 // Interiors are safe, instanced visits: outdoor combat/economy pauses, and saves retain your street position.
+function dressIndoorAvatar(avatar:Person){
+ const dispose=avatar.dispose,trim=applyWardrobe(avatar.root,C.kingpin.disguise>0?'':C.pursuits.wearing);avatar.dispose=()=>{trim();dispose();};return avatar;
+}
 function enterInterior(def:InteriorDefinition){
   if(inside||P.car||P.deadT>0){feed('Exit your vehicle and finish respawning before entering.');return;}
   // Match the visible facade threshold, not a wide street-centre trigger.
   if(!atPoint(P.x,P.z,def,3)){target={...approach(def),name:`Entrance: ${def.name}`};feed('Travel to the building entrance first.');return;}
   balcony=false;$("hud").style.display="";
-  inside={room:createInterior(def,playerAppearance(),C.lifestyle,C.expansion.furniture),def,arrival:selectedLocation,x:0,z:5.8};
+  inside={room:createInterior(def,playerAppearance(),C.lifestyle,C.expansion.furniture,C.pursuits.decor[def.id]??0),def,arrival:selectedLocation,x:0,z:5.8};
+  dressIndoorAvatar(inside.room.avatar);
   joystick.reset();keys.clear();mouseDown=aimHeld=false;walkVelocity.set(0,0);sound.engine(null);sound.siren(false);
   target=null;selectedLocation=null;$('exitInterior').hidden=false;$('insideLabel').textContent=def.name;
   feed(`Entered ${def.name}. Desk ${businessHours(def.id,C.clock)?'OPEN':'CLOSED'} · City Life services and contacts. E at the floor emblem to inspect supplies; back desk for ${def.tab}. Shift to sprint, H for medkit. E at the exit leaves.`);
@@ -1546,7 +1577,7 @@ function interiorInteract(){
  if(inside.z>5){leaveInterior();return;}
  if(inside.z<-3.6&&Math.abs(inside.x)<3){
   if(inside.arrival?.id.startsWith('heist:')){handleRecon(inside.arrival.id.slice(6));return;}
-  empire.open('City Life');return;
+  empire.open(inside.def.tab==='City Pursuits'?'City Pursuits':'City Life');return;
  }
  feed('Walk to the back service desk for City Life services and contacts, or return to the teal exit.');
 }
@@ -1572,10 +1603,38 @@ function spawnStoryEncounter(){
  for(let i=0;i<count;i++){const [x,z]=freeSpot(def.x+(i-1)*4,def.z+8,5);const f=spawnFoe(i===0?'boss':'gangster',x,z,0);f.blockId=`story:${a.id}`;f.hp=i===0?(a.id==='crown'?220:140):65;f.aggro=true;}
  storySpawned=true;
 }
+function cityPursuitContext(){return {x:P.x,z:P.z,driving:!!P.car,taxi:P.car?.style===10,speed:P.car?.speed??0,vehicleKey:P.car?.key??'',condition:P.car?.condition??100,guards:foes.filter(f=>f.blockId==='city-pursuit'&&!f.dead).length,fired:noiseThisFrame};}
+function cleanupCityPursuitActors(){
+ taxiRider?.dispose();taxiRider=null;paceRival?.dispose();paceRival=null;$('cityActivityStatus').hidden=true;
+ for(const f of foes)if(f.blockId==='city-pursuit'){f.hp=0;f.dead=.01;f.blockId='retired-city';f.person.setVisible(false);coverPlanner.release(f.serial);}
+}
+function updateCityPursuits(dt:number){
+ const message=tickPursuits(C,dt,cityPursuitContext());if(message){feed(message);C.pursuits.report=message;saveGame();}
+ const a=C.pursuits.active,p=pursuitObjective(C);if(!a||!p){cleanupCityPursuitActors();return;}
+ target={...(a.kind==='race'||a.kind==='fishing'?p:approach(p)),name:p.name};selectedLocation=null;
+ if(a.kind==='race'){
+  if(!paceRival){paceRival=createCar(2,0xa862bd);scene.add(paceRival.root);const ghostMaterials:THREE.Material[]=[];const disposePace=paceRival.dispose;paceRival.dispose=()=>{ghostMaterials.forEach(m=>m.dispose());disposePace();};paceRival.root.traverse(o=>{if(o instanceof THREE.Mesh){const material=(o.material as THREE.Material).clone();material.transparent=true;material.opacity=.35;o.material=material;ghostMaterials.push(material);}});}
+  const race=RACES.find(m=>m.id===a.id)!,fraction=Math.min(.999,a.elapsed/race.par)*(race.points.length-1),index=Math.floor(fraction),t=fraction-index,from=race.points[index]!,to=race.points[Math.min(index+1,race.points.length-1)]!;
+  paceRival.root.position.set(from.x+(to.x-from.x)*t,0,from.z+(to.z-from.z)*t);paceRival.root.rotation.y=Math.atan2(to.x-from.x,to.z-from.z);paceRival.motion(12,0,false,time);paceRival.detail(false);
+  const result=pursuitInteract(C,cityPursuitContext());if(result&&result!=='Enter a road vehicle before taking the checkpoint.'&&(result!==C.pursuits.report||result==='Race checkpoint cleared.')){feed(result);C.pursuits.report=result;if(!C.pursuits.active){missionCompletionKey=`pursuit:race:${a.id}`;cleanupCityPursuitActors();}saveGame();}
+ }
+ if(a.kind==='taxi'){
+  if(!taxiRider){taxiRider=createPerson('civilian',14);scene.add(taxiRider.root);}
+  if(a.step===1&&a.boarded&&P.car?.rig.passengerSeat){const pos=P.car.rig.passengerSeat.clone().applyAxisAngle(new THREE.Vector3(0,1,0),P.car.h);taxiRider.root.position.set(P.car.x+pos.x,pos.y,P.car.z+pos.z);taxiRider.root.rotation.y=P.car.h;taxiRider.root.scale.setScalar(.7);taxiRider.pose('seated',0,time,0,dt);}
+  else {const location=approach(p);taxiRider.root.position.set(location.x+1,0,location.z);taxiRider.root.scale.setScalar(1);taxiRider.pose('idle',0,time,0,dt);}
+ }
+ if((a.kind==='bounty'||a.kind==='rival')&&a.step===0&&!a.spawned){
+  if(!foes.some(f=>f.blockId==='city-pursuit')){const entry=approach(p);for(let i=0;i<3;i++){const [x,z]=freeSpot(entry.x+(i-1)*3,entry.z+6,4);const f=spawnFoe('gangster',x,z,districtAt(entry.x,entry.z));f.blockId='city-pursuit';f.aggro=true;}}
+  a.spawned=true;saveGame();
+ }
+ if(a.kind==='fishing'){$('cityActivityStatus').hidden=false;$('cityActivityStatus').textContent=a.window>0?`BITE! ${a.window.toFixed(1)}s · INTERACT NOW`:a.cast>0?'Line cast · watch for the bite':'FISHING PIER · Interact to cast';}
+ else {$('cityActivityStatus').hidden=false;$('cityActivityStatus').textContent=p.name;}
+}
+
 function syncDisguiseAppearance(){
  const disguised=C.kingpin.disguise>0;if(disguised===disguiseVisual)return;disguiseVisual=disguised;
- player.dispose();player=createPerson('player',5,playerAppearance(),C.lifestyle);player.root.position.set(P.x,0,P.z);player.root.rotation.y=P.heading;scene.add(player.root);
- if(inside){const pos=inside.room.avatar.root.position.clone(),heading=inside.room.avatar.root.rotation.y;inside.room.avatar.dispose();inside.room.avatar=createPerson('player',5,playerAppearance(),C.lifestyle);inside.room.avatar.root.position.copy(pos);inside.room.avatar.root.rotation.y=heading;inside.room.scene.add(inside.room.avatar.root);}
+ wardrobeDispose?.();player.dispose();player=createPerson('player',5,playerAppearance(),C.lifestyle);wardrobeDispose=applyWardrobe(player.root,C.kingpin.disguise>0?'':C.pursuits.wearing);player.root.position.set(P.x,0,P.z);player.root.rotation.y=P.heading;scene.add(player.root);
+ if(inside){const pos=inside.room.avatar.root.position.clone(),heading=inside.room.avatar.root.rotation.y;inside.room.avatar.dispose();inside.room.avatar=dressIndoorAvatar(createPerson('player',5,playerAppearance(),C.lifestyle));inside.room.avatar.root.position.copy(pos);inside.room.avatar.root.rotation.y=heading;inside.room.scene.add(inside.room.avatar.root);}
 }
 function ventureContext(){return {x:P.x,z:P.z,driving:!!P.car,guards:foes.filter(f=>f.blockId==='venture'&&!f.dead).length,heat:C.heat,noise:noiseThisFrame,lockHeld:keys.has('KeyL')};}
 function cleanupVentureActors(){
@@ -1609,7 +1668,7 @@ function updateCompanion(dt:number){
  if(retreat&&atPoint(companion.x,companion.z,{x:30,z:4},5)){companion.id='';companion.injury=Math.max(30,100-companion.hp);feed('Companion reached home safely and is recovering.');return;}
  crewFire=Math.max(0,crewFire-dt);
  const enemy=!retreat?foes.filter(f=>!f.dead&&f.kind==='gangster'&&f.aggro&&dist2(companion.x,companion.z,f.x,f.z)<22&&hasLOS(companion.x,companion.z,f.x,f.z)).sort((a,b)=>dist2(a.x,a.z,companion.x,companion.z)-dist2(b.x,b.z,companion.x,companion.z))[0]:null;
- if(enemy){actor.root.rotation.y=Math.atan2(enemy.x-companion.x,enemy.z-companion.z);if(crewFire===0){crewFire=C.kingpin.personal.includes(companion.id)?1.2:1.8;tracer(new THREE.Vector3(companion.x,1.4,companion.z),new THREE.Vector3(enemy.x,1.2,enemy.z),0x6de7cb);damageFoe(enemy,C.kingpin.personal.includes(companion.id)?22:14,false);}}
+ if(enemy){actor.root.rotation.y=Math.atan2(enemy.x-companion.x,enemy.z-companion.z);if(crewFire===0){crewFire=C.kingpin.personal.includes(companion.id)?1.2:1.8;tracer(new THREE.Vector3(companion.x,1.4,companion.z),new THREE.Vector3(enemy.x,1.2,enemy.z),0x6de7cb);damageFoe(enemy,(C.kingpin.personal.includes(companion.id)?22:14)+Math.floor((C.pursuits.bond[companion.id]??0)/25),false);}}
  actor.root.position.set(companion.x,0,companion.z);actor.setVisible(dist2(P.x,P.z,companion.x,companion.z)<graphics.actorRange);actor.pose(enemy?'aim':movement?'run':'idle',movement,time,0,dt);
 }
 function updateKingpin(dt:number){
@@ -1722,7 +1781,7 @@ function updateStoryCity(dt:number){
  if(a.step===1&&storySpawned&&!foes.some(f=>!f.dead&&f.blockId===`story:${a.id}`)){a.step=2;storySpawned=false;feed('Rival encounter won. Return to Mama Nola with the evidence.');saveGame();}
  const objective=storyObjective(C);if(objective)target={x:objective.x,z:objective.z,name:objective.text};}
  DISCOVERIES.forEach((d,i)=>{discoveryMeshes[i]!.visible=!C.cityStories.discovered.includes(d.id);discoveryMeshes[i]!.rotation.y=time*.7;});
- streetLife.update(dt,time,P.x,P.z,C.heat,C.legacy.tutorial>=3,Cspeed=>{C.cityStories.trafficHits++;if(P.car){P.car.speed*=.65;impactVehicle(P.car,Cspeed,.1);P.car.rig.damage(P.car.condition);hurtRescue(Cspeed);hurt(Cspeed*.25);if(P.deadT<=0)addHeat(C,2);}else hurt(4);shake=.3;},(x,z)=>{if(P.deadT<=0&&foes.filter(f=>f.kind==='cop'&&!f.dead).length<8){const p=freeSpot(x,z,3);spawnFoe('cop',p[0],p[1],-1);feed('Police cruiser stopped — uniformed officer deploying.');}},pursuit,vehicles.filter(v=>v!==P.car).map(v=>({x:v.x,z:v.z})));
+ streetLife.update(dt,time,P.x,P.z,C.heat,C.legacy.tutorial>=3,Cspeed=>{C.cityStories.trafficHits++;if(P.car){P.car.speed*=.65;impactVehicle(P.car,Cspeed,.1);P.car.rig.damage(P.car.condition);hurtRescue(Cspeed);if(C.pursuits.active?.kind==='taxi')C.pursuits.active.condition=Math.max(0,C.pursuits.active.condition-Cspeed);hurt(Cspeed*.25);if(P.deadT<=0)addHeat(C,2);}else hurt(4);shake=.3;},(x,z)=>{if(P.deadT<=0&&foes.filter(f=>f.kind==='cop'&&!f.dead).length<8){const p=freeSpot(x,z,3);spawnFoe('cop',p[0],p[1],-1);feed('Police cruiser stopped — uniformed officer deploying.');}},pursuit,vehicles.filter(v=>v!==P.car).map(v=>({x:v.x,z:v.z})));
  if(P.car&&streetLife.near(P.x,P.z))P.car.speed*=Math.exp(-dt*3);
 }
 
@@ -1869,6 +1928,7 @@ function frame() {
   if (!playing || managing || shopOpen || P.deadT > 0) { sound.engine(null); sound.siren(false); }
   sound.world(playing&&!managing&&!shopOpen&&!document.hidden);
   sound.intensity(playing&&!managing&&!inside&&(boosting||C.heat>=30),conditions(C.clock).night);
+  if(time>bossWarningUntil)$('bossWarning').hidden=true;
   if(neighborhoodUntil&&time>neighborhoodUntil)$('neighborhoodIntro').hidden=true;
   updateCamera(dt);
   if(shake>0&&C.accessibility.shake>0&&!matchMedia('(prefers-reduced-motion: reduce)').matches){shake=Math.max(0,shake-dt*2);camera.position.x+=(Math.random()-.5)*shake*.2*C.accessibility.shake;camera.position.y+=(Math.random()-.5)*shake*.1*C.accessibility.shake;}
