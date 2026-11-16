@@ -102,13 +102,13 @@ export function buyVehicle(c: Campaign, id: string) {
   c.clean -= v.price; c.expansion.cars.push({ id, engine: 0, armor: 0, color: 0x682db5 }); return true;
 }
 export function upgradeVehicle(c: Campaign, index: number, armor: boolean) {
-  const car = c.expansion.cars[index]; if (!car || c.expansion.runs.some(r => r.car === index)) return false;
+  const car = c.expansion.cars[index]; if (!car || c.kingpin.vehicles[index]?.impounded || c.expansion.runs.some(r => r.car === index)) return false;
   const key = armor ? 'armor' : 'engine'; const cost = Math.round(250 * (car[key] + 1)*(loyal(c,'mechanic').length?.75:1));
   if (car[key] >= 3 || c.clean < cost || c.expansion.parts < 2) return false;
   c.clean -= cost; c.expansion.parts -= 2; car[key]++; return true;
 }
 export function startRun(c: Campaign, index: number) {
-  const car = c.expansion.cars[index]; if (!car || c.expansion.runs.some(r => r.car === index)) return false;
+  const car = c.expansion.cars[index]; if (!car || c.kingpin.vehicles[index]?.impounded || c.expansion.runs.some(r => r.car === index)) return false;
   const model = VEHICLES.find(v => v.id === car.id)!;
   if (c.inventory[0]! < model.capacity) return false;
   c.inventory[0]! -= model.capacity;
@@ -157,7 +157,7 @@ export const MISSIONS = [
   { id: 'mechanic', name: 'Chop Shop Parts Run', desc: 'Collect mechanical crates for garage upgrades. +6 parts on completion.', pay: 450, duration: 180, steps: [{x:-60,z:0,name:'Meet the mechanic'}, {x:-120,z:0,name:'Collect the parts crate'}, {x:-60,z:0,name:'Return the parts'}] },
 ] as const;
 export function startMission(c: Campaign, id: string) {
-  const m = MISSIONS.find(m => m.id === id); if (!m || c.living.active || c.expansion.mission) return false;
+  const m = MISSIONS.find(m => m.id === id); if (!m || c.kingpin.active || c.living.active || c.expansion.mission) return false;
   c.expansion.mission = { id, step: 0, remaining: m.duration }; return true;
 }
 export function missionInteract(c: Campaign, x: number, z: number): string | null {
