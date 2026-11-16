@@ -94,14 +94,17 @@
       </div>
       <div class="hud-bottom">
       <div id="feed"></div>
-      <canvas id="mini" width="180" height="180"></canvas>
+      <div class="minimap-card"><canvas id="mini" width="180" height="180" aria-label="North-up minimap: roads, route, police, businesses and crew"></canvas><small id="miniLegend">△ Police · □ Business · ◆ Route / crew<br />Dashed white: advisory street route · blue ring: search</small></div>
       <div id="speed"></div>
       <div id="prompt"></div>
       </div>
       <div id="cross"></div><div id="combatFeedback" aria-live="polite"></div>
-      <div id="hurt"></div>
+      <div id="hurt"></div><div id="damageDirection" aria-label="Incoming damage direction" hidden>▲</div>
+      <div id="interactionGlow" hidden></div><div id="vehicleWarning" role="status" hidden></div>
+      <section id="missionPanel" aria-label="Mission briefing and outcome" hidden><span id="missionPortrait" aria-hidden="true"></span><div><small id="missionSpeaker"></small><h2 id="missionTitle"></h2><p id="missionDialogue"></p><p id="missionStage"></p></div><button id="missionDismiss" aria-label="Dismiss mission card">×</button></section>
+      <div id="neighborhoodIntro" hidden><strong id="neighborhoodName"></strong><span id="neighborhoodTag"></span></div><div id="replayBanner" role="status" hidden></div>
     </div>
-    <nav id="toolbar" aria-label="Game controls"><button id="manage">EMPIRE / MAP · M</button><button id="paradeView" hidden>PARADE BALCONY</button><button id="exitInterior" hidden>EXIT BUILDING</button><button id="openCityMap">CITY MAP</button><button id="contextAction" hidden>E · INTERACT</button><button id="useMedkit">MEDKIT · H (0)</button><button id="clearWaypoint">CLEAR ROUTE</button><button id="pauseButton">PAUSE / SAVE</button><button id="mute" aria-label="Toggle mute">MUTE</button></nav>
+    <nav id="toolbar" aria-label="Game controls"><button id="manage">EMPIRE / MAP · M</button><button id="paradeView" hidden>PARADE BALCONY</button><button id="exitInterior" hidden>EXIT BUILDING</button><button id="openCityMap">CITY MAP</button><button id="contextAction" hidden>E · INTERACT</button><button id="useMedkit">MEDKIT · H (0)</button><button id="clearWaypoint">CLEAR ROUTE</button><button id="stopReplay" hidden>EXIT REPLAY</button><button id="pauseButton">PAUSE / SAVE</button><button id="mute" aria-label="Toggle mute">MUTE</button></nav>
     <div id="touchControls" aria-label="Touch game controls">
       <div class="touchMove"><div id="moveJoystick" role="group" aria-label="Movement joystick" aria-valuetext="Centered"><span class="joystick-label">MOVE / DRIVE</span><span class="joystick-knob"></span></div></div>
       <div class="touchActions"><button data-control="ShiftLeft">SPRINT / NITRO</button><button data-control="Space">BRAKE</button><button data-control="KeyB">HANDBRAKE</button><button data-control="KeyE">INTERACT</button><button data-control="fire">FIRE</button><button data-control="aim">AIM</button><button data-control="weapon">WEAPON</button><button data-control="reload">RELOAD</button><button data-control="cover">COVER</button><button data-control="takedown">TAKEDOWN · T</button><button data-control="distract">DISTRACT · G</button><button data-control="KeyL">HOLD LOCKPICK · L</button></div>
@@ -121,6 +124,8 @@
       <label class="quality"><input type="checkbox" id="touchMode" /> Enable touch joystick & action buttons</label>
       <label class="quality" for="quality">Graphics<select id="quality"><option value="auto">Auto · adaptive mobile performance</option><option value="balanced">Balanced · neon bloom</option><option value="cinematic">Cinematic · sharper bloom</option><option value="performance">Performance · reduced effects / no shadows</option></select></label><p id="graphicsStatus" aria-live="polite"></p>
     </div>
+    <section id="replayLoading" class="overlay" role="status" aria-label="Preparing safe replay" hidden><h1>PREPARING PRACTICE</h1><p>Saving your original campaign before starting a disposable replay…</p></section>
+    <section id="replayResult" class="overlay" role="dialog" aria-modal="true" aria-label="Replay result" hidden><h1>PRACTICE RESULT</h1><p id="replayResultText"></p><button id="replayReturn">RETURN TO SAVED CAMPAIGN</button></section>
     <section id="storyEpilogue" class="overlay" role="dialog" aria-modal="true" aria-label="City takeover ending" hidden><h1>THE FUTURE OF CRESCENT CITY</h1><p id="storyEpilogueText"></p><button id="storyEpilogueClose">CONTINUE FREE ROAM</button></section>
     <div id="end" class="overlay" style="display:none"><h1 id="endTitle"></h1><p id="endText"></p><button id="endLegacy">SHARE CARD / RETIRE</button><button onclick="location.reload()">KEEP BUILDING</button></div>
     <script type="module" src="/src/main.ts"></script>

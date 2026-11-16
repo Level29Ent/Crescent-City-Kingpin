@@ -80,6 +80,10 @@ export class AudioController {
     oscillator.connect(gain).connect(out); oscillator.start(); oscillator.stop(t + duration + .03);
     oscillator.onended = () => { oscillator.disconnect(); gain.disconnect(); };
   }
+  missionCue(kind:'contact'|'success'|'failure'){
+    if(!this.ctx)return;const frequencies=kind==='success'?[523,659,784]:kind==='failure'?[294,220]:[440,554];
+    frequencies.forEach((frequency,i)=>{this.tone(this.buses.sfx,frequency,kind==='failure'?frequency*.8:frequency,.12+i*.08,.09,'triangle');});
+  }
   sfx(name: SfxName, volume = 1) {
     if (!this.ctx) return;
     const bus = this.buses.sfx;

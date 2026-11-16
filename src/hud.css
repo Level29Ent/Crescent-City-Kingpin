@@ -195,3 +195,36 @@ body.touch-enabled .touchActions { column-gap:4px; row-gap:4px; }
 body.touch-enabled #touchControls button { line-height:1.15; }
 #storyEpilogue { z-index:30; padding:24px; box-sizing:border-box; }
 #storyEpilogue p { max-height:50vh; overflow:auto; }
+
+/* Explicit scalable text targets avoid enlarging canvases, reticles or world geometry. */
+:root { --game-text-scale:1; }
+#empireContent p,#empireContent label,#empireContent button,#empireContent select { font-size:calc(13px * var(--game-text-scale)); }
+#obj,#arrivalHelp,#prompt,#feed,#city,#weapon,#heat,#streak,#questTracker { font-size:calc(12px * var(--game-text-scale)); }
+.minimap-card { grid-area:mini;justify-self:end;max-width:210px; }
+.minimap-card #mini { display:block; }
+#miniLegend { display:block;max-width:190px;font-size:calc(9px * var(--game-text-scale));color:#def1ef;background:#102331dc;padding:4px;line-height:1.35; }
+#missionPanel { position:absolute;left:50%;top:27%;transform:translateX(-50%);display:flex;gap:10px;width:min(620px,76vw);padding:12px;background:#102635f2;border:2px solid #bca46e;border-radius:12px;box-sizing:border-box;pointer-events:auto;z-index:4;max-height:32vh;overflow:auto; }
+#missionPanel h2 { margin:4px 0;font-size:calc(17px * var(--game-text-scale));color:#ffdf9a; }
+#missionPanel p { margin:4px 0;font-size:calc(12px * var(--game-text-scale));line-height:1.4; }
+#missionPanel small {color:#9ee5db;}
+#missionPortrait { display:grid;place-items:center;min-width:42px;height:48px;border-radius:50%;background:#42677c;color:#fff1c8;font-weight:bold; }
+#missionDismiss { align-self:start;min-width:32px; }
+#missionPanel[data-kind="success"] {border-color:#8fe5bd;}
+#missionPanel[data-kind="failure"] {border-color:#ffbf74;}
+#damageDirection {position:absolute;left:50%;top:50%;width:120px;height:120px;text-align:center;color:#ffca70;font-size:24px;text-shadow:0 2px 4px #000;pointer-events:none;}
+#interactionGlow {position:absolute;left:50%;bottom:calc(var(--toolbar-height) + var(--touch-height) + 18px);transform:translateX(-50%);max-width:72vw;padding:6px 12px;border:2px solid #fff1a7;background:#183d46ed;border-radius:8px;color:#fff4be;font-size:calc(12px * var(--game-text-scale));}
+#vehicleWarning {position:absolute;right:12px;top:42%;padding:8px;background:#562b1cef;border:2px solid #ffd095;color:#fff0c9;font-weight:800;font-size:calc(12px * var(--game-text-scale));}
+#neighborhoodIntro {position:absolute;left:50%;top:18%;transform:translateX(-50%);display:flex;flex-direction:column;text-align:center;background:#102735d9;border-bottom:3px solid #dfbf79;padding:8px 20px;max-width:72vw;}
+#neighborhoodName {font-size:calc(22px * var(--game-text-scale));color:#ffe7a7;}
+#neighborhoodTag {font-size:calc(12px * var(--game-text-scale));color:#deeeed;}
+#replayBanner {position:absolute;left:50%;top:0;transform:translateX(-50%);background:#694b22;color:white;padding:5px 14px;font-weight:bold;}
+#replayResult {z-index:40;padding:20px;box-sizing:border-box;}
+.binding-row {display:flex;justify-content:space-between;align-items:center;gap:12px;margin:6px 0;}
+body[data-map-palette="accessible"] #objectiveArrow {border-bottom-color:#fff17c;}
+@media(max-width:760px){#missionPanel{top:31%;width:94vw;max-height:27vh;padding:8px;}#missionPortrait{min-width:32px;height:38px;}#miniLegend{max-width:125px;font-size:9px;}#neighborhoodIntro{top:24%;}#neighborhoodName{font-size:18px;}}
+@media(max-height:550px){#missionPanel{top:25%;max-height:36vh;}#missionPanel #missionDialogue{max-height:60px;overflow:auto;}#miniLegend{display:none;}#neighborhoodIntro{top:18%;padding:4px 12px;}}
+
+#missionPortrait { min-width:48px;height:auto;background:none; }
+#missionPortrait canvas { width:48px;height:56px;border-radius:8px; }
+#replayLoading {z-index:45;padding:20px;box-sizing:border-box;}
+.minimap-card #mini {max-width:100%;}

@@ -1,3 +1,10 @@
+import {contactPortrait} from './contact-portrait.ts';
+import {inspectNeighborhood} from './field-notes.ts';
+import {missionCard,missionProof,ledger,type MissionCard} from './mission-presentation.ts';
+import {canonicalKey,keyLabel,NEIGHBORHOODS,palette,damageAngle,missionDelta} from './polish.ts';
+import {prepareReplay,replayActive,replayCompleted,replayVerdict,canPersistReplay,type ReplayChoice} from './mission-replay.ts';
+import {createMapRoute,drawRoads,drawMapIcon,miniPoint} from './minimap.ts';
+import {addNeighborhoodArt} from './neighborhood-art.ts';
 import {districtReadyForBoss} from './combat-progress.ts';
 import {exitBeforeActivity,vehicleExit} from './interaction-policy.ts';
 import {applyLicensePlate} from './vehicle-plates.ts';
@@ -57,6 +64,8 @@ new ResizeObserver(() => {
 const store = new SaveStore();
 const loaded = await store.load();
 const C = loaded?.campaign ?? newCampaign();
+let replayPreparing=false;
+let practice:null|{choice:ReplayChoice;challenge:'finish'|'quiet'|'speed';elapsed:number;shots:number;finished:boolean}=null;
 const offline = loaded ? offlineProgress(C, Math.max(0, (Date.now() - loaded.savedAt) / 1000)) : null;
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -103,6 +112,7 @@ const abort = new AbortController();
 const sound = createSound(abort.signal);
 sound.configure(C.audio);
 const scenery = createScenery(scene);
+addNeighborhoodArt(scene);
 const impacts = createImpacts(scene);
 const tireSmoke=createImpacts(scene,true);
 let lastCleaned=C.stats.cleaned;
@@ -149,6 +159,9 @@ let policeReinforcement=0;
 let crewActor:Person|null=null;let crewActorId='';let crewNav=routeAgent(30,4);let crewFire=0;
 let distractionPoint:null|{x:number;z:number}=null;
 let noiseThisFrame=false;let theftNotice=0;
+let missionCompletionKey:string|null=null;
+let watchedMission:null|{card:MissionCard;before:ReturnType<typeof ledger>}=null;
+let noticeUntil=0;let neighborhoodUntil=0;let conditionBand=100;
 let yaw = SPAWN.heading;
 let pitch = -0.15;
 let time = 0;
@@ -286,49 +299,38 @@ function feed(text: string) {
 const sfx = (n: SfxName, g = 1) => sound.sfx(n, g);
 const mini = $<HTMLCanvasElement>("mini");
 const mg = mini.getContext("2d")!;
+const mapRoute=createMapRoute();
 
 function incomeRate(): number { return revenuePerMinute(C) / 60; }
 
 function drawMini() {
-  const S = 0.45;
-  mg.fillStyle = "#14101c";
-  mg.fillRect(0, 0, 180, 180);
-  mg.save();
-  mg.translate(90, 90);
-  const px = P.car ? P.car.x : P.x;
-  const pz = P.car ? P.car.z : P.z;
-  mg.fillStyle = "#3a3048";
-  for (const b of BUILDINGS) {
-    if (Math.abs(b.x0 - px) > 220 || Math.abs(b.z0 - pz) > 220) continue;
-    mg.fillRect((b.x0 - px) * S, (b.z0 - pz) * S, (b.x1 - b.x0) * S, (b.z1 - b.z0) * S);
-  }
-  const dot = (x: number, z: number, c: string, r = 3) => {
-    const dx = (x - px) * S;
-    const dz = (z - pz) * S;
-    const m = Math.hypot(dx, dz);
-    const k = m > 80 ? 80 / m : 1;
-    mg.fillStyle = c;
-    mg.beginPath();
-    mg.arc(dx * k, dz * k, r, 0, 6.3);
-    mg.fill();
-  };
-  for (const b of BUSINESSES) dot(approach(b).x, approach(b).z, P.captured.has(b.district) ? "#6cf06c" : "#ffd23a", 4);
-  for (const f of foes) if (!f.dead && f.kind !== "civilian") dot(f.x, f.z, f.kind === "cop" ? "#4a8aff" : f.kind === "boss" ? "#ff40ff" : "#ff4040", f.kind === "boss" ? 4 : 2.5);
-  if (P.job) dot(P.job.x, P.job.z, "#40f0ff", 4);
-  if (target) dot(target.x, target.z, '#ffffff', 5);
-  for(const p of pickups)dot(p.x,p.z,p.kind===0?'#f5c34a':p.kind===1?'#9c52e0':'#47d7c1',2);
-  for(const b of mapLocations())dot(b.x,b.z,b.category==='Heists'?'#ffbe79':b.category==='Buildings & homes'?'#82e6d1':'#b9adce',1.5);
-  for(const b of INTERIORS)dot(approach(b).x,approach(b).z,'#82e6d1',2.5);
-  for (const b of BLOCKS) dot(b.x, b.z, C.owned.includes(b.id) ? '#8cf08c' : '#dd8bff', 3);
-  mg.restore();
-  mg.fillStyle = "#fff";
-  mg.beginPath();
-  mg.arc(90, 90, 4, 0, 6.3);
-  mg.fill();
+ const S=.45,focus={x:P.x,z:P.z},colors=palette(C.accessibility.palette);
+ mg.fillStyle='#101d29';mg.fillRect(0,0,180,180);mg.save();mg.beginPath();mg.rect(4,4,172,172);mg.clip();mg.translate(90,90);
+ drawRoads(mg,focus,S);
+ mg.fillStyle='#283c48';for(const b of BUILDINGS)if(Math.abs(b.x0-P.x)<220&&Math.abs(b.z0-P.z)<220)mg.fillRect((b.x0-P.x)*S,(b.z0-P.z)*S,(b.x1-b.x0)*S,(b.z1-b.z0)*S);
+ if(pursuit.phase==='search'){
+  mg.fillStyle='#55bfff28';mg.strokeStyle=colors.police;mg.setLineDash([4,3]);mg.beginPath();mg.arc((pursuit.lastX-P.x)*S,(pursuit.lastZ-P.z)*S,55*S,0,Math.PI*2);mg.fill();mg.stroke();mg.setLineDash([]);
+ }
+ const destination=target??P.job;
+ if(destination){const path=mapRoute.path(focus,destination);mg.strokeStyle=colors.route;mg.lineWidth=2;mg.setLineDash([4,2]);mg.beginPath();path.forEach((p,i)=>i?mg.lineTo((p.x-P.x)*S,(p.z-P.z)*S):mg.moveTo((p.x-P.x)*S,(p.z-P.z)*S));mg.stroke();mg.setLineDash([]);}
+ const icon=(p:{x:number;z:number},color:string,shape:'circle'|'square'|'diamond'|'triangle',size=3,clamp=false)=>{const q=miniPoint(p,focus);if(q.edge&&!clamp)return;drawMapIcon(mg,q.x,q.y,color,shape,size);};
+ for(const b of BUSINESSES)icon(approach(b),colors.business,'square');
+ for(const b of INTERIORS)if(dist2(P.x,P.z,b.x,b.z)<70)icon(approach(b),colors.door,'square',2);
+ for(const f of foes)if(!f.dead&&f.kind!=='civilian')icon(f,f.kind==='cop'?colors.police:colors.enemy,f.kind==='cop'?'triangle':'circle',f.kind==='boss'?4:2.5);
+ for(const c of streetLife.observers())icon(c,colors.police,'triangle');
+ if(C.kingpin.companion.id)icon(C.kingpin.companion,colors.crew,'diamond',4,true);
+ if(C.living.active?.id==='rescue')icon(C.living.active.passenger,colors.crew,'diamond',3);
+ if(destination)icon(destination,colors.route,'diamond',5,true);
+ mg.restore();mg.fillStyle='#ffffff';mg.save();mg.translate(90,90);mg.rotate(Math.PI-P.heading);mg.beginPath();mg.moveTo(0,-6);mg.lineTo(4,5);mg.lineTo(-4,5);mg.closePath();mg.fill();mg.restore();
+ mg.fillStyle='#e8f5ef';mg.font='bold 10px sans-serif';mg.fillText('N',85,13);
 }
 
 function updateHud() {
   document.body.dataset.tutorial=String(C.legacy.tutorial);
+  document.body.dataset.mapPalette=C.accessibility.palette;
+  document.documentElement.style.setProperty('--game-text-scale',String(C.accessibility.textScale));
+  const labels:Record<string,string>={KeyE:'INTERACT',KeyL:'HOLD LOCKPICK',KeyB:'HANDBRAKE',KeyT:'TAKEDOWN',KeyG:'DISTRACT'};
+  for(const [key,label]of Object.entries(labels)){const button=document.querySelector<HTMLElement>(`[data-control="${key==='KeyT'?'takedown':key==='KeyG'?'distract':key}"]`);if(button)button.textContent=`${label} · ${keyLabel(C.accessibility.bindings[key as keyof typeof C.accessibility.bindings])}`;}
   $('graphicsStatus').textContent=`${quality.value.toUpperCase()} · ${Math.round(graphics.pixelRatio*100)}% render scale${quality.value==='auto'?` · ${Math.round(frameBudget.fps)} FPS estimate`:''}`;
   const controls=C.living.controls;
   document.body.classList.toggle('left-handed',controls.leftHanded);
@@ -336,6 +338,11 @@ function updateHud() {
   const actions=document.querySelector<HTMLElement>('.touchActions')!;
   if(actions.style.scale!==String(controls.scale)){actions.style.scale=String(controls.scale);measureTouchControls();}
   $('touchControls').style.opacity=String(controls.opacity);
+  $('stopReplay').hidden=!practice;
+  $('vehicleWarning').hidden=!P.car||P.car.condition>35;
+  if(P.car&&P.car.condition<=35)$('vehicleWarning').textContent=`VEHICLE ${Math.ceil(P.car.condition)}% · repair at a workshop`;
+  const band=P.car?P.car.condition<=15?15:P.car.condition<=35?35:100:100;
+  if(band<conditionBand){feed('Vehicle condition critical. Slow down and find a workshop.');sound.missionCue('failure');}conditionBand=band;
   $("cash").textContent = `$${Math.floor(C.clean).toLocaleString()} clean`;
   $("dirty").textContent = `$${Math.floor(C.dirty).toLocaleString()} dirty`;
   $("mute").textContent = C.audio.muted ? 'UNMUTE' : 'MUTE';
@@ -409,31 +416,34 @@ let mouseDown = false;
 let lookDragging=false;
 let aimHeld = false;
 addEventListener("keydown", (e) => {
+  if(replayPreparing)return;
   if ((e.target as HTMLElement)?.matches("input, select, textarea")) return;
-  if(!$('storyEpilogue').hidden){if(e.code==='Enter'||e.code==='Escape')$('storyEpilogueClose').click();return;}
-  if(introActive){if(e.code==='Escape'||e.code==='Space')finishIntro();return;}
-  if (balcony) {if(e.code === "Escape") $("paradeView").click(); return;}
-  if (e.code === 'Escape' && inside && !managing) { pauseRun(); return; }
+  const action=canonicalKey(C.accessibility,e.code);if(action===null)return;
+  if(!$('replayResult').hidden){if(action==='Enter'||action==='Escape')location.reload();return;}
+  if(!$('storyEpilogue').hidden){if(action==='Enter'||action==='Escape')$('storyEpilogueClose').click();return;}
+  if(introActive){if(action==='Escape'||action==='Space')finishIntro();return;}
+  if (balcony) {if(action === "Escape") $("paradeView").click(); return;}
+  if (action === 'Escape' && inside && !managing) { pauseRun(); return; }
   if(!$('pauseMenu').hidden)return;
-  if (e.code === "KeyM") { e.preventDefault(); if (!e.repeat) { if (empire.isOpen()) empire.close(); else empire.open(); } return; }
+  if (action === "KeyM") { e.preventDefault(); if (!e.repeat) { if (empire.isOpen()) empire.close(); else empire.open(); } return; }
   if (managing) return;
-  if (["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.code)) e.preventDefault();
-  if (e.code === "Escape" && playing && !shopOpen) {pauseRun();return;}
-  if (e.repeat && ['KeyE','KeyR','KeyM'].includes(e.code)) return;
-  keys.add(e.code);
+  if (["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(action)) e.preventDefault();
+  if (action === "Escape" && playing && !shopOpen) {pauseRun();return;}
+  if (e.repeat && ['KeyE','KeyR','KeyM'].includes(action)) return;
+  keys.add(action);
   if (!playing || shopOpen || managing) return;
-  if (e.code === "KeyE") interact();
-  if(e.code==='KeyH'&&!e.repeat)healWithMedkit();
-  if(e.code==='KeyC'&&!e.repeat)crouched=!crouched;
-  if(e.code==='KeyT'&&!e.repeat)nonlethalTakedown();
-  if(e.code==='KeyG'&&!e.repeat)throwDistraction();
-  if (e.code === "KeyR") reloadWeapon();
-  if (/^Digit[1-6]$/.test(e.code)) {
-    const w = Number(e.code.slice(-1)) - 1;
+  if (action === "KeyE") interact();
+  if(action==='KeyH'&&!e.repeat)healWithMedkit();
+  if(action==='KeyC'&&!e.repeat)crouched=!crouched;
+  if(action==='KeyT'&&!e.repeat)nonlethalTakedown();
+  if(action==='KeyG'&&!e.repeat)throwDistraction();
+  if (action === "KeyR") reloadWeapon();
+  if (/^Digit[1-6]$/.test(action)) {
+    const w = Number(action.slice(-1)) - 1;
     if (P.owned[w]) { P.weapon = w; reloading = 0; }
   }
 });
-addEventListener("keyup", (e) => keys.delete(e.code));
+addEventListener("keyup", (e) => {const action=canonicalKey(C.accessibility,e.code);if(action)keys.delete(action);});
 addEventListener("blur", () => { keys.clear(); joystick.reset(); lookDragging=false;mouseDown = aimHeld = false; });
 addEventListener("mousedown", (e) => {
   if (!playing || managing || shopOpen || e.target !== renderer.domElement || (e as MouseEvent & {sourceCapabilities?:{firesTouchEvents:boolean}}).sourceCapabilities?.firesTouchEvents) return;
@@ -584,15 +594,16 @@ function closeShop() {
 
 // ───────── interaction ─────────
 function interact() {
-  if(P.deadT>0)return;
+  if(P.deadT>0||practice?.finished||replayPreparing)return;
   if(inside){interiorInteract();return;}
+  if(!P.car&&!P.job&&!(C.legacy.daily&&!C.legacy.daily.finished)&&!missionCard(C)&&C.legacy.tutorial>=3&&NEIGHBORHOODS.some(n=>!C.districtVisits.includes(n.id)&&atPoint(P.x,P.z,n,5))){const note=inspectNeighborhood(C,P.x,P.z);if(note){feed(note);saveGame();return;}}
   // The recovery wagon is parked at a facade; boarding it must beat the public-door trigger.
   if(!P.car&&C.living.active?.id==='recovery'){
     const wagon=vehicles.find(v=>v.operation&&dist2(P.x,P.z,v.x,v.z)<4.5);
     if(wagon){P.car=wagon;lastDriven=wagon;sfx('door');return;}
   }
   if(P.car&&exitBeforeActivity(C,P.x,P.z,{recovery:!!P.car.operation,condition:P.car.condition,passengerBoarded:!!C.living.active?.passenger.boarded&&passengerVehicle===P.car})){exitCar();return;}
-  if(C.kingpin.active){const previousKind=C.kingpin.active.kind,previousStep=C.kingpin.active.step,result=ventureInteract(C,ventureContext());if(result){feed(result);C.kingpin.report=result;if(!C.kingpin.active||C.kingpin.active.step!==previousStep)cleanupVentureActors();if(!C.kingpin.active){target=null;selectedLocation=null;if(previousKind==='takeover'&&C.kingpin.takeoverWon){$('storyEpilogueText').textContent=result;$('storyEpilogue').hidden=false;playing=false;keys.clear();document.exitPointerLock();}}saveGame();return;}}
+  if(C.kingpin.active){const previousKind=C.kingpin.active.kind,previousStep=C.kingpin.active.step,previousKey=missionCard(C)?.key,result=ventureInteract(C,ventureContext());if(result){if(previousKey&&!C.kingpin.active&&(result.startsWith('Relief delivered.')||result.startsWith('Witness safe.')))missionCompletionKey=previousKey;feed(result);C.kingpin.report=result;if(!C.kingpin.active||C.kingpin.active.step!==previousStep)cleanupVentureActors();if(!C.kingpin.active){target=null;selectedLocation=null;if(previousKind==='takeover'&&C.kingpin.takeoverWon){$('storyEpilogueText').textContent=result;$('storyEpilogue').hidden=false;playing=false;keys.clear();document.exitPointerLock();}}saveGame();return;}}
   if(C.living.active){
     const result=operationInteract(C,operationContext());
     if(result){feed(result);if(!C.living.active){cleanupOperationActors();target=null;selectedLocation=null;sfx('cash');}saveGame();return;}
@@ -623,7 +634,9 @@ function interact() {
   }
   if (inside) {interiorInteract();return;}
   if (P.deadT > 0) return;
+  const sideBefore=C.expansion.mission?.id;
   const advanced = missionInteract(C,P.x,P.z);
+  if(advanced&&sideBefore&&!C.expansion.mission)missionCompletionKey=`side:${sideBefore}`;
   if(advanced) {if(!C.expansion.mission){target=null;selectedLocation=null;}feed(advanced); sfx('cash'); saveGame(); return;}
   const heist=HEISTS.find(h=>atPoint(P.x,P.z,h,10)&&target?.name.toLowerCase().includes(h.name.toLowerCase()));
   if(heist){const entry=destinationInterior(heist);if(entry){selectedLocation=mapLocations().find(r=>r.id===`heist:${heist.id}`)??null;enterInterior(entry);return;}}
@@ -670,8 +683,9 @@ const _d = new THREE.Vector3();
 const _e = new THREE.Vector3();
 let hitFlash = 0;
 
-function hurt(dmg: number) {
+function hurt(dmg: number,source?:{x:number;z:number}) {
   if (P.deadT > 0 || P.won) return;
+  if(source){$('damageDirection').style.transform=`translate(-50%,-50%) rotate(${-damageAngle(P,source,yaw)}rad)`;$('damageDirection').hidden=false;setTimeout(()=>$('damageDirection').hidden=true,700);}
   dmg*=1-trained(C,'muscle')*.03;
   dmg*=coverReduction(coverStations.some(p=>dist2(P.x,P.z,p.x,p.z)<2.4),crouched&&!P.car);
   const soak = Math.min(P.armor, dmg * 0.6);
@@ -778,6 +792,7 @@ function fire() {
   if (P.deadT>0 || P.car || C.legacy.tutorial===0 || inside || reloading > 0 || time - P.lastFire < w.cd) return;
   if (ammo[P.weapon]! <= 0) {reloadWeapon();return;}
   ammo[P.weapon]!--;
+  if(practice)practice.shots++;
   P.lastFire = time; operationFired=true;noiseThisFrame=true;C.kingpin.disguise=0;
   sfx(P.weapon === 2 ? "shotgun" : P.weapon === 1 || P.weapon===3 ? "smg" : "pistol");
   // aim point from the camera's centre ray
@@ -940,7 +955,7 @@ function updateFoes(dt: number) {
           tracer(new THREE.Vector3(sx, 1.35, sz), new THREE.Vector3(tx, 1.2, tz), 0xff8a5a);
           if(hitsCrew){if(injureCompanion(C,f.kind==='boss'?12:8)){feed('Companion injured. They withdrew; 90s recovery and -8 loyalty.');saveGame();}}
           else if(stray)hurtRescue(8);
-          else if (Math.random() < 0.5 - d / 150) hurt(f.kind === "boss" ? 9 : f.kind === "cop" ? 5 : 6);
+          else if (Math.random() < 0.5 - d / 150) hurt(f.kind === "boss" ? 9 : f.kind === "cop" ? 5 : 6,{x:f.x,z:f.z});
         }
       }
     }
@@ -1132,7 +1147,7 @@ function updateEconomy(dt: number) {
       P.job = null;target=null;selectedLocation=null;saveGame();
     }
   }
-  if (C.clean >= GOAL && !P.won && !C.expansion.completed.includes("millionKingpin")) {
+  if (!practice && C.clean >= GOAL && !P.won && !C.expansion.completed.includes("millionKingpin")) {
     C.expansion.completed.push("millionKingpin");
     P.won = true;
     document.exitPointerLock();
@@ -1154,7 +1169,9 @@ function prompt() {
     const cache=DISCOVERIES.find(d=>!C.cityStories.discovered.includes(d.id)&&atPoint(P.x,P.z,d,6));
     const storyContact=storyObjective(C);
     const entrance=nearestEntrance(P.x,P.z,3);
-    if(work&&atPoint(P.x,P.z,work,7))t='E / INTERACT: work order';
+    const landmark=C.legacy.tutorial>=3&&!P.job&&!(C.legacy.daily&&!C.legacy.daily.finished)&&!missionCard(C)&&NEIGHBORHOODS.find(n=>!C.districtVisits.includes(n.id)&&atPoint(P.x,P.z,n,5));
+    if(landmark)t=`INTERACT: record ${landmark.name} field note`;
+    else if(work&&atPoint(P.x,P.z,work,7))t='E / INTERACT: work order';
     else if(storyContact&&C.cityStories.active?.step!==1&&atPoint(P.x,P.z,storyContact,8))t='E / INTERACT: story contact';
     else if(cache)t=`E / INTERACT: discover ${cache.name}`;
     else if(entrance)t=`E / INTERACT: enter ${entrance.name}`;
@@ -1180,8 +1197,10 @@ function prompt() {
   }
   if(!inside&&P.job&&atPoint(P.x,P.z,P.job,8))t='IMPORT DELIVERY · drive/walk within 6m — completes automatically';
   $('arrivalHelp').textContent=t|| (target?`FOLLOW MARKER · ${selectedLocation?.instruction??'Reach the ground ring, then use E / INTERACT when prompted.'}`:'Use CITY MAP to choose a door, mission, job or heist.');
+  $('interactionGlow').hidden=!t||!playing||managing||shopOpen;
+  $('interactionGlow').textContent=t?`${keyLabel(C.accessibility.bindings.KeyE)} / INTERACT · ${t.replace(/^E[^:]*:\s*/, '')}`:'';
   $('contextAction').hidden=!t||!playing||managing||shopOpen;
-  $('contextAction').textContent=inside?'INTERACT / EXIT':P.car?'INTERACT / GET OUT':'E · INTERACT';
+  $('contextAction').textContent=inside?'INTERACT / EXIT':P.car?'INTERACT / GET OUT':`${keyLabel(C.accessibility.bindings.KeyE)} · INTERACT`;
   const el = $("prompt");
   el.textContent = t;
   el.style.display = t && playing && !managing && !shopOpen ? "block" : "none";
@@ -1295,7 +1314,8 @@ function snapshotPlayer() {
     target, battle, foes: foes.filter(f => !f.dead).map(f => ({ kind: f.kind, x: f.x, z: f.z, hp: f.hp, district: f.district, aggro: f.aggro, mugged: f.mugged, blockId: f.blockId })) };
 }
 function saveGame(manual = false) {
-  if (resetting) return;
+  if(resetting)return;
+  if(!canPersistReplay(!!practice)){if(manual)feed('Practice is not saved. Exit replay to return to your saved campaign.');return;}
   const result = store.save(C, snapshotPlayer());
   if (manual) void result.mirrored.then(mirrored => {const message=result.local && mirrored ? 'Game saved to localStorage and IndexedDB.' : result.local || mirrored ? 'Game saved to one storage copy; backup unavailable.' : 'Save failed: browser storage is unavailable.';feed(message);$('saveNotice').textContent=message;});
 }
@@ -1306,6 +1326,7 @@ $('paradeView').onclick=()=>{
 };
 let wasPlaying = false;
 const empire = createEmpireUI({
+  replay:(key,challenge)=>{void beginReplay(key,challenge);},stopReplay:()=>location.reload(),replaying:()=>!!practice,
   garage:()=>inside?.def.theme==='garage'||atPoint(P.x,P.z,{x:30,z:4},35)||atPoint(P.x,P.z,{x:-60,z:0},12),
   room:()=>inside&&inside.z<-3.6&&Math.abs(inside.x)<3?inside.def.id:null,
   service(action){
@@ -1348,13 +1369,13 @@ const empire = createEmpireUI({
     if(inside)leaveInterior();
     if(introActive){introActive=false;$('cinematic').hidden=true;}
     noiseThisFrame=false;operationFired=false;
-    startPlaying();saveGame();feed('Mission started — follow the white marker. E / INTERACT advances objectives.');
+    startPlaying();watchMission();saveGame();feed('Mission started — follow the white marker. E / INTERACT advances objectives.');
   },
   characterConfirmed(){needsCharacter=false;startPlaying();saveGame();},
   milestone(){milestoneRewards(C);const rewards=C.legacy.pending.splice(0);if(rewards.length){$('milestoneToast').textContent=rewards.join(' · ');$('milestoneToast').hidden=false;sfx('capture');setTimeout(()=>$('milestoneToast').hidden=true,6000);saveGame();}},
   travel(x,z){if(inside)leaveInterior();const p=approach({x,z});P.car=null;P.x=p.x;P.z=p.z;player.root.position.set(p.x,0,p.z);walkVelocity.set(0,0);saveGame();},
   repair(){if(C.clean>=50&&C.cooldown<=0){C.clean-=50;P.armor=50;C.cooldown=60;feed('Mechanic reinforced your armor.');saveGame();}},
-  retire(){const inheritance=legacyInheritance(C);const next=newCampaign();next.legacy.generation=inheritance.generation;next.legacy.inherited=inheritance.inherited;next.clean+=inheritance.inherited;resetting=true;const result=store.save(next,{});void result.mirrored.then(()=>location.reload());},
+  retire(){if(practice){feed('Retirement is disabled during replay.');return;}const inheritance=legacyInheritance(C);const next=newCampaign();next.legacy.generation=inheritance.generation;next.legacy.inherited=inheritance.inherited;next.clean+=inheritance.inherited;resetting=true;const result=store.save(next,{});void result.mirrored.then(()=>location.reload());},
   backRoom: openShop,
   buildings: () => INTERIORS.map(b=>({...b,...approach(b)})),
   trackLocation(location){selectedLocation=location;target={x:location.x,z:location.z,name:location.name};yaw=Math.atan2(location.x-P.x,location.z-P.z);feed(location.instruction);},
@@ -1364,7 +1385,7 @@ const empire = createEmpireUI({
     if (open) { if(balcony){balcony=false;$('hud').style.display='';playing=balconyWasPlaying;$("paradeView").textContent="PARADE BALCONY";} wasPlaying = playing; managing = true; keys.clear(); joystick.reset(); lookDragging=false;mouseDown = aimHeld = false; document.exitPointerLock(); }
     else { managing = false; playing = wasPlaying; if (playing) { $('start').style.display = 'none'; lock(); } }
   },
-  changed() { syncDisguiseAppearance(); sound.station(C.kingpin.radio,districtAt(P.x,P.z)); for(const v of vehicles)if(v.garage!==undefined)syncVehiclePlate(v); if(!C.kingpin.active)cleanupVentureActors(); if(!C.living.active)cleanupOperationActors(); if(C.stats.cleaned>lastCleaned){lastCleaned=C.stats.cleaned;sfx('cash');$('cashBurst').classList.remove('animate');void $('cashBurst').offsetWidth;$('cashBurst').classList.add('animate');} if (battle?.defending && C.defense?.block !== battle.block) clearBattle(); for (const a of unlock(C)) feed(`Achievement: ${a}`); updateHud(); saveGame(); sfx('click'); },
+  changed() { syncDisguiseAppearance(); sound.station(C.kingpin.radio,districtAt(P.x,P.z)); for(const v of vehicles)if(v.garage!==undefined)syncVehiclePlate(v); if(!C.kingpin.active)cleanupVentureActors(); if(!C.living.active)cleanupOperationActors(); if(C.stats.cleaned>lastCleaned){lastCleaned=C.stats.cleaned;sfx('cash');$('cashBurst').classList.remove('animate');void $('cashBurst').offsetWidth;$('cashBurst').classList.add('animate');} if (battle?.defending && C.defense?.block !== battle.block) clearBattle(); for (const a of unlock(C)) feed(`Achievement: ${a}`); updateHud();watchMission(); saveGame(); sfx('click'); },
   notice: feed, location: () => ({ x:P.x, z:P.z, district:districtAt(P.x,P.z) }),
   attack: startBattle,
   waypoint(x, z, name) {if(inside)leaveInterior();const p=approach({x,z}); target = { ...p, name };selectedLocation=namedDestination({x,z},name); yaw=Math.atan2(p.x-P.x,p.z-P.z); feed(`Route marked: ${name}. White dot on minimap.`); },
@@ -1375,6 +1396,7 @@ const empire = createEmpireUI({
   },
   save: () => saveGame(true),
   async reset() {
+    if(practice){feed('Reset is disabled during replay.');return;}
     resetting = true;
     try { await store.reset(); location.reload(); } catch { resetting = false; feed('Unable to reset: browser storage is blocked.'); }
   },
@@ -1545,7 +1567,7 @@ function updateKingpin(dt:number){
   if(a.spawned&&!foes.some(f=>f.blockId==='venture'&&!f.dead)&&guardsRequired(a))a.resolved=true;
   target={...approach(p),name:p.name};
  }
- if(!P.job&&!battle)for(const message of tickAtmosphere(C,dt,districtAt(P.x,P.z)))feed(message);
+ if(!practice&&!P.job&&!battle)for(const message of tickAtmosphere(C,dt,districtAt(P.x,P.z)))feed(message);
  sound.station(C.kingpin.radio,districtAt(P.x,P.z));
  theftNotice=Math.max(0,theftNotice-dt);
  if(P.car?.garage!==undefined&&C.heat>=60)vehicleRecord(C,P.car.garage).reported=true;
@@ -1620,7 +1642,7 @@ function updateOperations(dt:number){
 
 function updateStoryCity(dt:number){
  const neighborhood=districtAt(P.x,P.z);
- if(neighborhood!==lastNeighborhood){lastNeighborhood=neighborhood;const trust=C.living.reputation[neighborhood]??0;if(trust>=15)feed(`Neighborhood welcome · trust ${trust}/100. Locals remember your help.`);}
+ if(neighborhood!==lastNeighborhood){lastNeighborhood=neighborhood;const area=NEIGHBORHOODS[neighborhood];if(area){$('neighborhoodName').textContent=area.name;$('neighborhoodTag').textContent=area.tag;$('neighborhoodIntro').hidden=false;neighborhoodUntil=time+5;}const trust=C.living.reputation[neighborhood]??0;if(trust>=15)feed(`Neighborhood welcome · trust ${trust}/100. Locals remember your help.`);}
 
  const a=C.cityStories.active;
  if(a){if(a.step===1&&!storySpawned)spawnStoryEncounter();
@@ -1662,8 +1684,51 @@ function updateMicroEvents(dt:number){
 function pauseRun(){playing=false;keys.clear();joystick.reset();mouseDown=aimHeld=false;$('pauseMenu').hidden=false;locked=false;document.exitPointerLock();}
 $('endLegacy').onclick=()=>{$('end').style.display='none';empire.open('Legacy & Training');};
 $('pauseButton').onclick=pauseRun;$('resumeRun').onclick=startPlaying;$('pauseSave').onclick=()=>saveGame(true);
-$('exportSave').onclick=()=>{saveGame();const code=encodeSave(C,snapshotPlayer());$<HTMLTextAreaElement>('importCode').value=code;$('saveNotice').textContent='Copy this code to your other device. Keep it private: it contains your alias and progress.';};
-$('importSave').onclick=()=>{const save=decodeSave($<HTMLTextAreaElement>('importCode').value.trim());if(!save){$('saveNotice').textContent='Invalid or unsupported save code. Current progress unchanged.';return;}if(!confirm('Replace this device’s current run with this save?'))return;resetting=true;const result=store.save(save.campaign,save.player);void result.mirrored.then(ok=>{if(ok||result.local)location.reload();else{resetting=false;$('saveNotice').textContent='Import failed: storage unavailable.';}});};
+$('exportSave').onclick=()=>{if(practice){$('saveNotice').textContent='Export is disabled during replay. Return to your saved campaign first.';return;}saveGame();const code=encodeSave(C,snapshotPlayer());$<HTMLTextAreaElement>('importCode').value=code;$('saveNotice').textContent='Copy this code to your other device. Keep it private: it contains your alias and progress.';};
+$('importSave').onclick=()=>{if(practice){$('saveNotice').textContent='Import is disabled during replay.';return;}const save=decodeSave($<HTMLTextAreaElement>('importCode').value.trim());if(!save){$('saveNotice').textContent='Invalid or unsupported save code. Current progress unchanged.';return;}if(!confirm('Replace this device’s current run with this save?'))return;resetting=true;const result=store.save(save.campaign,save.player);void result.mirrored.then(ok=>{if(ok||result.local)location.reload();else{resetting=false;$('saveNotice').textContent='Import failed: storage unavailable.';}});};
+
+function showMissionNotice(card:MissionCard,kind:'contact'|'success'|'failure',text:string){
+ $('missionPortrait').replaceChildren(contactPortrait(card.speaker));$('missionSpeaker').textContent=card.speaker;
+ $('missionTitle').textContent=kind==='contact'?card.title:kind==='success'?'MISSION COMPLETE':'ACTIVITY ENDED';
+ $('missionDialogue').textContent=text;$('missionPanel').dataset.kind=kind;$('missionPanel').hidden=false;noticeUntil=time+(kind==='contact'?10:14);
+ sound.missionCue(kind);
+}
+function watchMission(){
+ const next=missionCard(C);
+ if(watchedMission&&watchedMission.card.key!==next?.key){
+  const previous=watchedMission,delta=missionDelta(previous.before,ledger(C)),success=missionProof(C,previous.card.key)>previous.card.proof||missionCompletionKey===previous.card.key;
+  showMissionNotice(previous.card,success?'success':'failure',`${previous.card.title} · ${success?'Objective complete':'Stopped, failed or abandoned'}. Net activity-session changes: clean $${delta.clean>=0?'+':''}${delta.clean}, dirty $${delta.dirty>=0?'+':''}${delta.dirty}, heat ${delta.heat>=0?'+':''}${delta.heat}, total crew loyalty ${delta.loyalty>=0?'+':''}${delta.loyalty}. ${practice?'PRACTICE: none of these changes will be saved.':''}`);
+  watchedMission=null;missionCompletionKey=null;
+ }
+ if(next&&!watchedMission){watchedMission={card:next,before:ledger(C)};showMissionNotice(next,'contact',next.dialogue);}
+ if(next&&watchedMission){watchedMission.card={...next,proof:watchedMission.card.proof};}
+ if(next){$('missionStage').textContent=`${practice?'PRACTICE · ':''}STEP ${next.step}/${next.total} · ${next.objective}`;}
+ else $('missionStage').textContent='';
+ if(noticeUntil>0&&time>noticeUntil)$('missionPanel').hidden=true;
+}
+async function beginReplay(key:string,challenge:'finish'|'quiet'|'speed'){
+ if(replayPreparing||practice||missionCard(C)||P.job||battle||P.deadT>0||C.defense||(C.legacy.daily&&!C.legacy.daily.finished)){feed('Finish your current activity, defense or respawn before replaying.');return;}
+ const prepared=prepareReplay(C,key);if(!prepared){feed('Complete that mission in your campaign before replaying it.');return;}
+ replayPreparing=true;$('replayLoading').hidden=false;playing=false;keys.clear();mouseDown=aimHeld=false;
+ const saved=store.save(C,snapshotPlayer());const mirrored=await saved.mirrored;replayPreparing=false;$('replayLoading').hidden=true;
+ if(!saved.local&&!mirrored){feed('Replay cancelled: the original campaign could not be saved safely.');$('start').style.display='flex';return;}
+ if(inside)leaveInterior();if(P.car)exitCar();cleanupVentureActors();cleanupOperationActors();
+ practice={choice:prepared.choice,challenge,elapsed:0,shots:0,finished:false};
+ Object.assign(C,prepared.sandbox);operationFired=false;noiseThisFrame=false;reloading=0;P.lastFire=-10;ammo.splice(0,ammo.length,...MAGAZINES);P.job=null;P.hp=MAX_HP;P.deadT=0;P.won=false;P.car=null;Object.assign(pursuit,newPursuit());watchedMission=null;missionCompletionKey=null;
+ $('replayBanner').hidden=false;$('replayBanner').textContent=`PRACTICE · ${prepared.choice.name} · rewards discarded`;
+ empire.close();startPlaying();watchMission();
+}
+function updateReplay(dt:number){
+ if(!practice||practice.finished)return;practice.elapsed+=dt;
+ if(P.deadT>0||!replayActive(C,practice.choice)){
+  const completed=P.deadT<=0&&replayCompleted(C,practice.choice),passed=replayVerdict(completed,practice.elapsed,practice.shots,practice.challenge);
+  practice.finished=true;playing=false;keys.clear();mouseDown=aimHeld=false;document.exitPointerLock();
+  $('replayResultText').textContent=`${practice.choice.name}: ${completed?'Mission complete':'Mission ended'} · ${practice.elapsed.toFixed(1)}s · ${practice.shots} player shots · ${passed?'CHALLENGE PASSED':'CHALLENGE NOT MET'}. All practice rewards, costs and choices are discarded. Return to reload your saved campaign.`;
+  $('replayResult').hidden=false;
+ }
+}
+$('missionDismiss').onclick=()=>{$('missionPanel').hidden=true;noticeUntil=0;};
+$('replayReturn').onclick=()=>location.reload();$('stopReplay').onclick=()=>location.reload();
 
 // ───────── main loop ─────────
 const clock = new THREE.Clock();
@@ -1671,7 +1736,7 @@ let hudT = 0;
 let miniT = 0;
 function frame() {
   requestAnimationFrame(frame);
-  const menuObscuresControls = !$('storyEpilogue').hidden || !$('pauseMenu').hidden || introActive || managing || shopOpen || $("start").style.display !== "none";
+  const menuObscuresControls = !$('replayResult').hidden || !$('storyEpilogue').hidden || !$('pauseMenu').hidden || introActive || managing || shopOpen || $("start").style.display !== "none";
   toolbar.classList.toggle("menu-obscured", menuObscuresControls);
   $("touchControls").classList.toggle("menu-obscured", menuObscuresControls);
   const frameDelta=clock.getDelta();
@@ -1712,6 +1777,7 @@ function frame() {
     for (const v of vehicles) if (v !== P.car) { v.rig.root.visible=v.garage===undefined||!vehicleRecord(C,v.garage).impounded;v.rig.root.position.set(v.x, 0, v.z); v.rig.root.rotation.y = v.h; v.rig.motion(0, 0, false, time);v.rig.damage(v.condition); }
     updateFoes(dt);
     updateEconomy(dt);
+    watchMission();updateReplay(dt);
     impacts.update(dt);tireSmoke.update(dt);
     if (hitFlash > 0) hitFlash -= dt;
     $("cross").classList.toggle("hit", hitFlash > 0);
@@ -1729,8 +1795,9 @@ function frame() {
   if (!playing || managing || shopOpen || P.deadT > 0) { sound.engine(null); sound.siren(false); }
   sound.world(playing&&!managing&&!shopOpen&&!document.hidden);
   sound.intensity(playing&&!managing&&!inside&&(boosting||C.heat>=30),conditions(C.clock).night);
+  if(neighborhoodUntil&&time>neighborhoodUntil)$('neighborhoodIntro').hidden=true;
   updateCamera(dt);
-  if(shake>0&&!matchMedia('(prefers-reduced-motion: reduce)').matches){shake=Math.max(0,shake-dt*2);camera.position.x+=(Math.random()-.5)*shake*.2;camera.position.y+=(Math.random()-.5)*shake*.1;}
+  if(shake>0&&C.accessibility.shake>0&&!matchMedia('(prefers-reduced-motion: reduce)').matches){shake=Math.max(0,shake-dt*2);camera.position.x+=(Math.random()-.5)*shake*.2*C.accessibility.shake;camera.position.y+=(Math.random()-.5)*shake*.1*C.accessibility.shake;}
   if(inside){renderPass.scene=inside.room.scene;if(graphics.bloom)composer.render();else renderer.render(inside.room.scene,camera);return;}
   renderPass.scene=scene;
   scenery.update(C.clock, P.x, P.z,graphics.waterInterval);
