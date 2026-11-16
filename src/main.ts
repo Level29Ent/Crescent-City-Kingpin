@@ -1,8 +1,12 @@
+import {newFrameBudget,sampleFrame,renderBudget,type Quality} from './performance.ts';
+import {createCityNavigator,routeAgent,type RouteAgent} from './city-navigation.ts';
+import {createCoverPlanner,coverPhase,type CoverChoice} from './tactics.ts';
+import {damagePassenger,updateBoarding,passengerTrafficImpact} from './rescue.ts';
 import {newPursuit,tickPursuit,pursuitLabel} from './pursuit.ts';
 import {driveStep,impactVehicle,handlingProfile} from './driving.ts';
 import {OPERATIONS,operationObjective,operationInteract,tickOperation,localService,businessHours,trained,reputationGain} from './living-city.ts';
 import {resetAfterDeath} from './campaign.ts';
-import {actorHit,damageFalloff,spreadMultiplier,coverWaypoint} from './gunplay.ts';
+import {actorHit,damageFalloff,spreadMultiplier} from './gunplay.ts';
 // Crescent City Kingpin: standalone single-player game. Plain three.js, no engine, no server.
 import * as THREE from "three";
 import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
@@ -35,7 +39,7 @@ import {approach,atPoint,mapLocations,namedDestination,destinationInterior,type 
 import {recon,HEISTS,plan} from './expansion.ts';
 import {applyBodyStyle} from './car-style.ts';
 import {workObjective,workInteract,tickWork} from './lifestyle.ts';
-import {STORIES,DISCOVERIES,storyInteract,storyObjective,discover,tacticalHeading,coverReduction} from './city-stories.ts';
+import {STORIES,DISCOVERIES,storyInteract,storyObjective,discover,coverReduction} from './city-stories.ts';
 import {inspectSupplies,atSupply,useMedkit} from './building-activities.ts';
 import {addEntranceArt} from './entrance-art.ts';
 import {createStreetLife} from './street-life.ts';
@@ -72,11 +76,14 @@ const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.in
 composer.addPass(bloom);
 composer.addPass(new OutputPass());
 const quality = $<HTMLSelectElement>("quality");
-quality.addEventListener("change", () => {
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, quality.value === "cinematic" ? 1.5 : 1));
-  resize();
-});
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1));
+const frameBudget=newFrameBudget();
+try{const saved=localStorage.getItem('cck.quality');if(saved&&['auto','performance','balanced','cinematic'].includes(saved))quality.value=saved;else if(matchMedia('(pointer: coarse)').matches)quality.value='auto';}catch{}
+let graphics=renderBudget(quality.value as Quality,frameBudget,devicePixelRatio);
+function applyGraphics(){
+  graphics=renderBudget(quality.value as Quality,frameBudget,devicePixelRatio);
+  renderer.setPixelRatio(graphics.pixelRatio);renderer.shadowMap.enabled=graphics.shadows;bloom.enabled=graphics.bloom;resize();
+}
+quality.addEventListener('change',()=>{frameBudget.scale=1;frameBudget.slow=frameBudget.fast=0;try{localStorage.setItem('cck.quality',quality.value);}catch{}applyGraphics();});
 const resize = () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
   composer.setPixelRatio(renderer.getPixelRatio());
@@ -84,8 +91,8 @@ const resize = () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
 };
-window.addEventListener("resize", resize);
-resize();
+window.addEventListener("resize", applyGraphics);
+applyGraphics();
 
 const abort = new AbortController();
 const sound = createSound(abort.signal);
@@ -97,6 +104,8 @@ let lastCleaned=C.stats.cleaned;
 const entranceArt=addEntranceArt(scene);
 const streetLife=createStreetLife(scene);
 const coverStations=[{x:0,z:-115},{x:120,z:175},{x:-180,z:6},{x:60,z:6}];
+const npcNavigation=createCityNavigator((x,z)=>!coverStations.some(p=>Math.abs(x-p.x)<2.05&&Math.abs(z-p.z)<1.05));
+const coverPlanner=createCoverPlanner(coverStations,npcNavigation.clear);
 const coverGeo=new THREE.BoxGeometry(3,1.1,1),coverMat=new THREE.MeshStandardMaterial({color:0x706e51,roughness:1});
 for(const p of coverStations){const wall=new THREE.Mesh(coverGeo,coverMat);wall.position.set(p.x,.55,p.z);scene.add(wall);}
 const discoveryGeo=new THREE.OctahedronGeometry(.7),discoveryMat=new THREE.MeshStandardMaterial({color:0xf4c268,emissive:0x8c5f14,emissiveIntensity:.6});
@@ -113,7 +122,7 @@ const shotLight = new THREE.PointLight(0xffb760,0,8);scene.add(shotLight);
 // ───────── game state ─────────
 type Foe = {
   kind: PersonKind; person: Person; x: number; z: number; heading: number; hp: number; district: number;
-  hitT:number; blockId?: string; mugged?: boolean; cd: number; aggro: boolean; dead: number; wx: number; wz: number; wt: number; flee: number; speed: number;
+  animTime:number;nav:RouteAgent;cover:CoverChoice|null;aiTime:number;serial:number;staggerCooldown:number;hitT:number; blockId?: string; mugged?: boolean; cd: number; aggro: boolean; dead: number; wx: number; wz: number; wt: number; flee: number; speed: number;
 };
 type Vehicle = { condition:number;gripHeading:number;impactCooldown:number;operation?:boolean;rig: Car; style: number; x: number; z: number; h: number; speed: number; steer: number; garage?: number };
 
@@ -128,7 +137,10 @@ const pursuit=newPursuit();
 let lastDriven:Vehicle|null=null;
 let operationFired=false;
 let operationPassenger:Person|null=null;
+let passengerNav=routeAgent(0,0);
+let passengerVehicle:Vehicle|null=null;
 let lastNeighborhood=-1;
+let policeReinforcement=0;
 let yaw = SPAWN.heading;
 let pitch = -0.15;
 let time = 0;
@@ -184,6 +196,7 @@ player.root.position.set(P.x, 0, P.z);
 player.root.rotation.y = P.heading;
 scene.add(player.root);
 const foes: Foe[] = [];
+let nextFoeSerial=0;
 const vehicles: Vehicle[] = [];
 const colors = carColors();
 
@@ -202,7 +215,7 @@ function spawnFoe(kind: PersonKind, x: number, z: number, district: number): Foe
   person.root.position.set(x, 0, z);
   scene.add(person.root);
   const f: Foe = {
-    hitT:0, kind, person, x, z, heading: rnd(0, 6.28), hp: kind === "boss" ? 260 : kind === "cop" ? 70 : kind === "civilian" ? 30 : 55, district,
+    animTime:0,nav:routeAgent(x,z),cover:null,aiTime:0,serial:nextFoeSerial++,staggerCooldown:0,hitT:0, kind, person, x, z, heading: rnd(0, 6.28), hp: kind === "boss" ? 260 : kind === "cop" ? 70 : kind === "civilian" ? 30 : 55, district,
     cd: rnd(0.5, 1.5), aggro: kind === "cop", dead: 0, wx: x, wz: z, wt: 0, flee: 0, speed: kind === "boss" ? 3.2 : kind === "cop" ? 5 : 3.6,
   };
   foes.push(f);
@@ -298,6 +311,7 @@ function drawMini() {
 
 function updateHud() {
   document.body.dataset.tutorial=String(C.legacy.tutorial);
+  $('graphicsStatus').textContent=`${quality.value.toUpperCase()} · ${Math.round(graphics.pixelRatio*100)}% render scale${quality.value==='auto'?` · ${Math.round(frameBudget.fps)} FPS estimate`:''}`;
   const controls=C.living.controls;
   document.body.classList.toggle('left-handed',controls.leftHanded);
   $('moveJoystick').style.scale=String(controls.scale);
@@ -630,6 +644,7 @@ function hurt(dmg: number) {
   if (P.hp <= 0) {
     P.hp = 0;
     P.deadT = RESPAWN_SECONDS;
+    player.root.scale.setScalar(1);
     P.car = null;
     C.clean = Math.floor(C.clean * 0.9);
     resetAfterDeath(C);
@@ -660,7 +675,7 @@ function hurt(dmg: number) {
 function damageFoe(f: Foe, dmg: number, byPlayer: boolean) {
   if (f.dead) return;
   const covered=f.kind!=='civilian'&&coverStations.some(p=>dist2(f.x,f.z,p.x,p.z)<2);
-  f.hp -= dmg*(covered?.65:1); f.hitT=.18;
+  f.hp -= dmg*(covered?.65:1); if(f.staggerCooldown<=0){f.hitT=.18;f.staggerCooldown=.65;}
   if(byPlayer&&f.kind==='civilian')reputationGain(C,districtAt(f.x,f.z),-8);
   f.aggro = true;
   f.flee = 4;
@@ -744,6 +759,9 @@ function fire() {
     dir.z += rnd(-spread, spread);
     dir.normalize();
     const r = rayHit(_o.x, _o.y, _o.z, dir.x, dir.y, dir.z, w.range);
+    const rescue=C.living.active;
+    const passengerHit=rescue?.id==='rescue'&&rescue.step>0&&!rescue.passenger.boarded?actorHit(_o.x,_o.y,_o.z,dir.x,dir.y,dir.z,rescue.passenger.x,rescue.passenger.z,r.t):null;
+    if(passengerHit){r.t=passengerHit.t;r.foe=null;hurtRescue(w.dmg);}
     tracer(_o.clone(), _o.clone().addScaledVector(dir, r.t), 0xffe9a0);
     if (r.t < w.range) impacts.burst(_o.x + dir.x * r.t, _o.y + dir.y * r.t, _o.z + dir.z * r.t);
     if (r.foe) {
@@ -790,6 +808,7 @@ function hasLOS(ax: number, az: number, bx: number, bz: number): boolean {
 
 // ───────── per-frame updates ─────────
 function updateFoes(dt: number) {
+  npcNavigation.beginFrame(graphics.pathBudget);
   const observers=[...foes.filter(f=>f.kind==='cop'&&!f.dead),...streetLife.observers()];
   const seen=P.deadT<=0&&observers.some(f=>dist2(f.x,f.z,P.x,P.z)<55*conditions(C.clock).visibility&&hasLOS(f.x,f.z,P.x,P.z));
   if(tickPursuit(pursuit,dt,C.heat,seen,P.x,P.z)){
@@ -806,6 +825,7 @@ function updateFoes(dt: number) {
       f.dead -= dt;
       f.person.pose("down", 0, time, 0, dt);
       if (f.dead <= 0) {
+        coverPlanner.release(f.serial);
         f.person.root.removeFromParent();
         f.person.dispose();
         foes.splice(i, 1);
@@ -815,6 +835,7 @@ function updateFoes(dt: number) {
     const d = dist2(f.x, f.z, px, pz);
     let moving = 0;
     let aiming = false;
+    let destination:{x:number;z:number}|null=null;
     if (f.kind === "cop") {
       cops++;
       if (P.heat === 0 || d > 150) { f.hp = 0; f.dead = 0.01; continue; }
@@ -826,52 +847,72 @@ function updateFoes(dt: number) {
         f.flee -= dt;
         const a = Math.atan2(f.x - px, f.z - pz);
         f.heading = a;
-        moving = 6;
+        const goal={x:f.x+Math.sin(a)*7,z:f.z+Math.cos(a)*7};destination=npcNavigation.clear(goal.x,goal.z)?goal:null;
+        moving = destination?6:0;
       } else {
         f.wt -= dt;
         if (f.wt <= 0) { [f.wx, f.wz] = freeSpot(f.x, f.z, 18); f.wt = rnd(4, 10); }
         const dd = dist2(f.x, f.z, f.wx, f.wz);
-        if (dd > 1) { f.heading = Math.atan2(f.wx - f.x, f.wz - f.z); moving = 1.6; }
+        if (dd > 1) { destination={x:f.wx,z:f.wz};moving = 1.6; }
       }
     } else if (alive && (C.legacy.tutorial>=3 || f===tutorialRival)) {
       const sight = f.kind === "cop" ? conditions(C.clock).visibility : 1;
       const los = d < 60*sight && hasLOS(f.x, f.z, px, pz);
+      if(los){f.wx=px;f.wz=pz;f.wt=6;f.aggro=true;}else f.wt=Math.max(0,f.wt-dt);
       const searching=f.kind==='cop'&&pursuit.phase!=='pursuit';
-      if (!f.aggro && los && d < 40*sight) f.aggro = true;
-      if (f.aggro && d > 90) f.aggro = f.kind === "cop";
-      if (f.kind==='cop'&&searching) {
-        const known=pursuit.phase==='search';const dd=dist2(f.x,f.z,pursuit.lastX,pursuit.lastZ);
-        if(known&&dd>4){f.heading=Math.atan2(pursuit.lastX-f.x,pursuit.lastZ-f.z);moving=f.speed*.65;}
-      } else if (f.aggro) {
-        f.heading = tacticalHeading(Math.atan2(px - f.x, pz - f.z),d,i,time);
-        aiming = true;
-        if (d > 13 || !los || (d>9&&Math.floor(time/3+i)%3===0)) moving = f.speed;
-        // Use a reachable position beside cover, then alternate exposure and firing windows.
-        const cover=coverStations.map(p=>coverWaypoint(f.x,f.z,p,pz)).filter(p=>dist2(f.x,f.z,p.x,p.z)<14&&walkable(p.x,p.z)&&!pushOut(p.x,p.z,.5).hit).sort((a,b)=>dist2(f.x,f.z,a.x,a.z)-dist2(f.x,f.z,b.x,b.z))[0];
-        if(cover&&d>10){const cd=dist2(f.x,f.z,cover.x,cover.z);if(cd>1){f.heading=Math.atan2(cover.x-f.x,cover.z-f.z);moving=f.speed;}else{moving=0;aiming=Math.floor(time*1.3+i)%3!==0;}}
+      const known=f.kind==='cop'?{x:pursuit.lastX,z:pursuit.lastZ}:{x:f.wx,z:f.wz};
+      if(f.kind==='cop'&&searching){
+        if(pursuit.phase==='search'&&dist2(f.x,f.z,known.x,known.z)>2){destination=known;moving=f.speed*.65;}
+        f.cover=null;coverPlanner.release(f.serial);
+      }else if(f.aggro){
+        const knownDistance=dist2(f.x,f.z,known.x,known.z);
+        f.heading=Math.atan2(known.x-f.x,known.z-f.z);aiming=los;
+        if(knownDistance>13||!los){destination=known;moving=f.speed;}
+        if(f.kind!=='cop'&&!los&&f.wt===0&&knownDistance<2)f.aggro=false;
+        f.aiTime-=dt;
+        if(f.aiTime<=0){f.aiTime=1.2+(f.serial%4)*.15;f.cover=los?coverPlanner.choose(f.serial,f,known,time):null;}
+        if(f.cover&&f.cover.until>time&&d>10){
+          const phase=coverPhase(time,f.serial),goal=phase==='hide'?f.cover.hide:f.cover.peek;
+          destination=goal;moving=dist2(f.x,f.z,goal.x,goal.z)>.45?f.speed:0;
+          aiming=los&&phase==='peek'&&moving===0;
+        }
         f.cd -= dt;
         if (f.cd <= 0 && los && aiming && f.hitT<=0 && d < 42*sight) {
           f.cd = f.kind === "boss" ? rnd(0.6, 1) : rnd(1, 1.7);
           sfx("enemyShot", Math.max(0.1, 1 - d / 50));
           const sx = f.x + Math.sin(f.heading) * 0.7;
           const sz = f.z + Math.cos(f.heading) * 0.7;
-          tracer(new THREE.Vector3(sx, 1.35, sz), new THREE.Vector3(px, 1.2, pz), 0xff8a5a);
-          if (Math.random() < 0.5 - d / 150) hurt(f.kind === "boss" ? 9 : f.kind === "cop" ? 5 : 6);
+          const rescue=C.living.active;
+          const stray=rescue?.id==='rescue'&&rescue.step>0&&dist2(rescue.passenger.x,rescue.passenger.z,px,pz)<5&&hasLOS(f.x,f.z,rescue.passenger.x,rescue.passenger.z)&&Math.random()<.15;
+          const tx=stray?rescue!.passenger.x:px,tz=stray?rescue!.passenger.z:pz;
+          tracer(new THREE.Vector3(sx, 1.35, sz), new THREE.Vector3(tx, 1.2, tz), 0xff8a5a);
+          if(stray)hurtRescue(8);
+          else if (Math.random() < 0.5 - d / 150) hurt(f.kind === "boss" ? 9 : f.kind === "cop" ? 5 : 6);
         }
       }
     }
+    f.staggerCooldown=Math.max(0,f.staggerCooldown-dt);
     f.hitT=Math.max(0,f.hitT-dt);if(f.hitT>0)moving*=.25;
-    if (moving > 0) slide(f, Math.sin(f.heading) * moving * dt, Math.cos(f.heading) * moving * dt, 0.5);
+    if(moving>0&&destination){
+      f.nav.x=f.x;f.nav.z=f.z;
+      const next=npcNavigation.next(f.nav,destination,dt);
+      if(next){const distance=dist2(f.x,f.z,next.x,next.z);f.heading=Math.atan2(next.x-f.x,next.z-f.z);const step=Math.min(distance,moving*dt);slide(f,Math.sin(f.heading)*step,Math.cos(f.heading)*step,.5);}else moving=0;
+    }
     f.person.root.position.set(f.x, 0, f.z);
     f.person.root.rotation.y = f.heading;
     f.person.root.rotation.z=f.hitT>0?Math.sin(f.hitT*35)*.1:0;
-    f.person.pose(aiming ? (moving > 0 ? "run" : "aim") : moving > 2 ? "run" : moving > 0 ? "walk" : "idle", moving, time, 0, dt);
+    f.person.setVisible(d<graphics.actorRange);
+    f.animTime+=dt;
+    if(d<45||f.animTime>.15){
+    f.person.pose(aiming ? (moving > 0 ? "run" : "aim") : moving > 2 ? "run" : moving > 0 ? "walk" : "idle", moving, time, 0, f.animTime);f.animTime=0;
+    }
   }
+  policeReinforcement=Math.max(0,policeReinforcement-dt);
   // cops chase the player when wanted
-  if (alive && P.heat > 0 && pursuit.phase==='pursuit' && cops < P.heat * 2) {
+  if (alive && P.heat > 0 && pursuit.phase==='pursuit' && policeReinforcement===0 && cops < Math.min(8,P.heat * 2)) {
     const a = rnd(0, 6.28);
     const [x, z] = freeSpot(pursuit.lastX + Math.sin(a) * 55, pursuit.lastZ + Math.cos(a) * 55, 6);
-    if (dist2(x, z, px, pz) > 35) spawnFoe("cop", x, z, -1);
+    if (dist2(x, z, px, pz) > 35){spawnFoe("cop", x, z, -1);policeReinforcement=3;}
   }
   sound.siren(pursuit.phase==='pursuit' && (copsNear||streetLife.sirenNear(P.x,P.z)));
 }
@@ -895,6 +936,7 @@ function updateDriving(dt: number) {
   if(hit){
     const damage=impactVehicle(c,speed,(model?.armor??0)+(stored?.armor??0)*.07);
     if(damage>0){
+      if(speed>10)hurtRescue(speed*.9);
       if(speed>14)hurt(speed*.4);
       c.speed*=-.2;c.gripHeading=c.h;
       shake=Math.max(shake,.65);if(P.deadT<=0)addHeat(C,2);sfx('bump',.7);
@@ -921,12 +963,13 @@ function updateDriving(dt: number) {
   if(Math.abs(c.speed)>32)addHeat(C,dt*.25);
   P.x = c.x;
   P.z = c.z;
-  player.root.scale.y=1;
-  player.setVisible(c.style===6);
+  player.root.scale.setScalar(1);player.setVisible(true);
+  if(c.style!==6&&P.deadT<=0){const seat=c.rig.driverSeat.clone().applyAxisAngle(new THREE.Vector3(0,1,0),c.h);player.root.scale.setScalar(.7);player.root.position.set(c.x+seat.x,seat.y,c.z+seat.z);player.root.rotation.y=c.h;player.pose('seated',0,time,0,dt);}
   if(c.style===6){player.root.position.set(c.x-Math.sin(c.h)*.15,.12,c.z-Math.cos(c.h)*.15);player.root.rotation.y=c.h;player.pose('ride',0,time,0,dt);}
 }
 
 function updateWalking(dt: number) {
+  player.root.scale.setScalar(1);
   player.setVisible(true);
   player.root.scale.y=crouched?.78:1;
   sound.engine(null);
@@ -1384,9 +1427,14 @@ function spawnStoryEncounter(){
  for(let i=0;i<count;i++){const [x,z]=freeSpot(def.x+(i-1)*4,def.z+8,5);const f=spawnFoe(i===0?'boss':'gangster',x,z,0);f.blockId=`story:${a.id}`;f.hp=i===0?(a.id==='crown'?220:140):65;f.aggro=true;}
  storySpawned=true;
 }
-function operationContext(){return {x:P.x,z:P.z,driving:!!P.car,bike:P.car?.style===6,recoveryCar:!!P.car?.operation,condition:P.car?.condition??0,guards:foes.filter(f=>!f.dead&&f.blockId==='operation').length,fired:operationFired,searching:pursuit.phase==='pursuit'||pursuit.phase==='search'};}
+function hurtRescue(amount:number){
+  const a=C.living.active;if(a?.id!=='rescue'||a.step===0)return;
+  const damage=damagePassenger(a.passenger,amount,a.passenger.boarded);
+  if(damage>0){feed(`Musician hurt · ${Math.ceil(a.passenger.hp)} HP. Keep them safe.`);saveGame();}
+}
+function operationContext(){return {x:P.x,z:P.z,driving:!!P.car,bike:P.car?.style===6,recoveryCar:!!P.car?.operation,condition:P.car?.condition??0,passengerBoarded:C.living.active?.id==='rescue'&&C.living.active.passenger.boarded&&passengerVehicle===P.car,guards:foes.filter(f=>!f.dead&&f.blockId==='operation').length,fired:operationFired,searching:pursuit.phase==='pursuit'||pursuit.phase==='search'};}
 function cleanupOperationActors(){
-  operationPassenger?.dispose();operationPassenger=null;
+  operationPassenger?.dispose();operationPassenger=null;passengerVehicle=null;passengerNav=routeAgent(0,0);
   for(let i=foes.length-1;i>=0;i--)if(foes[i]!.blockId==='operation'){foes[i]!.person.dispose();foes.splice(i,1);}
   for(let i=vehicles.length-1;i>=0;i--)if(vehicles[i]!.operation){if(P.car===vehicles[i])exitCar();vehicles[i]!.rig.dispose();vehicles.splice(i,1);}
 }
@@ -1402,10 +1450,36 @@ function updateOperations(dt:number){
   }
   const recovery=vehicles.find(v=>v.operation);if(recovery)a.vehicleCondition=recovery.condition;
   if(a.id==='rescue'){
-    if(!operationPassenger){operationPassenger=createPerson('civilian',2);scene.add(operationPassenger.root);}
-    const p=a.step===0?approach(def.stages[0]!):{x:P.x+1.2,z:P.z};
-    operationPassenger.root.position.set(p.x,0,p.z);operationPassenger.setVisible(!P.car);
-    operationPassenger.pose('idle',0,time,0,dt);
+    const passenger=a.passenger;
+    if(!operationPassenger){operationPassenger=createPerson('civilian',2);scene.add(operationPassenger.root);passengerNav=routeAgent(passenger.x,passenger.z);}
+    if(a.step===0){const p=approach(def.stages[0]!);passenger.x=p.x;passenger.z=p.z;}
+    const car=P.car,seat=car?.rig.passengerSeat;
+    const worldSeat=car&&seat?seat.clone().applyAxisAngle(new THREE.Vector3(0,1,0),car.h).add(new THREE.Vector3(car.x,0,car.z)):null;
+    const wasBoarded=passenger.boarded;
+    if(passengerVehicle&&passengerVehicle!==car){
+      // Exit beside the previous car, only at a collision-free location.
+      const previous=passengerVehicle;
+      for(const side of [1,-1]){const x=previous.x+Math.cos(previous.h)*2.8*side,z=previous.z-Math.sin(previous.h)*2.8*side;if(npcNavigation.clear(x,z)){passenger.x=x;passenger.z=z;break;}}
+      passengerVehicle=null;
+    }
+    const board=a.step>0&&car&&seat?{key:String(vehicles.indexOf(car)),distance:dist2(passenger.x,passenger.z,car.x+Math.cos(car.h)*2.2,car.z-Math.sin(car.h)*2.2),speed:car.speed,hasSeat:true}:null;
+    updateBoarding(passenger,dt,board);
+    if(passenger.boarded&&car&&worldSeat){
+      passengerVehicle=car;passenger.x=car.x;passenger.z=car.z;
+      operationPassenger.root.position.copy(worldSeat);operationPassenger.root.rotation.y=car.h;operationPassenger.root.scale.setScalar(.7);
+      operationPassenger.pose('seated',0,time,0,dt);if(!wasBoarded)feed('Musician on board. Drive carefully — crashes and gunfire can injure them.');
+    }else{
+      let moving=0;
+      if(a.step>0){const goal=car?{x:car.x+Math.cos(car.h)*2.2,z:car.z-Math.sin(car.h)*2.2}:{x:P.x-Math.sin(P.heading)*1.8,z:P.z-Math.cos(P.heading)*1.8};
+        if(dist2(passenger.x,passenger.z,goal.x,goal.z)>1.1){passengerNav.x=passenger.x;passengerNav.z=passenger.z;const next=npcNavigation.next(passengerNav,goal,dt);if(next){const d=dist2(passenger.x,passenger.z,next.x,next.z),step=Math.min(d,3.8*dt);const h=Math.atan2(next.x-passenger.x,next.z-passenger.z);passenger.x+=Math.sin(h)*step;passenger.z+=Math.cos(h)*step;operationPassenger.root.rotation.y=h;moving=3.8;}}
+      }
+      operationPassenger.root.scale.setScalar(1);operationPassenger.root.position.set(passenger.x,0,passenger.z);
+      if(passenger.boarding>0&&worldSeat){operationPassenger.root.position.lerp(worldSeat,passenger.boarding);operationPassenger.root.scale.setScalar(1-passenger.boarding*.3);operationPassenger.pose('seated',0,time,0,dt);}
+      else operationPassenger.pose(moving?'walk':'idle',moving,time,0,dt);
+    }
+    operationPassenger.setVisible(true);
+    if(a.step>0){const hit=passengerTrafficImpact(passenger,dt,[...streetLife.state(),...vehicles]);if(hit>0){feed(`Musician struck by traffic · ${Math.ceil(passenger.hp)} HP.`);saveGame();}}
+
   }
   const combat=(a.id==='protection'||a.id==='heist'&&a.choice==='loud')&&a.step===1;
   if(combat&&!a.spawned){
@@ -1416,7 +1490,7 @@ function updateOperations(dt:number){
     a.spawned=true;saveGame();
   }
   if(a.id==='protection'&&a.step===1&&a.spawned&&!foes.some(f=>f.blockId==='operation'&&!f.dead)){a.step=2;feed('Extortionists defeated. Return to the club manager.');saveGame();}
-  const point=operationObjective(C);if(point){const p=a.id==='recovery'&&recovery&&P.car!==recovery?{x:recovery.x,z:recovery.z}:approach(point);target={...p,name:point.text};}
+  const point=operationObjective(C);if(point){const p=a.id==='recovery'&&recovery&&P.car!==recovery?{x:recovery.x,z:recovery.z}:a.id==='rescue'&&a.step>0&&!a.passenger.boarded?{x:a.passenger.x,z:a.passenger.z}:approach(point);target={...p,name:point.text};}
 }
 
 function updateStoryCity(dt:number){
@@ -1428,7 +1502,7 @@ function updateStoryCity(dt:number){
  if(a.step===1&&storySpawned&&!foes.some(f=>!f.dead&&f.blockId===`story:${a.id}`)){a.step=2;storySpawned=false;feed('Rival encounter won. Return to Mama Nola with the evidence.');saveGame();}
  const objective=storyObjective(C);if(objective)target={x:objective.x,z:objective.z,name:objective.text};}
  DISCOVERIES.forEach((d,i)=>{discoveryMeshes[i]!.visible=!C.cityStories.discovered.includes(d.id);discoveryMeshes[i]!.rotation.y=time*.7;});
- streetLife.update(dt,time,P.x,P.z,C.heat,C.legacy.tutorial>=3,Cspeed=>{C.cityStories.trafficHits++;if(P.car){P.car.speed*=.65;impactVehicle(P.car,Cspeed,.1);P.car.rig.damage(P.car.condition);hurt(Cspeed*.25);if(P.deadT<=0)addHeat(C,2);}else hurt(4);shake=.3;},(x,z)=>{if(foes.filter(f=>f.kind==='cop'&&!f.dead).length<8){const p=freeSpot(x,z,3);spawnFoe('cop',p[0],p[1],-1);feed('Police cruiser stopped — uniformed officer deploying.');}},pursuit);
+ streetLife.update(dt,time,P.x,P.z,C.heat,C.legacy.tutorial>=3,Cspeed=>{C.cityStories.trafficHits++;if(P.car){P.car.speed*=.65;impactVehicle(P.car,Cspeed,.1);P.car.rig.damage(P.car.condition);hurtRescue(Cspeed);hurt(Cspeed*.25);if(P.deadT<=0)addHeat(C,2);}else hurt(4);shake=.3;},(x,z)=>{if(foes.filter(f=>f.kind==='cop'&&!f.dead).length<8){const p=freeSpot(x,z,3);spawnFoe('cop',p[0],p[1],-1);feed('Police cruiser stopped — uniformed officer deploying.');}},pursuit,vehicles.filter(v=>v!==P.car).map(v=>({x:v.x,z:v.z})));
  if(P.car&&streetLife.near(P.x,P.z))P.car.speed*=Math.exp(-dt*3);
 }
 
@@ -1475,7 +1549,9 @@ function frame() {
   const menuObscuresControls = !$('pauseMenu').hidden || introActive || managing || shopOpen || $("start").style.display !== "none";
   toolbar.classList.toggle("menu-obscured", menuObscuresControls);
   $("touchControls").classList.toggle("menu-obscured", menuObscuresControls);
-  const dt = Math.min(0.05, clock.getDelta());
+  const frameDelta=clock.getDelta();
+  if(quality.value==='auto'&&sampleFrame(frameBudget,frameDelta,playing&&!managing&&!shopOpen&&!inside&&!document.hidden))applyGraphics();
+  const dt = Math.min(0.05, frameDelta);
   if(introActive&&!document.hidden){
     introElapsed+=dt;
     const shot=INTRO_SHOTS[introShot(introElapsed)]!;
@@ -1529,10 +1605,10 @@ function frame() {
   sound.intensity(playing&&!managing&&!inside&&(boosting||C.heat>=30),conditions(C.clock).night);
   updateCamera(dt);
   if(shake>0&&!matchMedia('(prefers-reduced-motion: reduce)').matches){shake=Math.max(0,shake-dt*2);camera.position.x+=(Math.random()-.5)*shake*.2;camera.position.y+=(Math.random()-.5)*shake*.1;}
-  if(inside){renderPass.scene=inside.room.scene;if(quality.value!=="performance")composer.render();else renderer.render(inside.room.scene,camera);return;}
+  if(inside){renderPass.scene=inside.room.scene;if(graphics.bloom)composer.render();else renderer.render(inside.room.scene,camera);return;}
   renderPass.scene=scene;
-  scenery.update(C.clock, P.x, P.z);
-  const weatherState=weather.update(C.clock,playing&&!managing&&!shopOpen?dt:0,P.x,P.z);
+  scenery.update(C.clock, P.x, P.z,graphics.waterInterval);
+  const weatherState=weather.update(C.clock,playing&&!managing&&!shopOpen?dt:0,P.x,P.z,graphics.weatherParticles);
   const parade=C.expansion.mission?.id==='parade';
   $('paradeView').hidden=!parade;
   festival.update(time,playing&&!managing&&!shopOpen?dt:0,parade,parade&&C.expansion.mission?.step===4?(C.expansion.mission.escort??0):null);
@@ -1545,7 +1621,7 @@ function frame() {
     headlights.position.set(P.x + Math.sin(P.car.h) * 2, 1.2, P.z + Math.cos(P.car.h) * 2);
     headlights.target.position.set(P.x + Math.sin(P.car.h) * 25, 0, P.z + Math.cos(P.car.h) * 25);
   }
-  if (quality.value !== "performance") composer.render();
+  if (graphics.bloom) composer.render();
   else renderer.render(scene, camera);
 }
 

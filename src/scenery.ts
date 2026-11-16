@@ -22,7 +22,7 @@ import {
   type Prop,
 } from "./world.ts";
 
-export type Scenery = { update(time: number, focusX: number, focusZ: number): void; dispose(): void };
+export type Scenery = { update(time: number, focusX: number, focusZ: number,waterInterval?:number): void; dispose(): void };
 
 // ───────────────────────── helpers ─────────────────────────
 const TAU = Math.PI * 2;
@@ -1989,7 +1989,8 @@ export function createScenery(scene: THREE.Scene): Scenery {
   const duskFog = new THREE.Color(0xa87672);
   const moonColor = new THREE.Color(0x98bbff);
   const sunColor = new THREE.Color(0xffe2b8);
-  const update = (time: number, focusX: number, focusZ: number) => {
+  let lastWater=-Infinity;
+  const update = (time: number, focusX: number, focusZ: number,waterInterval=0) => {
     const { daylight, dusk } = cityClock(time);
     skyMat.color.copy(nightSky).lerp(daySky, daylight).lerp(duskSky, dusk * 0.65);
     (scene.fog as THREE.Fog).color.copy(nightFog).lerp(dayFog, daylight).lerp(duskFog, dusk * 0.6);
@@ -2012,6 +2013,7 @@ export function createScenery(scene: THREE.Scene): Scenery {
     sun.position.copy(sunFocus).addScaledVector(SUN_DIR, 220);
 
     // river waves
+    if(time!==lastWater&&(time-lastWater>=waterInterval||time<lastWater)){lastWater=time;
     const arr = water.array as Float32Array;
     for (let i = 0; i < water.count; i++) {
       const x = riverBase[i * 3]!;
@@ -2020,6 +2022,7 @@ export function createScenery(scene: THREE.Scene): Scenery {
     }
     water.needsUpdate = true;
     waterTex.offset.set(time * 0.004, time * 0.012);
+    }
 
     // streetcar along x=-60
     const ph = (time * Math.PI * 2) / 150;

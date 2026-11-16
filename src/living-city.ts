@@ -1,17 +1,18 @@
+import {newPassenger,restorePassenger,type RescuePassenger} from './rescue.ts';
 import type {Campaign} from './campaign.ts';
 import {activeCrew} from './campaign.ts';
 import {owns,PROPERTIES} from './expansion.ts';
 import {INTERIORS} from './interiors.ts';
-import {atPoint} from './navigation.ts';
+import {atPoint,approach} from './navigation.ts';
 import {cityClock} from './dynamics.ts';
 export const OPERATIONS=[
  {id:'recovery',name:'Borrowed Wheels',desc:'Recover a marked estate wagon without wrecking it. Return it to the chop shop.',pay:750,duration:240,unlock:0,stages:[{x:120,z:60,name:'Find the marked estate wagon'},{x:-60,z:0,name:'Deliver the marked wagon · E while driving'}]},
- {id:'rescue',name:'Last Ride Home',desc:'Reach the stranded musician, pick them up on foot, then drive them to the clinic in a car (not a motorcycle).',pay:950,duration:200,unlock:1,stages:[{x:-120,z:-180,name:'Meet the stranded musician · E on foot'},{x:-180,z:-60,name:'Drive the musician to the clinic · E'}]},
+ {id:'rescue',name:'Last Ride Home',desc:'Reach the stranded musician, pick them up on foot, wait for them to board a stopped car, then drive carefully to the clinic. Crashes, traffic and gunfire can injure them.',pay:950,duration:200,unlock:1,stages:[{x:-120,z:-180,name:'Meet the stranded musician · E on foot'},{x:-180,z:-60,name:'Drive the musician to the clinic · E'}]},
  {id:'stealth',name:'No Alarms Tonight',desc:'Carry a confidential package from the post office to the gallery. No gunfire or wanted heat; stay below 30.',pay:1200,duration:240,unlock:1,stages:[{x:120,z:-180,name:'Collect the sealed package · E'},{x:-120,z:180,name:'Deliver quietly to Royal Street Gallery · E'}]},
  {id:'protection',name:'Keep the Music Playing',desc:'Meet the club manager, defeat three extortionists, then return to the desk. No remote menu payouts.',pay:1500,duration:300,unlock:2,stages:[{x:0,z:-60,name:'Meet the jazz-club manager · E'},{x:0,z:-60,name:'Defeat the three extortionists'},{x:0,z:-60,name:'Report back to the manager · E'}]},
  {id:'heist',name:'The Canal Exchange',desc:'A three-stop street heist. Quiet needs a paid smuggler; loud brings guards. Recover the case, then lose the police before delivery.',pay:2600,duration:360,unlock:3,stages:[{x:0,z:-120,name:'Scout the bank approach · E'},{x:60,z:0,name:'Recover the exchange case · E'},{x:90,z:124,name:'Lose the police, deliver the case · E'}]},
 ] as const;
-export type LivingCity={completed:string[];reputation:number[];active:null|{id:string;step:number;remaining:number;choice:'quiet'|'loud';spawned:boolean;vehicleCondition:number};serviceCooldown:number;rested:number;vehicleCondition:Record<string,number>;tires:Record<string,number>;businessLevels:Record<string,number>;training:Record<string,number>;controls:{scale:number;opacity:number;leftHanded:boolean;aimAssist:boolean}};
+export type LivingCity={completed:string[];reputation:number[];active:null|{id:string;step:number;remaining:number;choice:'quiet'|'loud';spawned:boolean;vehicleCondition:number;passenger:RescuePassenger};serviceCooldown:number;rested:number;vehicleCondition:Record<string,number>;tires:Record<string,number>;businessLevels:Record<string,number>;training:Record<string,number>;controls:{scale:number;opacity:number;leftHanded:boolean;aimAssist:boolean}};
 export function newLivingCity():LivingCity{return {completed:[],reputation:[0,0,0,0,0],active:null,serviceCooldown:0,rested:0,vehicleCondition:{},tires:{},businessLevels:{},training:{},controls:{scale:1,opacity:.95,leftHanded:false,aimAssist:false}};}
 export function restoreLivingCity(v:any):LivingCity{
  const s=newLivingCity();if(!v||typeof v!=='object')return s;
@@ -24,7 +25,7 @@ export function restoreLivingCity(v:any):LivingCity{
   for(const id of allowed)if(v[key][id]!==undefined)s[key][id]=Math.floor(n(v[key][id],3));
  }
  const a=v.active,m=OPERATIONS.find(m=>m.id===a?.id);
- if(m&&!s.completed.includes(m.id)&&['quiet','loud'].includes(a.choice))s.active={id:m.id,step:Math.floor(n(a.step,m.stages.length-1)),remaining:n(a.remaining,m.duration,m.duration),choice:a.choice,spawned:a.spawned===true,vehicleCondition:n(a.vehicleCondition,100,100)};
+ if(m&&!s.completed.includes(m.id)&&['quiet','loud'].includes(a.choice))s.active={id:m.id,step:Math.floor(n(a.step,m.stages.length-1)),remaining:n(a.remaining,m.duration,m.duration),choice:a.choice,spawned:a.spawned===true,vehicleCondition:n(a.vehicleCondition,100,100),passenger:restorePassenger(a.passenger??{...approach(m.stages[0]!)})};
  s.controls={scale:Math.max(.8,n(v.controls?.scale,1.25,1)),opacity:Math.max(.35,n(v.controls?.opacity,1,.95)),leftHanded:v.controls?.leftHanded===true,aimAssist:v.controls?.aimAssist===true};return s;
 }
 export function activityBusy(c:Campaign){return !!(c.living.active||c.lifestyle.work||c.expansion.mission||c.cityStories.active||(c.legacy.daily&&!c.legacy.daily.finished));}
@@ -34,19 +35,21 @@ export function startOperation(c:Campaign,id:string,choice:'quiet'|'loud'='loud'
  const m=OPERATIONS.find(m=>m.id===id);if(!m||!['quiet','loud'].includes(choice)||c.legacy.tutorial<3||activityBusy(c)||c.living.completed.includes(id)||c.living.completed.length<m.unlock)return false;
  if((id==='stealth'||id==='heist'&&choice==='quiet')&&c.heat>=30)return false;
  if(id==='heist'&&choice==='quiet'&&!activeCrew(c).some(m=>m.id==='smuggler'))return false;
- c.living.active={id,step:0,remaining:m.duration,choice,spawned:false,vehicleCondition:100};return true;
+ c.living.active={id,step:0,remaining:m.duration,choice,spawned:false,vehicleCondition:100,passenger:newPassenger()};return true;
 }
-export function operationObjective(c:Campaign){const a=c.living.active;if(!a)return null;const m=OPERATIONS.find(m=>m.id===a.id)!;return {...m.stages[a.step]!,text:`${m.name} · ${m.stages[a.step]!.name} · ${Math.ceil(a.remaining)}s`};}
-export type OperationContext={x:number;z:number;driving:boolean;bike:boolean;recoveryCar:boolean;condition:number;guards:number;fired:boolean;searching:boolean};
+export function operationObjective(c:Campaign){const a=c.living.active;if(!a)return null;const m=OPERATIONS.find(m=>m.id===a.id)!;return {...m.stages[a.step]!,text:`${m.name} · ${m.stages[a.step]!.name} · ${Math.ceil(a.remaining)}s${a.id==='rescue'?` · MUSICIAN ${Math.ceil(a.passenger.hp)} HP${a.passenger.boarded?' · ON BOARD':a.step?' · WAIT FOR BOARDING':''}`:''}`};}
+export type OperationContext={x:number;z:number;driving:boolean;bike:boolean;recoveryCar:boolean;condition:number;guards:number;fired:boolean;searching:boolean;passengerBoarded?:boolean};
 export function operationInteract(c:Campaign,ctx:OperationContext){
  const a=c.living.active,point=operationObjective(c);if(!a||!point||!atPoint(ctx.x,ctx.z,point,8))return null;
  if(a.id==='recovery'&&a.step===0&&!ctx.driving)return null;
  if(a.id==='recovery'&&(!ctx.recoveryCar||ctx.condition<=20))return 'Use the marked wagon and keep its condition above 20%.';
+ if(a.id==='rescue'&&a.passenger.hp<=0)return 'The musician cannot be delivered: rescue failed.';
  if(a.id==='rescue'&&(a.step===0?ctx.driving:!ctx.driving||ctx.bike))return a.step===0?'Exit the vehicle to meet the musician.':'The musician needs a car, not a motorcycle.';
+ if(a.id==='rescue'&&a.step===1&&ctx.passengerBoarded!==true)return 'Stop beside the musician and wait for them to board.';
  if((a.id==='protection'||a.id==='heist'&&a.choice==='loud')&&a.step===1&&(!a.spawned||ctx.guards>0))return 'Clear the marked guards first.';
  if(a.id==='heist'&&a.step===2&&(c.heat>=30||ctx.searching))return 'Lose the police before delivering the case.';
  const m=OPERATIONS.find(m=>m.id===a.id)!;
- if(a.step<m.stages.length-1){a.step++;a.spawned=false;if(a.id==='heist')c.heat=Math.min(100,c.heat+(a.choice==='loud'?35:8));return 'Operation advanced. Follow the next marker.';}
+ if(a.step<m.stages.length-1){a.step++;a.spawned=false;if(a.id==='rescue'){a.passenger.x=ctx.x;a.passenger.z=ctx.z;}if(a.id==='heist')c.heat=Math.min(100,c.heat+(a.choice==='loud'?35:8));return 'Operation advanced. Follow the next marker.';}
  c.clean+=Math.round(m.pay*(1+trained(c,'hacker')*.05));c.living.completed.push(a.id);
  reputationGain(c,a.id==='protection'?0:a.id==='rescue'?1:3,15);c.living.active=null;
  return `${m.name} complete! Clean pay +$${Math.round(m.pay*(1+trained(c,'hacker')*.05))}. New equipment and operations may be unlocked.`;
@@ -54,6 +57,7 @@ export function operationInteract(c:Campaign,ctx:OperationContext){
 export function tickOperation(c:Campaign,dt:number,fired:boolean){
  c.living.serviceCooldown=Math.max(0,c.living.serviceCooldown-dt);c.living.rested=Math.max(0,c.living.rested-dt);
  const a=c.living.active;if(!a)return null;a.remaining-=dt;
+ if(a.id==='rescue'&&a.passenger.hp<=0){c.living.active=null;return 'Rescue failed: the musician was lost. No payout. Retry from City Life.';}
  const quiet=a.id==='stealth'||a.id==='heist'&&a.choice==='quiet';
  if(a.remaining<=0||quiet&&(fired||c.heat>=30)){c.living.active=null;return quiet&&(fired||c.heat>=30)?'Operation failed: the quiet approach was compromised.':'Operation expired. No payout. Retry from City Life.';}
  return null;

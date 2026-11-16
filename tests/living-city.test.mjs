@@ -27,7 +27,7 @@ test('rescue requires on-foot pickup and four-wheel transport, not remote confir
  const c=ready();c.living.completed=['recovery'];startOperation(c,'rescue');
  assert.match(operationInteract(c,context(c,{driving:true})),/Exit/);assert.match(operationInteract(c,context(c)),/advanced/);
  assert.match(operationInteract(c,context(c,{driving:true,bike:true})),/motorcycle/);assert.match(operationInteract(c,context(c)),/needs a car/);
- assert.match(operationInteract(c,context(c,{driving:true})),/complete/);assert.equal(c.clean,20950);
+ assert.match(operationInteract(c,context(c,{driving:true,passengerBoarded:true})),/complete/);assert.equal(c.clean,20950);
 });
 test('quiet operations fail on gunfire or heat, timeout pays nothing, death cancels operations',()=>{
  for(const [heat,fired]of [[0,true],[30,false]]){const c=ready();c.living.completed=['recovery'];startOperation(c,'stealth');c.heat=heat;assert.match(tickOperation(c,.1,fired),/compromised/);assert.equal(c.living.active,null);assert.equal(c.clean,20000);}

@@ -1,5 +1,7 @@
 # Living city gameplay update
 
+Navigation, rescue passengers and graphics were subsequently expanded; see NAVIGATION-AND-RESCUE.md for current behavior.
+
 Open **Empire / M → City Life**. The board is also opened by E at an interior's back desk. Existing garage, properties, story and heist boards remain available as tabs. Finish the three tutorial steps before accepting operations.
 
 ## Useful interiors
@@ -20,7 +22,7 @@ Open **Empire / M → City Life**. The board is also opened by E at an interior'
 All payouts require on-site interactions, prerequisites and remaining time; no completion by clicking a menu. Each operation pays only once per save. Failure/abandonment may be retried. Only one tracked operation/work/story/side-mission/daily activity runs at once; accepting an operation cancels an existing import contract without payout.
 
 1. **Borrowed Wheels** ($750, 240s): recover the marked gold estate wagon; return it with condition above 20%.
-2. **Last Ride Home** ($950, 200s; one completion): meet the musician on foot, then deliver them by car, not motorcycle. The companion follows on foot and is hidden while riding; no passenger combat/health simulation.
+2. **Last Ride Home** ($950, 200s; one completion): meet the musician on foot, then deliver them by car, not motorcycle. The companion follows on foot, boards a stopped car, sits visibly and has persistent health; see NAVIGATION-AND-RESCUE.md.
 3. **No Alarms Tonight** ($1,200, 240s; one completion): post-office-to-gallery delivery, no gunfire and heat below 30.
 4. **Keep the Music Playing** ($1,500, 300s; two completions): meet the club manager, defeat three extortionists and report back.
 5. **The Canal Exchange** ($2,600, 360s; three completions): scout the bank, recover a case at the mint, deliver to the dock after losing police. Quiet approach requires a paid loyal smuggler and no gunfire/wanted heat; loud approach adds heat and three guards. This is an additional street heist, not a replacement for existing major heist planning.
