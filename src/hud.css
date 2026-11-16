@@ -177,3 +177,16 @@ body[data-tutorial="1"] #touchControls [data-control="cover"] {display:none;}
 #hud > #combatFeedback { position:absolute; top:calc(50% + 28px); left:50%; transform:translateX(-50%); color:#e1f9eb; font-size:12px; font-weight:800; letter-spacing:2px; opacity:0; text-shadow:0 2px 7px #000; }
 #hud > #combatFeedback.headshot {color:#ffcd76;}
 #cross {transition:scale .08s ease-out; width:12px;height:12px;margin:-8px;border-width:2px;}
+/* Keep scaled touch controls anchored inside their screen edges. */
+.touchMove #moveJoystick { transform-origin: bottom left; }
+.touchActions { transform-origin: bottom right; }
+body.touch-enabled.left-handed .touchMove { left:auto; right:0; }
+body.touch-enabled.left-handed .touchActions { right:auto; left:0; transform-origin:bottom left; }
+body.left-handed #moveJoystick { transform-origin:bottom right; }
+
+/* Nine driving/combat actions occupy three rows instead of overflowing five rows. */
+body.touch-enabled .touchActions { grid-template-columns:repeat(3,minmax(0,1fr)); }
+@media (max-height:520px) and (orientation:landscape) {
+  body.touch-enabled { --touch-height:140px; }
+  body.touch-enabled .touchActions { grid-template-columns:repeat(4,minmax(0,1fr)); }
+}

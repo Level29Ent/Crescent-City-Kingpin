@@ -1,3 +1,4 @@
+import {livingCityPanel} from './living-city-ui.ts';
 import {locationMap} from './location-map.ts';
 import type {MapLocation} from './navigation.ts';
 import {mountShowroom} from './showroom.ts';
@@ -8,7 +9,7 @@ import { owns } from './expansion.ts';
 import { EXPANSION_TABS, renderExpansion } from './expansion-ui.ts';
 import { ACHIEVEMENTS, BLOCKS, EVENTS, GOODS, SPECIALISTS, activeCrew, bonus, heist, hire, launder, layLow, price, salePrice, resolveDefense, revenuePerMinute, settleWages, trade, type Campaign } from './campaign.ts';
 export type EmpireHooks = {
-  trackLocation(p:MapLocation):void; retire():void;travel(x:number,z:number):void;repair():void; milestone():void; missionStarted():void; characterConfirmed():void; backRoom():void; buildings(): readonly {id:string;name:string;x:number;z:number}[]; enterBuilding(id:string):void; campaign: Campaign; pause(open: boolean): void; changed(): void; notice(text: string): void;
+  room():string|null;service(action:'meal'|'treatment'|'repair'):void; trackLocation(p:MapLocation):void; retire():void;travel(x:number,z:number):void;repair():void; milestone():void; missionStarted():void; characterConfirmed():void; backRoom():void; buildings(): readonly {id:string;name:string;x:number;z:number}[]; enterBuilding(id:string):void; campaign: Campaign; pause(open: boolean): void; changed(): void; notice(text: string): void;
   location(): { x: number; z: number; district: number }; attack(id: string): void; waypoint(x: number, z: number, name: string): void;
   deploy(index: number): void; armory(weapon: number): void; gearOwned(weapon: number): boolean; appearance(): void; save(): void; reset(): Promise<void>; audio(): void;
 };
@@ -20,7 +21,7 @@ export function createEmpireUI(h: EmpireHooks) {
   const overlay = document.getElementById('empire')!;
   const content = document.getElementById('empireContent')!;
   const summary = document.getElementById('empireSummary')!;
-  const tabs = [...EXPANSION_TABS, 'Turf', 'Crew', 'Market', 'Safehouse', 'Character', 'Achievements', 'Leaderboard', 'Buildings', 'Legacy & Training', 'Stories & Exploration', 'Jobs & Style', 'City Map', 'Settings'];
+  const tabs = ['City Life', ...EXPANSION_TABS, 'Turf', 'Crew', 'Market', 'Safehouse', 'Character', 'Achievements', 'Leaderboard', 'Buildings', 'Legacy & Training', 'Stories & Exploration', 'Jobs & Style', 'City Map', 'Settings'];
   let selected = 'Turf'; let opened = false;
   function button(parent: HTMLElement, text: string, fn: () => void, disabled = false) {
     const b = document.createElement('button'); b.textContent = text; b.disabled = disabled;
@@ -49,12 +50,13 @@ export function createEmpireUI(h: EmpireHooks) {
     Array.from(nav.children).forEach((b, i) => b.setAttribute('aria-pressed', String(tabs[i] === selected)));
     if (renderExpansion(selected,c,content,{location:h.location,waypoint:h.waypoint,close,notice:h.notice,deploy:h.deploy,armory:h.armory,gearOwned:h.gearOwned,missionStarted:h.missionStarted,reload:h.changed})) return;
     content.append(el('h2', selected));
-    if(selected==='City Map'){locationMap(content,h.location(),p=>{h.trackLocation(p);close();h.missionStarted();});}
+    if(selected==='City Life'){livingCityPanel(c,content,{notice:h.notice,changed:h.changed,room:h.room,service:h.service,track:h.waypoint,resume:()=>{close();h.missionStarted();}});}
+    else if(selected==='City Map'){locationMap(content,h.location(),p=>{h.trackLocation(p);close();h.missionStarted();});}
     else if(selected==='Jobs & Style'){lifestylePanel(c,content,{changed:h.changed,track:h.waypoint,resume:()=>{close();h.missionStarted();}});}
     else if(selected==='Stories & Exploration'){cityStoriesPanel(c,content,{changed:h.changed,track:h.waypoint,resume:()=>{close();h.missionStarted();}});}
     else if(selected==='Legacy & Training'){legacyPanel(c,content,{changed:h.changed,retire:h.retire,travel:h.travel,repair:h.repair,waypoint:(x,z)=>{h.waypoint(x,z,'Daily checkpoint');close();}});}
     else if (selected === 'Buildings') {
-      content.append(el('p','Forty-one furnished public rooms, including Karma dispensary, a clinic, diner, florist, hardware shop, reading room, tailor, rehearsal hall and dispatch office. Inspect the floor supply emblem with E once per room: workshop parts or medkits (carry five). H / MEDKIT heals 35 health. Shift sprints indoors. Signed building entrances include three homes and all business/heist destinations. Enter on foot at the facade door. Outdoor combat and income pause while inside. Visit the back desk for services; E at the teal exit or Exit Building returns you to your original street position. Property ownership and prices remain unchanged.'));
+      content.append(el('p','Forty-seven furnished public rooms, including the patisserie, post office, auto-parts store, gallery, guest house and arcade. Visit service desks for City Life treatments, food, repairs, contacts and operations. Inspect the floor supply emblem with E once per room: workshop parts or medkits (carry five). H / MEDKIT heals 35 health. Shift sprints indoors. Signed building entrances include three homes and all business/heist destinations. Enter on foot at the facade door. Outdoor combat and income pause while inside. Visit the back desk for services; E at the teal exit or Exit Building returns you to your original street position. Property ownership and prices remain unchanged.'));
       for(const b of h.buildings()){
         const d=distance(h.location(),b.x,b.z),near=d<=3;
         const item=card(b.name,`${d} m away · walkable furnished room · no entry fee`);

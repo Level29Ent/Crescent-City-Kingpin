@@ -15,6 +15,7 @@ export type Person = {
   dispose(): void;
 };
 export type Car = {
+  damage(condition:number):void;
   root: THREE.Group;
   motion(speed: number, steer: number, braking: boolean, time: number): void;
   driverSeat: THREE.Vector3;
@@ -471,9 +472,11 @@ export function createCar(style: number, color: number): Car {
   const tail = new THREE.MeshStandardMaterial({ color: 0x8a0a0a, emissive: 0xff1010, emissiveIntensity: 0.5 });
   for (const sx of [-1, 1]) {
     part(box(), hl, 0.4, 0.17, 0.08, sx * 0.7, h0 + ch - 0.12, len / 2 + 0.02, body);
-    part(box(), tail, 0.42, 0.15, 0.08, sx * 0.7, h0 + ch - 0.12, -len / 2 - 0.02, body);
+    part(box(), tail, 0.42, 0.15, 0.08, sx * 0.7, h0 + ch - 0.12, -len / 2 - 0.02, body).name='vehicle-tail-light';
   }
   const extraMats: THREE.Material[] = [tail];
+  const damageMaterial=new THREE.MeshStandardMaterial({color:0x252522,roughness:1,transparent:true,opacity:0});extraMats.push(damageMaterial);
+  const dent=part(box(),damageMaterial,w*.7,.035,1.1,0,h0+ch+.025,len/2-.7,body);dent.name='vehicle-damage';
   const barMeshes: THREE.Mesh[] = [];
   let barR: THREE.MeshStandardMaterial | null = null, barB: THREE.MeshStandardMaterial | null = null;
   if (sports) {
@@ -535,6 +538,7 @@ export function createCar(style: number, color: number): Car {
   if(police){for(const [x,color]of [[-.4,0xff2233],[.4,0x3377ff]]){const light=new THREE.PointLight(color,0,9,2);light.position.set(x!,h0+ch+cabH+.3,0);root.add(light);emergencyLights.push(light);}}
   let last = -1, rot = 0;
   const car: Car = {
+    damage(condition){const severity=1-Math.max(0,Math.min(100,condition))/100;damageMaterial.opacity=severity*.9;dent.rotation.x=severity*.22;dent.position.y=h0+ch+.025-severity*.08;},
     root,
     driverSeat: new THREE.Vector3(-0.45, h0 + 0.35, sports ? -0.2 : -0.1),
     motion(speed, steer, braking, time) {
@@ -584,7 +588,7 @@ function createMotorcycle(color: number): Car {
   for(const side of [-1,1])part(box(),metal,.06,.8,.06,side*.12,.8,.91,body).rotation.x=-.18;
   part(sph(),emi(0xffe9bb,1.3),.28,.25,.13,0,1.12,1,body);
   const tail=new THREE.MeshStandardMaterial({color:0xb0141d,emissive:0xff1e20,emissiveIntensity:.4});
-  part(box(),tail,.23,.12,.08,0,1,-.91,body);
+  part(box(),tail,.23,.12,.08,0,1,-.91,body).name='vehicle-tail-light';
   const wheels:{pivot:THREE.Group;spin:THREE.Group}[]=[];
   for(const z of [-.92,.92]){
     const pivot=new THREE.Group();pivot.position.set(0,.4,z);root.add(pivot);
@@ -592,10 +596,12 @@ function createMotorcycle(color: number): Car {
     const tire=part(cyl(),rubber,.8,.19,.8,0,0,0,spin);tire.rotation.z=Math.PI/2;
     const hub=part(cyl(),metal,.47,.2,.47,0,0,0,spin);hub.rotation.z=Math.PI/2;wheels.push({pivot,spin});
   }
+  const scarMat=new THREE.MeshStandardMaterial({color:0x29231e,transparent:true,opacity:0});
+  const scar=part(box(),scarMat,.46,.025,.5,0,1.18,.3,body);scar.name='vehicle-damage';
   let last=0,spin=0;
-  return {root,driverSeat:new THREE.Vector3(0,1,-.25),motion(speed,steer,brake,time){
+  return {damage(condition){scarMat.opacity=(1-Math.max(0,Math.min(100,condition))/100)*.9;},root,driverSeat:new THREE.Vector3(0,1,-.25),motion(speed,steer,brake,time){
     const dt=Math.max(0,Math.min(.1,time-last));last=time;spin+=speed*dt/.4;
     wheels.forEach(w=>{w.spin.rotation.x=spin;});wheels[1]!.pivot.rotation.y=steer*.4;
     body.rotation.z=-steer*Math.min(.3,Math.abs(speed)*.012);tail.emissiveIntensity=brake?2.5:.4;
-  },dispose(){tail.dispose();root.removeFromParent();}};
+  },dispose(){scarMat.dispose();tail.dispose();root.removeFromParent();}};
 }

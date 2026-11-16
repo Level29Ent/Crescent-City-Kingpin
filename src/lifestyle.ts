@@ -1,3 +1,5 @@
+import {reputationGain} from './living-city.ts';
+import {districtAt} from './world.ts';
 import {atPoint} from './navigation.ts';
 import type {Campaign} from './campaign.ts';
 export const WORK = [
@@ -25,7 +27,7 @@ export function restoreLifestyle(v:any):Lifestyle{
  const work=WORK.find(w=>w.id===v.work?.id);if(work)s.work={id:work.id,step:Math.floor(num(v.work.step,0,1)),t:num(v.work.t,work.duration,work.duration)};
  if(v.carStyle&&typeof v.carStyle==='object')for(const key of Object.keys(v.carStyle).filter(k=>/^[0-7]$/.test(k))){const c=v.carStyle[key];if(c&&typeof c==='object')s.carStyle[key]={spoiler:c.spoiler===true,stripe:c.stripe===true,glowColor:Math.floor(num(c.glowColor,0,2)),rimColor:Math.floor(num(c.rimColor,0,2))};}return s;
 }
-export function startWork(c:Campaign,id:string){const work=WORK.find(w=>w.id===id);if(!work||c.lifestyle.work||c.lifestyle.workCooldown>0||c.cityStories.active||c.expansion.mission||(c.legacy.daily&&!c.legacy.daily.finished)||c.legacy.tutorial<3)return false;c.lifestyle.work={id,step:0,t:work.duration};return true;}
+export function startWork(c:Campaign,id:string){const work=WORK.find(w=>w.id===id);if(!work||c.living.active||c.lifestyle.work||c.lifestyle.workCooldown>0||c.cityStories.active||c.expansion.mission||(c.legacy.daily&&!c.legacy.daily.finished)||c.legacy.tutorial<3)return false;c.lifestyle.work={id,step:0,t:work.duration};return true;}
 export function workObjective(c:Campaign){const active=c.lifestyle.work;if(!active)return null;const w=WORK.find(w=>w.id===active.id)!;return {x:active.step?w.dropX:w.x,z:active.step?w.dropZ:w.z,text:`${w.name} · ${active.step?'Deliver':'Collect'} · ${Math.ceil(active.t)}s`};}
 /** Clean work rewards spare time; illegal recovery keeps its fixed risk/reward. */
 export function workBonus(pay:number,remaining:number,duration:number){
@@ -37,7 +39,7 @@ export function workInteract(c:Campaign,x:number,z:number){
  if(active.step===0){active.step=1;return 'Cargo collected. Follow the marked drop-off.';}
  const w=WORK.find(w=>w.id===active.id)!;
  const bonus=w.id==='fence'?0:workBonus(w.pay,active.t,w.duration);
- if(w.id==='fence'){c.dirty+=w.pay;c.heat=Math.min(100,c.heat+8);}else c.clean+=w.pay+bonus;
+ if(w.id==='fence'){c.dirty+=w.pay;c.heat=Math.min(100,c.heat+8);}else {c.clean+=w.pay+bonus;reputationGain(c,districtAt(w.dropX,w.dropZ),3);}
  if(w.id==='salvage')c.expansion.parts+=2;
  c.lifestyle.work=null;c.lifestyle.workCooldown=45;c.lifestyle.workCompleted++;
  return `${w.name} complete: +$${w.pay} ${w.id==='fence'?'dirty':'clean'}${bonus?` + $${bonus} early bonus`:''}${w.id==='salvage'?' + 2 parts':''}`;
