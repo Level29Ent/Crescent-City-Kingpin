@@ -1,3 +1,4 @@
+import {choiceEffects,journalNote} from './depth.ts';
 import type {Campaign} from './campaign.ts';
 import {BLOCKS,SPECIALISTS,activeCrew} from './campaign.ts';
 import {owns,PROPERTIES} from './expansion.ts';
@@ -46,7 +47,7 @@ export function startPersonal(c:Campaign,id:string){if(ventureBusy(c)||c.legacy.
 export function canTakeover(c:Campaign){return CHAPTERS.every(ch=>!!c.kingpin.chapters[ch.id])&&BLOCKS.every(b=>c.owned.includes(b.id))&&c.expansion.properties.filter(id=>owns(c,id)).length>=3&&activeCrew(c).length>=2&&!c.kingpin.takeoverWon;}
 export function startTakeover(c:Campaign){if(ventureBusy(c)||!canTakeover(c))return false;c.kingpin.active={kind:'takeover',id:'city',step:0,remaining:900,choice:'protect',method:'assault',spawned:false,resolved:false,progress:0,cargo:100};return true;}
 export function venturePoint(c:Campaign){const a=c.kingpin.active;if(!a)return null;
- if(a.kind==='story'){const ch=CHAPTERS.find(ch=>ch.id===a.id)!;return {x:a.step===2?ch.returnX:ch.x,z:a.step===2?ch.returnZ:ch.z,name:`${ch.name} · ${a.choice.toUpperCase()} · ${a.step===0?'Meet contact':a.step===1?`${a.method.toUpperCase()} · resolve encounter`:'Deliver evidence'}`};}
+ if(a.kind==='story'){const ch=CHAPTERS.find(ch=>ch.id===a.id)!;const safeRoute=choiceEffects(c).dockAllies&&a.id==='betrayal'&&a.step===0;return {x:safeRoute?120:a.step===2?ch.returnX:ch.x,z:safeRoute?180:a.step===2?ch.returnZ:ch.z,name:`${ch.name} · ${a.choice.toUpperCase()} · ${a.step===0?(safeRoute?'Dockworker ally provides a safe contact':'Meet contact'):a.step===1?`${a.method.toUpperCase()} · resolve encounter`:'Deliver evidence'}`};}
  if(a.kind==='takeover'){const b=BLOCKS[Math.min(a.step,4)]!;return a.step===5?{x:30,z:4,name:'Return to Mama Nola · choose the city’s future'}:{x:b.x,z:b.z,name:`TAKEOVER ${a.step+1}/5 · defeat rival retaliation at ${b.name}`};}
  if(a.kind==='event')return {x:a.id==='relief'?-180:0,z:a.id==='relief'?-60:120,name:a.id==='relief'?'Street relief collection · E to donate $50':'Threatened witness · E to help, then clear two pursuers'};
  if(a.kind==='personal'){const s=SPECIALISTS.findIndex(m=>m.id===a.id),p=[{x:-60,z:0},{x:0,z:120},{x:60,z:120},{x:0,z:-60},{x:120,z:180},{x:-180,z:0}][s]!;return {x:a.step===2?30:p.x,z:a.step===2?4:p.z,name:`${SPECIALISTS[s]!.name} · ${a.step===0?'Meet personal contact':a.step===1?'Rescue contact from rival guards':'Return to Mama Nola'}`};}
@@ -81,8 +82,8 @@ export function ventureInteract(c:Campaign,ctx:VentureContext){
  if(a.kind==='event'&&a.id==='witness'){if(a.step===0){a.step=1;return 'Two pursuers spotted the witness. Protect them.';}c.living.reputation[0]=Math.min(100,c.living.reputation[0]!+8);c.clean+=150;c.kingpin.active=null;return 'Witness safe. +$150 clean and neighborhood trust.';}
  if(a.step<2){a.step++;a.spawned=false;a.progress=0;return 'Activity advanced. Follow the next marker.';}
  let pay=0;
- if(a.kind==='story'){const ch=CHAPTERS.find(ch=>ch.id===a.id)!;pay=Math.round(ch.pay*(a.choice==='profit'?1.4:1));c.kingpin.chapters[a.id]=a.choice;c.heat=Math.min(100,c.heat+(a.choice==='profit'?20:4));
-  if(a.id==='betrayal'){if(a.choice==='profit'){c.crew.forEach(m=>m.loyalty=Math.max(0,m.loyalty-15));c.kingpin.retaliation=20;}else c.crew.forEach(m=>m.loyalty=Math.min(100,m.loyalty+10));}
+ if(a.kind==='story'){const ch=CHAPTERS.find(ch=>ch.id===a.id)!;pay=Math.round(ch.pay*(a.choice==='profit'?1.4:1));c.kingpin.chapters[a.id]=a.choice;journalNote(c,`${ch.name}: chose ${a.choice}; evidence route ${a.method}.`);c.heat=Math.min(100,c.heat+(a.choice==='profit'?20:4));
+  if(a.id==='betrayal'){if(a.choice==='profit'){c.crew.forEach(m=>m.loyalty=Math.max(0,m.loyalty-15));c.kingpin.retaliation=130;}else c.crew.forEach(m=>m.loyalty=Math.min(100,m.loyalty+10));}
   if(a.choice==='protect')c.living.reputation=c.living.reputation.map(n=>Math.min(100,n+5));
  }else if(a.kind==='personal'){c.kingpin.personal.push(a.id);const crew=c.crew.find(m=>m.id===a.id);if(crew)crew.loyalty=Math.min(100,crew.loyalty+25);pay=350;}
  else {pay=a.kind==='club'?550:a.kind==='shipment'?Math.round(1100*a.cargo/100):450;c.kingpin.businessWins++;c.kingpin.businessCooldown[a.id]=240;if(a.choice==='profit')c.heat=Math.min(100,c.heat+12);}
@@ -103,7 +104,7 @@ export function tickKingpin(c:Campaign,dt:number,ctx:VentureContext){
   }
  }
  // Retaliation uses the existing turf-defense system: loss really removes the corner.
- if(Object.keys(s.chapters).length&&!c.defense&&c.owned.length){s.retaliation+=dt;if(s.retaliation>=240){s.retaliation=0;c.defense={block:c.owned[Math.floor(c.clock/240)%c.owned.length]!,remaining:120};messages.push('RIVAL RETALIATION: defend your neighborhood or lose its income and control.');}}
+ if(Object.keys(s.chapters).length&&!c.defense&&c.owned.length){s.retaliation+=dt;if(s.retaliation>=choiceEffects(c).retaliationInterval){s.retaliation=0;c.defense={block:c.owned[Math.floor(c.clock/240)%c.owned.length]!,remaining:120};messages.push('RIVAL RETALIATION: defend your neighborhood or lose its income and control.');}}
  return messages;
 }
 export function callCompanion(c:Campaign,id:string,x:number,z:number){if(!activeCrew(c).some(m=>m.id===id)||c.kingpin.companion.injury>0||!!c.kingpin.companion.id)return false;c.kingpin.companion={id,command:'follow',hp:100,x,z,injury:0};return true;}

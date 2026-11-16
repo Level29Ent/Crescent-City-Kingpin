@@ -6,7 +6,7 @@ export function legacyPanel(c:Campaign,root:HTMLElement,h:{changed():void;retire
  const el=(tag:string,text:string)=>{const e=document.createElement(tag);e.textContent=text;return e;};
  const section=(title:string,body:string)=>{const s=el('article','');s.className='empire-card';s.append(el('h3',title),el('p',body));root.append(s);return s;};
  const button=(parent:HTMLElement,text:string,fn:()=>void,disabled=false)=>{const b=el('button',text) as HTMLButtonElement;b.disabled=disabled;b.onclick=()=>{fn();h.changed();};parent.append(b);};
- const tutorial=section('Guided onboarding',TUTORIAL[c.legacy.tutorial]!);button(tutorial,'Skip tutorial (unlock open city)',()=>{c.legacy.tutorial=3;},c.legacy.tutorial===3);
+ const tutorial=section('Guided onboarding',TUTORIAL[c.legacy.tutorial]!);button(tutorial,'Skip tutorial (unlock open city)',()=>{c.legacy.tutorial=3;c.depth.guided=false;},c.legacy.tutorial===3);
  const settings=section('Touch movement sensitivity','0.5× precision to 2× responsive. Release always returns the stick to neutral.');
  const slider=document.createElement('input');slider.type='range';slider.min='.5';slider.max='2';slider.step='.1';slider.value=String(c.legacy.sensitivity);slider.setAttribute('aria-label','Joystick sensitivity');
  slider.oninput=()=>{c.legacy.sensitivity=Number(slider.value);};slider.onchange=h.changed;settings.append(slider);
