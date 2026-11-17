@@ -38,9 +38,10 @@ export function openingAdvice(c:Campaign){
  if(c.legacy.tutorial===0)return 'Meet Mama Nola first. Follow the ground marker, then Interact. You do not need to manage an empire yet.';
  if(c.legacy.tutorial===1)return 'Your first rival is a practice fight. Aim, fire and reload; crouch if you need steadier shots. Your next lesson unlocks only after this encounter.';
  if(c.legacy.tutorial===2)return 'Take the marked sedan and reach the nearby drop. Learn driving before accepting longer jobs.';
- if(c.lifestyle.workCompleted===0)return 'First open-city goal: accept Clinic Supply Run or Catering in Jobs & Style. Pickup, deliver and earn clean money without a fight.';
+ if(c.pursuits.active||c.kingpin.active||c.living.active||c.cityStories.active||c.expansion.mission||c.lifestyle.work||c.legacy.daily&&!c.legacy.daily.finished)return 'Finish your current activity. Follow its destination marker and use Interact at each objective; City Map is for directions, not accepting another job.';
+ if(c.lifestyle.workCompleted===0)return 'Visit Charity Street Clinic or Mama Nola’s. Enter the signed door and talk to the back-desk attendant for Clinic Supply Run or a catering job. Pickup, deliver and earn clean money without a fight.';
  if(c.stats.captured===0)return 'Next: hire a specialist or capture one corner. Dirty income needs laundering; do not buy every upgrade at once.';
- return 'Open city unlocked. Follow the journal’s unresolved objectives, or disable guided menus to browse all systems.';
+ return 'Explore the city. Use the map to find contacts and addresses, then travel there and Interact. Your current objective stays on the HUD.';
 }
 
 export function encounterGuards(c:Campaign,kind:string,id:string){

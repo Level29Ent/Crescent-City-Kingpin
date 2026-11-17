@@ -89,7 +89,7 @@ test('street theft report is once per car; tools spend once, respect cooldown an
 test('radio patterns are distinct and captioned events never appear over an active mission',()=>{
  const c=ready();assert.notDeepEqual(radioPattern('jazz',0),radioPattern('bounce',0));assert.deepEqual(radioPattern('off',0),[]);assert.deepEqual(radioPattern('news',0),[]);
  c.kingpin.radio='news';assert.match(atmosphereLine(c,0),/Crescent News/);assert.ok(tickAtmosphere(c,24,1).length);assert.equal(c.kingpin.active,null);
- startChapter(c,'union','protect','assault');tickAtmosphere(c,200,0);assert.equal(c.kingpin.active.kind,'story');c.kingpin.active=null;tickAtmosphere(c,1,0);assert.equal(c.kingpin.active.kind,'event');assert.ok(['relief','witness'].includes(c.kingpin.active.id));
+ startChapter(c,'union','protect','assault');tickAtmosphere(c,200,0);assert.equal(c.kingpin.active.kind,'story');c.kingpin.active=null;tickAtmosphere(c,1,0);assert.equal(c.kingpin.active,null);assert.ok(c.kingpin.eventClock>=150,'time unlocks local offers without accepting one remotely');
 });
 test('old/malformed saves migrate safely, clamp private state and reject impossible active ventures',()=>{
  assert.deepEqual(restoreCampaign({clean:500}).kingpin,newKingpin());

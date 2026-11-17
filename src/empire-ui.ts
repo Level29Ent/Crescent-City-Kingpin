@@ -1,34 +1,36 @@
+import {worldActivities,atContact,startContact,canStartContact,contactBlockReason,type ContactPosition} from './world-activities.ts';
+import {siteTabs,siteServices} from './site-services.ts';
+import {INTERIORS} from './interiors.ts';
+import {missionCard} from './mission-presentation.ts';
+import {openingAdvice} from './depth.ts';
 import {OUTFITS} from './pursuits.ts';
-import {pursuitsPanel} from './pursuits-ui.ts';
-import {journalPanel} from './journal-ui.ts';
-import {guidedTabs} from './depth.ts';
 import {polishPanel} from './polish-ui.ts';
-import {kingpinPanel} from './kingpin-ui.ts';
-import {livingCityPanel} from './living-city-ui.ts';
 import {locationMap} from './location-map.ts';
 import type {MapLocation} from './navigation.ts';
 import {mountShowroom} from './showroom.ts';
-import {lifestylePanel} from './lifestyle-ui.ts';
-import {cityStoriesPanel} from './city-stories-ui.ts';
-import { legacyPanel } from './legacy-ui.ts';
 import { owns } from './expansion.ts';
-import { EXPANSION_TABS, renderExpansion } from './expansion-ui.ts';
-import { ACHIEVEMENTS, BLOCKS, EVENTS, GOODS, SPECIALISTS, activeCrew, bonus, heist, hire, launder, layLow, price, salePrice, resolveDefense, revenuePerMinute, settleWages, trade, type Campaign } from './campaign.ts';
+import { renderExpansion } from './expansion-ui.ts';
+import { ACHIEVEMENTS, BLOCKS, EVENTS, GOODS, SPECIALISTS, bonus, heist, hire, launder, layLow, price, salePrice, revenuePerMinute, settleWages, trade, type Campaign } from './campaign.ts';
 export type EmpireHooks = {
+  contactPosition():ContactPosition;creatingCharacter():boolean;
   retryCheckpoint():void;replay(key:string,challenge:'finish'|'quiet'|'speed'):void;stopReplay():void;replaying():boolean;garage():boolean;room():string|null;service(action:'meal'|'treatment'|'repair'):void; trackLocation(p:MapLocation):void; retire():void;travel(x:number,z:number):void;repair():void; milestone():void; missionStarted():void; characterConfirmed():void; backRoom():void; buildings(): readonly {id:string;name:string;x:number;z:number}[]; enterBuilding(id:string):void; campaign: Campaign; pause(open: boolean): void; changed(): void; notice(text: string): void;
   location(): { x: number; z: number; district: number }; attack(id: string): void; waypoint(x: number, z: number, name: string): void;
   deploy(index: number): void; armory(weapon: number): void; gearOwned(weapon: number): boolean; appearance(): void; save(): void; reset(): Promise<void>; audio(): void;
 };
 const money = (n: number) => `$${Math.floor(n).toLocaleString()}`;
-const distance = (a: { x: number; z: number }, x: number, z: number) => Math.round(Math.hypot(a.x - x, a.z - z));
 const el = (tag: string, text = '', cls = '') => { const e = document.createElement(tag); e.textContent = text; e.className = cls; return e; };
 export function createEmpireUI(h: EmpireHooks) {
   const c = h.campaign;
   const overlay = document.getElementById('empire')!;
   const content = document.getElementById('empireContent')!;
   const summary = document.getElementById('empireSummary')!;
-  const tabs = ['City Pursuits','City Journal','Polish & Replays','Kingpin Stories','City Life', ...EXPANSION_TABS, 'Turf', 'Crew', 'Market', 'Safehouse', 'Character', 'Achievements', 'Leaderboard', 'Buildings', 'Legacy & Training', 'Stories & Exploration', 'Jobs & Style', 'City Map', 'Settings'];
-  let selected = 'City Journal'; let opened = false;
+  const tabs = ['City Map','Objective','Progress','Settings','Contact','Services','Garage','Heists','Properties','Interior','Armory','Crew','Market','Safehouse','Character','Polish & Replays','Leaderboard'];
+  let selected = 'City Map'; let opened = false; let contactId:string|null=null;
+  const allowedTabs=()=>{
+    const local=siteTabs(h.room());
+    const contact=worldActivities(c).find(a=>a.id===contactId);
+    return ['City Map','Objective','Progress','Settings','Leaderboard',...local,...(contact&&atContact(contact,h.contactPosition())?['Contact']:[]),...(h.creatingCharacter()?['Character']:[])];
+  };
   function button(parent: HTMLElement, text: string, fn: () => void, disabled = false) {
     const b = document.createElement('button'); b.textContent = text; b.disabled = disabled;
     b.onclick = () => { fn(); h.changed(); if (opened) render(); }; parent.append(b); return b;
@@ -37,15 +39,18 @@ export function createEmpireUI(h: EmpireHooks) {
     const box = el('article', '', 'empire-card'); box.append(el('h3', title), el('p', text)); content.append(box); return box;
   }
   function close() { opened = false; overlay.hidden = true; h.pause(false); }
-  function open(tab = 'City Journal') {
-    h.milestone();const allowed=guidedTabs(c); selected = allowed&&!allowed.includes(tab)?'City Journal':tab; opened = true; overlay.hidden = false; h.pause(true); render();
+  function open(tab = 'City Map') {
+    h.milestone(); selected = allowedTabs().includes(tab)?tab:'City Map'; opened = true; overlay.hidden = false; h.pause(true); render();
     (document.getElementById('empireClose') as HTMLButtonElement).focus();
   }
   document.getElementById('empireClose')!.onclick = close;
   document.getElementById('openCityMap')!.onclick=()=>open('City Map');
   document.getElementById('manage')!.onclick = () => open();
-  document.getElementById('festivalLaunch')!.onclick = () => open('Missions');
-  document.getElementById('customize')!.onclick = () => open('Character');
+  document.getElementById('festivalLaunch')!.onclick = () => {h.trackLocation({id:'contact:mission:parade',name:'Parade marshal · Royal Street',category:'Contacts & work',x:0,z:-18,instruction:'Meet the parade marshal on Royal Street on foot. Interact in the gold ring to join.'});document.getElementById('go')!.click();};
+  document.getElementById('customize')!.onclick = () => {
+    if(h.creatingCharacter()){open('Character');return;}
+    const tailor=INTERIORS.find(r=>r.id==='tailor')!;h.waypoint(tailor.x,tailor.z,'Royal Street Tailor');h.notice('Visit the tailor’s signed door and back desk to change your look.');document.getElementById('go')!.click();
+  };
   document.getElementById('mute')!.onclick = () => { c.audio.muted = !c.audio.muted; h.audio(); h.changed(); };
   const nav = document.getElementById('empireTabs')!;
   tabs.forEach(tab => button(nav, tab, () => { selected = tab; }));
@@ -53,56 +58,53 @@ export function createEmpireUI(h: EmpireHooks) {
   function render() {
     content.replaceChildren();
     summary.textContent = `${money(c.clean)} clean · ${money(c.dirty)} dirty · Heat ${Math.floor(c.heat)}/100 · ${Math.floor(revenuePerMinute(c))}/min from turf`;
-    const allowed=guidedTabs(c);if(allowed&&!allowed.includes(selected))selected='City Journal';
-    Array.from(nav.children).forEach((b, i) => { (b as HTMLElement).hidden=!!allowed&&!allowed.includes(tabs[i]!);b.setAttribute('aria-pressed',String(tabs[i]===selected));});
+    const allowed=allowedTabs();if(!allowed.includes(selected))selected='City Map';
+    const room=INTERIORS.find(r=>r.id===h.room());
+    overlay.querySelector('h1')!.textContent=room?room.name:'PAUSED';
+    const visible=siteTabs(h.room()).includes(selected)||selected==='Contact'?[selected,...(room?['Contact','Services']:[])]:['City Map','Objective','Progress','Settings',...(h.creatingCharacter()?['Character']:[])];
+    Array.from(nav.children).forEach((b, i) => { (b as HTMLElement).hidden=!visible.includes(tabs[i]!);b.setAttribute('aria-pressed',String(tabs[i]===selected));});
     if(h.replaying()&&selected==='Leaderboard'){card('Leaderboard disabled during practice','Return to your saved campaign before viewing/submitting campaign scores. Replay balances and progress are disposable.');return;}
-    if (renderExpansion(selected,c,content,{location:h.location,waypoint:h.waypoint,close,notice:h.notice,deploy:h.deploy,armory:h.armory,gearOwned:h.gearOwned,missionStarted:h.missionStarted,reload:h.changed})) return;
+    if (renderExpansion(selected,c,content,{room:h.room,location:h.location,waypoint:h.waypoint,close,notice:h.notice,deploy:h.deploy,armory:h.armory,gearOwned:h.gearOwned,missionStarted:h.missionStarted,reload:h.changed})) return;
     content.append(el('h2', selected));
-    if(selected==='City Pursuits'){pursuitsPanel(c,content,{changed:h.changed,notice:h.notice,track:h.waypoint,appearance:h.appearance,resume:()=>{close();h.missionStarted();}});}
-    else if(selected==='City Journal'){journalPanel(c,content,{retry:h.retryCheckpoint,changed:()=>{h.changed();render();},notice:h.notice,track:(x,z,name)=>{h.waypoint(x,z,name);close();}});}
+    if(selected==='Objective'){
+      const active=missionCard(c);
+      card(active?active.title:'Your next step',active?`Step ${active.step}/${active.total} · ${active.objective}`:openingAdvice(c));
+      card('Travel, then interact','Use City Map to set a route. Cyan doors lead to walkable rooms; gold rings mark street contacts. Enter on foot, walk to the desk, then Interact. Offers never start from the map.');
+      if(active){const box=card('Leave this activity','Abandoning gives no payout and does not refund setup costs or entry fees.');button(box,'Abandon current activity · no refund',()=>{
+        if(c.expansion.mission)c.crew.forEach(m=>m.loyalty=Math.max(0,m.loyalty-12));
+        c.expansion.mission=null;c.cityStories.active=null;c.living.active=null;c.kingpin.active=null;
+        if(c.lifestyle.work){c.lifestyle.work=null;c.lifestyle.workCooldown=30;}
+        if(c.pursuits.active){c.pursuits.active=null;c.pursuits.cooldown=20;}
+      });}
+      if(c.depth.checkpoint){const cp=c.depth.checkpoint;const box=card('Checkpoint',`${cp.title} · Retry costs $50. Current funds and earned rewards are not rolled back.`);button(box,'Retry last stage · $50',h.retryCheckpoint,c.clean<50);}
+    }
+    else if(selected==='Progress'){
+      card('Your city',`${c.stats.captured} corners captured · $${Math.floor(c.stats.cleaned).toLocaleString()} laundered · ${c.lifestyle.workCompleted} work orders completed`);
+      card('Stories',`${c.cityStories.completed.length}/3 original stories · ${Object.keys(c.kingpin.chapters).length}/3 new chapters · ${c.living.completed.length}/5 neighborhood operations`);
+      const achievements=document.createElement('details');achievements.append(el('summary','Achievements'));for(const a of ACHIEVEMENTS)achievements.append(el('p',`${c.achievements.includes(a.id)?'✓':'○'} ${a.name} · ${a.description}`));content.append(achievements);button(content,'Optional community leaderboard',()=>{selected='Leaderboard';});
+    }
+    else if(selected==='Services'){
+      const tools=el('div','','site-tools');for(const tab of siteTabs(h.room()).filter(t=>!['Services','Contact'].includes(t)))button(tools,tab,()=>{selected=tab;});content.append(tools);
+      siteServices(c,content,{...h,close,refresh:render});
+    }
+    else if(selected==='Contact'){
+      const offers=worldActivities(c).filter(a=>atContact(a,h.contactPosition()));
+      if(!offers.length){card('No new offers','Finish your current objective or explore another contact.');return;}
+      const contact=offers.find(a=>a.id===contactId)??offers[0]!;contactId=contact.id;
+      if(offers.length>1){const label=el('label','Talk about '),select=document.createElement('select');select.setAttribute('aria-label','Local conversation');for(const a of offers){const option=document.createElement('option');option.value=a.id;option.textContent=a.name;select.append(option);}select.value=contact.id;select.onchange=()=>{contactId=select.value;render();};label.append(select);content.append(label);}
+      const box=card(contact.name,`${contact.speaker}: ${contact.description}`);
+      let method:'assault'|'bribe'|'lockpick'|'disguise'='assault';
+      if(contact.methods){const select=document.createElement('select');select.setAttribute('aria-label','Approach');for(const m of contact.methods){const option=el('option',({assault:'Confront guards',bribe:'Pay fixer $300 on-site',lockpick:'Hold lockpick for 8s on-site',disguise:'Use purchased disguise below 30 heat'})[m]) as HTMLOptionElement;option.value=m;select.append(option);}select.onchange=()=>method=select.value as typeof method;box.append(select);}
+      for(const choice of contact.choices)button(box,choice.label,()=>{
+        if(startContact(c,contact.id,h.contactPosition(),choice.id,method)){close();h.missionStarted();}
+        else h.notice(contactBlockReason(c));
+      },!canStartContact(c,contact,choice.id));
+      if(!contact.choices.some(choice=>canStartContact(c,contact,choice.id)))box.append(el('p',contactBlockReason(c)));
+      button(content,'Not now · return to city',close);
+    }
     else if(selected==='Polish & Replays'){polishPanel(c,content,{changed:h.changed,notice:h.notice,replay:(key,challenge)=>{close();h.replay(key,challenge);},stopReplay:h.stopReplay,replaying:h.replaying,track:(x,z,name)=>{h.waypoint(x,z,name);close();}});}
-    else if(selected==='Kingpin Stories'){kingpinPanel(c,content,{notice:h.notice,changed:h.changed,track:h.waypoint,location:h.location,garage:h.garage,room:h.room,resume:()=>{close();h.missionStarted();}});}
-    else if(selected==='City Life'){livingCityPanel(c,content,{notice:h.notice,changed:h.changed,room:h.room,service:h.service,track:h.waypoint,resume:()=>{close();h.missionStarted();}});}
-    else if(selected==='City Map'){locationMap(content,h.location(),p=>{h.trackLocation(p);close();h.missionStarted();});}
-    else if(selected==='Jobs & Style'){lifestylePanel(c,content,{changed:h.changed,track:h.waypoint,resume:()=>{close();h.missionStarted();}});}
-    else if(selected==='Stories & Exploration'){cityStoriesPanel(c,content,{changed:h.changed,track:h.waypoint,resume:()=>{close();h.missionStarted();}});}
-    else if(selected==='Legacy & Training'){legacyPanel(c,content,{changed:h.changed,retire:h.retire,travel:h.travel,repair:h.repair,waypoint:(x,z)=>{h.waypoint(x,z,'Daily checkpoint');close();}});}
-    else if (selected === 'Buildings') {
-      content.append(el('p','Fifty-one public interiors/annexes including two rooftops, a waterfront pavilion and rail market, including the patisserie, post office, auto-parts store, gallery, guest house and arcade. Visit service desks for City Life treatments, food, repairs, contacts and operations. Inspect the floor supply emblem with E once per room: workshop parts or medkits (carry five). H / MEDKIT heals 35 health. Shift sprints indoors. Signed building entrances include three homes and all business/heist destinations. Enter on foot at the facade door. Outdoor combat and income pause while inside. Visit the back desk for services; E at the teal exit or Exit Building returns you to your original street position. Property ownership and prices remain unchanged.'));
-      for(const b of h.buildings()){
-        const d=distance(h.location(),b.x,b.z),near=d<=3;
-        const item=card(b.name,`${d} m away · walkable furnished room · no entry fee`);
-        button(item,near?'Enter building':'Mark entrance',()=>{if(near){h.enterBuilding(b.id);close();}else{h.waypoint(b.x,b.z,b.name);close();}});
-      }
-    } else if (selected === 'Turf') {
-      content.append(el('p', 'Select a corner to mark it on the minimap. Travel there, press E to start a fight, and defeat its guards. Controlled corners earn dirty cash per minute but raise heat. Rival attacks suspend that corner’s revenue.'));
-      if (c.defense) {
-        const block = BLOCKS.find(b => b.id === c.defense!.block)!;
-        const warning = card(`UNDER ATTACK: ${block.name}`, `${Math.ceil(c.defense.remaining)} seconds left. Fight on-site or dispatch a loyal, fully paid crew.`);
-        button(warning, 'Go defend', () => { h.waypoint(block.x, block.z, `Defend ${block.name}`); close(); });
-        const chance = Math.min(.9, .2 + bonus(c).defense / 100);
-        button(warning, `Dispatch crew (${Math.round(chance * 100)}% success)`, () => {
-          const success = Math.random() < chance; resolveDefense(c, success);
-          h.notice(success ? 'Your crew held the corner!' : 'Defense failed. Corner lost; loyalty fell.');
-        }, activeCrew(c).length === 0);
-      }
-      const map = el('div', '', 'district-map');
-      map.setAttribute('aria-label', 'Neighborhood district selector');
-      for (const b of BLOCKS) {
-        const mark = button(map, b.name, () => { h.waypoint(b.x, b.z, b.name); close(); });
-        mark.style.left = `${(b.x + 200) / 4}%`; mark.style.top = `${(b.z + 200) / 4}%`;
-        mark.classList.toggle('owned', c.owned.includes(b.id));
-      }
-      content.append(map);
-      for (const b of BLOCKS) {
-        const owned = c.owned.includes(b.id); const dist = distance(h.location(), b.x, b.z);
-        const item = card(`${owned ? '●' : '○'} ${b.name}`, `${owned ? 'Controlled' : 'Rival turf'} · ${money(b.rate)}/min base · +${b.risk} heat/min · ${dist} m away`);
-        button(item, owned ? 'Visit corner' : dist < 14 ? 'Fight for this corner' : 'Mark route', () => {
-          if (!owned && dist < 14) { h.attack(b.id); close(); }
-          else { h.waypoint(b.x, b.z, b.name); close(); }
-        });
-      }
-    } else if (selected === 'Crew') {
+    else if(selected==='City Map'){locationMap(content,h.location(),p=>{h.trackLocation(p);close();},c);}
+    else if (selected === 'Crew') {
       content.append(el('p', 'One of each specialist. Wages come from clean capital every 24 real hours of online/offline time. Unpaid or low-loyalty crew (<25) stop providing bonuses. Mission failure costs 12 loyalty.'));
       for (const s of SPECIALISTS) {
         const m = c.crew.find(m => m.id === s.id);
@@ -125,14 +127,14 @@ export function createEmpireUI(h: EmpireHooks) {
         button(item, 'Sell one', () => { trade(c, i, district, true); }, !c.inventory[i]);
         item.append(el('small', BLOCKS.map(b => `${b.name}: ${money(price(c, i, b.district))}`).join(' · ')));
       }
-      const item = card('Warehouse heist', `Risk $100 clean for $1,200 dirty (+crew bonuses). Adds 25 heat; 3-minute cooldown. Failure lowers loyalty. Success chance ${Math.round(Math.min(.9, .45 + bonus(c).defense / 100 + bonus(c).payout) * 100)}%.`);
-      const near = distance(h.location(), 60, 120) < 14;
+      if(h.room()==='freight'){const item = card('Warehouse heist', `Risk $100 clean for $1,200 dirty (+crew bonuses). Adds 25 heat; 3-minute cooldown. Failure lowers loyalty. Success chance ${Math.round(Math.min(.9, .45 + bonus(c).defense / 100 + bonus(c).payout) * 100)}%.`);
+      const near = h.room()==='freight';
       button(item, near ? `Run heist${c.heistCooldown ? ` (${Math.ceil(c.heistCooldown)}s cooldown)` : ''}` : 'Travel to warehouse heist', () => {
         if (!near) { h.waypoint(60, 120, 'Warehouse heist'); close(); return; }
         const success = heist(c); h.notice(success ? 'Heist succeeded! Dirty cash acquired.' : 'Heist failed. Crew loyalty dropped.');
-      }, near && (c.clean < 100 || c.heistCooldown > 0));
+      }, near && (c.clean < 100 || c.heistCooldown > 0));}
     } else if (selected === 'Safehouse') {
-      const near = distance(h.location(), 30, 4) < 10;
+      const near = h.room()==='hq';
       content.append(el('p', `Mama Nola’s is your safehouse. ${near ? 'You are inside its safe zone.' : 'Travel to the gold HQ marker to launder cash or lay low.'} Operations pause while managing your empire.`));
       button(content, 'Back room gear & import jobs', () => {close();h.backRoom();}, !near);
       button(content, 'Mark safehouse', () => { h.waypoint(30, 4, 'Safehouse'); close(); });
@@ -207,6 +209,16 @@ export function createEmpireUI(h: EmpireHooks) {
         input.oninput = () => { c.audio[key] = Number(input.value) / 100; h.audio(); }; input.onchange = h.changed; label.append(input); content.append(label);
       }
       button(content, c.audio.muted ? 'Unmute all' : 'Mute all', () => { c.audio.muted = !c.audio.muted; h.audio(); });
+      for(const [key,label,min,max,step,value,apply]of [
+        ['look','Look sensitivity',.4,2,.1,c.lifestyle.lookSensitivity,(n:number)=>c.lifestyle.lookSensitivity=n],
+        ['joystick','Joystick sensitivity',.5,2,.1,c.legacy.sensitivity,(n:number)=>c.legacy.sensitivity=n],
+        ['scale','Control size',.8,1.25,.05,c.living.controls.scale,(n:number)=>c.living.controls.scale=n],
+        ['opacity','Control opacity',.35,1,.05,c.living.controls.opacity,(n:number)=>c.living.controls.opacity=n],
+      ] as const){const field=el('label',label,'field'),input=document.createElement('input');input.type='range';input.min=String(min);input.max=String(max);input.step=String(step);input.value=String(value);input.setAttribute('aria-label',label);input.oninput=()=>{apply(Number(input.value));h.changed();};field.append(input);content.append(field);}
+      for(const [key,label]of [['leftHanded','Left-handed layout'],['aimAssist','Touch aim assistance']] as const){const field=el('label',label,'field'),input=document.createElement('input');input.type='checkbox';input.checked=c.living.controls[key];input.onchange=()=>{c.living.controls[key]=input.checked;h.changed();};field.append(input);content.append(field);}
+      if(c.legacy.tutorial<3)button(content,'Skip opening tutorial',()=>{c.legacy.tutorial=3;});
+      const accessibility=document.createElement('details');accessibility.append(el('summary','Accessibility & keyboard bindings'));const inputs=el('div');accessibility.append(inputs);content.append(accessibility);
+      polishPanel(c,inputs,{changed:h.changed,notice:h.notice,replay:()=>{},stopReplay:()=>{},replaying:h.replaying,track:()=>{}},'settings');
       button(content, 'Save Game', h.save);
       const danger = card('Reset Progress', 'This permanently clears this browser’s campaign and both save copies. It does not delete an already-published leaderboard score. Type RESET to confirm.');
       const input = document.createElement('input'); input.placeholder = 'Type RESET'; input.setAttribute('aria-label', 'Reset confirmation'); danger.append(input);
@@ -214,5 +226,5 @@ export function createEmpireUI(h: EmpireHooks) {
       input.oninput = () => reset.disabled = input.value !== 'RESET';
     }
   }
-  return { open, close, isOpen: () => opened, render };
+  return { open, close, contact(id:string){const a=worldActivities(c).find(a=>a.id===id);if(a&&atContact(a,h.contactPosition())){contactId=id;open('Contact');}}, isOpen: () => opened, render };
 }
