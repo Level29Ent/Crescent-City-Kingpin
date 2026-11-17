@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>Crescent City Kingpin</title>
     <style>
       html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #1b1424; font-family: "Trebuchet MS", system-ui, sans-serif; color: #fff; }
@@ -89,20 +89,25 @@
         <div id="reserveLabel">STAMINA · SHIFT</div><div class="bar" id="reserve"><i style="width:100%"></i></div>
         <div id="streak">Delivery streak 0</div>
       </div>
-      <div id="city"><div id="insideLabel"></div><div id="weather">CLEAR</div><div id="cityTime">18:00 · GOLDEN HOUR</div><div id="demand"></div></div>
-      <div id="obj" aria-live="polite"></div><div id="arrivalHelp" aria-live="polite"></div><div class="quest-card"><span id="objectiveArrow" aria-hidden="true"></span><div id="questTracker"></div></div>
+      <div id="city"><div id="insideLabel"></div><div id="weather">CLEAR</div><div id="cityTime">18:00 · GOLDEN HOUR</div><div id="demand"></div><button id="hudDetailsToggle" aria-expanded="false" aria-controls="hudDetails">OBJECTIVES & HELP</button></div>
+      <div id="obj" aria-live="polite"></div>
+      <section id="hudDetails" aria-label="Objectives and help" hidden>
+        <div id="arrivalHelp" aria-live="polite"></div>
+        <p id="openingGuide" hidden></p>
+        <div class="quest-card"><span id="objectiveArrow" aria-hidden="true"></span><div id="questTracker"></div></div>
+        <small id="miniLegend">△ Police · □ Business · ◆ Route / crew<br />Dashed white: advisory street route · blue ring: search</small>
+      </section>
+      <div class="hud-notices" aria-label="City updates"><div id="vehicleWarning" role="status" hidden></div><section id="missionPanel" aria-label="Mission briefing and outcome" hidden><span id="missionPortrait" aria-hidden="true"></span><div><small id="missionSpeaker"></small><h2 id="missionTitle"></h2><p id="missionDialogue"></p><p id="missionStage"></p></div><button id="missionDismiss" aria-label="Dismiss mission card">×</button></section><div id="neighborhoodIntro" hidden><strong id="neighborhoodName"></strong><span id="neighborhoodTag"></span></div><div id="replayBanner" role="status" hidden></div><div id="enemyReaction" role="status" hidden></div><div id="cityActivityStatus" role="status" hidden></div><div id="bossWarning" role="alert" hidden></div></div>
       </div>
       <div class="hud-bottom">
       <div id="feed"></div>
-      <div class="minimap-card"><canvas id="mini" width="180" height="180" aria-label="North-up minimap: roads, route, police, businesses and crew"></canvas><small id="miniLegend">△ Police · □ Business · ◆ Route / crew<br />Dashed white: advisory street route · blue ring: search</small></div>
+      <div class="minimap-card"><canvas id="mini" width="180" height="180" aria-label="North-up minimap: roads, route, police, businesses and crew"></canvas></div>
       <div id="speed"></div>
       <div id="prompt"></div>
       </div>
       <div id="cross"></div><div id="combatFeedback" aria-live="polite"></div>
       <div id="hurt"></div><div id="damageDirection" aria-label="Incoming damage direction" hidden>▲</div>
-      <div id="interactionGlow" hidden></div><div id="vehicleWarning" role="status" hidden></div>
-      <section id="missionPanel" aria-label="Mission briefing and outcome" hidden><span id="missionPortrait" aria-hidden="true"></span><div><small id="missionSpeaker"></small><h2 id="missionTitle"></h2><p id="missionDialogue"></p><p id="missionStage"></p></div><button id="missionDismiss" aria-label="Dismiss mission card">×</button></section>
-      <div id="neighborhoodIntro" hidden><strong id="neighborhoodName"></strong><span id="neighborhoodTag"></span></div><div id="replayBanner" role="status" hidden></div><p id="openingGuide" hidden></p><div id="enemyReaction" role="status" hidden></div><div id="cityActivityStatus" role="status" hidden></div><div id="bossWarning" role="alert" hidden></div>
+      <div id="interactionGlow" hidden></div>
     </div>
     <nav id="toolbar" aria-label="Game controls"><button id="manage">EMPIRE / MAP · M</button><button id="paradeView" hidden>PARADE BALCONY</button><button id="exitInterior" hidden>EXIT BUILDING</button><button id="openCityMap">CITY MAP</button><button id="contextAction" hidden>E · INTERACT</button><button id="useMedkit">MEDKIT · H (0)</button><button id="clearWaypoint">CLEAR ROUTE</button><button id="driverCamera" hidden>DRIVER CAMERA · V</button><button id="checkpointRetry" hidden>CHECKPOINT / JOURNAL</button><button id="stopReplay" hidden>EXIT REPLAY</button><button id="pauseButton">PAUSE / SAVE</button><button id="mute" aria-label="Toggle mute">MUTE</button></nav>
     <div id="touchControls" aria-label="Touch game controls">

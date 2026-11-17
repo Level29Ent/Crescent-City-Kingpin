@@ -67,6 +67,12 @@ const toolbar = document.getElementById('toolbar')!;
 new ResizeObserver(() => {
   document.documentElement.style.setProperty('--toolbar-height', `${Math.ceil(toolbar.getBoundingClientRect().height)}px`);
 }).observe(toolbar);
+const hudDetailsToggle = document.getElementById('hudDetailsToggle')!;
+const hudDetails = document.getElementById('hudDetails')!;
+hudDetailsToggle.onclick = () => {
+  hudDetails.hidden = !hudDetails.hidden;
+  hudDetailsToggle.setAttribute('aria-expanded', String(!hudDetails.hidden));
+};
 const store = new SaveStore();
 const loaded = await store.load();
 const C = loaded?.campaign ?? newCampaign();
@@ -349,6 +355,7 @@ function updateHud() {
   for(const [key,label]of Object.entries(labels)){const button=document.querySelector<HTMLElement>(`[data-control="${key==='KeyT'?'takedown':key==='KeyG'?'distract':key}"]`);if(button)button.textContent=`${label} · ${keyLabel(C.accessibility.bindings[key as keyof typeof C.accessibility.bindings])}`;}
   $('graphicsStatus').textContent=`${quality.value.toUpperCase()} · ${Math.round(graphics.pixelRatio*100)}% render scale${quality.value==='auto'?` · ${Math.round(frameBudget.fps)} FPS estimate`:''}`;
   const controls=C.living.controls;
+  document.body.style.setProperty('--control-scale',String(controls.scale));
   document.body.classList.toggle('left-handed',controls.leftHanded);
   $('moveJoystick').style.scale=String(controls.scale);
   const actions=document.querySelector<HTMLElement>('.touchActions')!;
