@@ -1,4 +1,8 @@
 export type Quality='auto'|'performance'|'balanced'|'cinematic';
+/** Saved choices always win; coarse-pointer devices keep adaptive rendering. */
+export function initialQuality(saved: string | null, coarse: boolean): Quality {
+ return saved && ['auto','performance','balanced','cinematic'].includes(saved) ? saved as Quality : coarse ? 'auto' : 'cinematic';
+}
 export type FrameBudget={scale:number;slow:number;fast:number;sample:number;seconds:number;fps:number};
 export function newFrameBudget():FrameBudget{return {scale:1,slow:0,fast:0,sample:0,seconds:0,fps:60};}
 /** Hysteresis prevents oscillation. Paused/loading frames never lower quality. */

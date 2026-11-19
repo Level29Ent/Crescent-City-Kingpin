@@ -12,3 +12,18 @@ This is an Unreal-inspired lighting/material pass on the existing Three.js game,
 Cinematic adds a normal/depth render and fullscreen passes: use Auto or Performance on slower GPUs. This change does not establish a frame-rate target on physical mobile hardware.
 
 Checks: `npm test`, `npm run typecheck`, `npm run build`. The graphics tests cover deterministic texture data, UV projection and quality-mode gates; deployed visual checks are reported in the pull request.
+
+## Whole-game pass
+
+Cinematic is now the default for a new fine-pointer/desktop session. A saved graphics preference is never overwritten; coarse-pointer/mobile sessions still start in Auto. Pick another mode on the opening screen if needed.
+
+The visual treatment now extends beyond the outdoor facades:
+
+- All five procedural character kinds use distinct skin, woven fabric and leather finishes. Shared beveled torso/limb geometry and smoother heads soften silhouettes; NPCs now have facial landmarks too. Animation pivots, hit volumes and gameplay dimensions are unchanged.
+- The procedural fleet (including motorcycles) uses clearcoat paint. Car bodies and roofs get shared beveled geometry. Procedural actor/vehicle parts now cast and receive the existing scene shadows when the quality budget allows shadows.
+- Every enterable room uses a bounded 1024px directional shadow rig, cool ambient fill and warm/themed practical lights. Floors and walls get bump detail; finished floors are more reflective than warehouse floors. Main rooms and stockrooms borrow the shared prefiltered environment (never dispose it on exit).
+- The river uses a physically based roughness/bump material with smooth normals recalculated at the existing quality-dependent wave interval. Reflections still sample the sky, not nearby moving objects.
+- Impact sparks and tire smoke use soft radial particle textures instead of square point sprites. Both pools remain capped at 128 particles.
+- FXAA runs after the output transform in the postprocessed modes, on both interior and exterior scenes; it follows physical render size on resize. The HTML HUD is not filtered. Performance/downscaled Auto continue bypassing the composer.
+
+This remains a stylized procedural browser game. No claim of photorealistic characters, ray tracing, Unreal Engine rendering, live scene reflections, volumetric simulation or a sustained device frame rate is made. Cinematic costs more GPU work than Auto; beveled geometry/material updates are shared across modes. Tests cover actor/fleet material wiring, every interior's light/surface setup, resource cleanup, particle pool bounds and saved/default quality selection. Visual preview checks and remaining gaps are recorded on the PR.

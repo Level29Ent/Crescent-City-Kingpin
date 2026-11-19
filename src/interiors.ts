@@ -1,3 +1,4 @@
+import {interiorLighting} from "./material-finish.ts";
 import {ROBBABLE} from './street-heists.ts';
 import {createInteriorLife} from './interior-life.ts';
 import {dressAnnex} from './pursuits-art.ts';
@@ -103,14 +104,16 @@ export function createInterior(def:InteriorDefinition,appearance:Appearance,cust
   }
   const floor=box(0,-.15,0,14,.3,16,0xffffff);
   const floorTexture=surfaceTexture(def.theme==='dispensary'?'marble':def.theme==='garage'||def.theme==='warehouse'?'metal':def.theme==='cafe'||def.theme==='casino'?'tile':'wood');
-  (floor.material as THREE.MeshStandardMaterial).map=floorTexture;
+  const floorMat=floor.material as THREE.MeshStandardMaterial;
+  floorMat.map=floorTexture; floorMat.bumpMap=floorTexture; floorMat.bumpScale=.025;
+  floorMat.roughness=def.theme==='garage'||def.theme==='warehouse'?.78:.38;
   if(def.theme==='dispensary')(floor.material as THREE.MeshStandardMaterial).roughness=.35;
   const wallTexture=surfaceTexture('brick');wallTexture.repeat.set(2,2);
   if(def.theme!=='dispensary')for(let x=-6.5;x<7;x+=.7)box(x,.008,0,.025,.01,16,0x62503b);
   const wallColor=def.id==='hq'?[0x97623d,0x254f59,0x57365f][customization?.safehouseTheme??0]!:def.color;
   const walls=[box(-7,2,0,.2,4,16,wallColor),box(7,2,0,.2,4,16,wallColor),box(0,2,-8,14,4,.2,wallColor)];
   // Materials and perimeter dressing are shared by every enterable room.
-  if(def.theme!=='dispensary')walls.forEach(w=>{(w.material as THREE.MeshStandardMaterial).map=wallTexture;});
+  if(def.theme!=='dispensary')walls.forEach(w=>{(w.material as THREE.MeshStandardMaterial).map=wallTexture;(w.material as THREE.MeshStandardMaterial).bumpMap=wallTexture;(w.material as THREE.MeshStandardMaterial).bumpScale=.045;});
   const disposeDressing=def.theme==='dispensary'?furnishKarma(scene,box):()=>{};
   if(def.theme!=='dispensary')furnishDetails(def.theme,box);
   // Front wall stays open to preserve third-person camera visibility; the exit threshold is at z=6.7.
@@ -176,9 +179,7 @@ export function createInterior(def:InteriorDefinition,appearance:Appearance,cust
     for(let i=0;i<8;i++)box(-5.5+i*.15,1,-3.73,.07,.14,.04,0xdbbd65);
     sign('GUEST RECEPTION',0,2.7,-7.65,'#f4d5a0').scale.setScalar(.7);
   }
-  const hemi=new THREE.HemisphereLight(0xf9e4c4,0x6a7594,2.5);scene.add(hemi);
-  const light=new THREE.DirectionalLight(0xffe2b2,3);light.position.set(2,7,4);scene.add(light);
-  for(const x of [-5,5]){const lamp=new THREE.PointLight(def.id==='hq'?[0xffc879,0x79ffe0,0xc080ff][customization?.lightColor??0]!:def.theme==='club'?0xbd70ff:0xffc879,12,14);lamp.position.set(x,3,-1);scene.add(lamp);}
+  const disposeLighting=interiorLighting(scene,def.id==='hq'?[0xffc879,0x79ffe0,0xc080ff][customization?.lightColor??0]!:def.theme==='club'?0xbd70ff:0xffc879);
   if(def.id==='hq'){
     if(customization?.rug){box(0,.025,1.8,4,.04,4.5,0x355968);for(const x of [-1.8,1.8])box(x,.05,1.8,.08,.02,4.2,0xe0ba72);}
     if(customization?.art){box(-6.86,2,-1,.06,1.5,2.2,0xd3b573);box(-6.8,2,-1,.06,1.25,1.9,0x35758a);}
@@ -210,5 +211,5 @@ export function createInterior(def:InteriorDefinition,appearance:Appearance,cust
   if(stockroom){sign('PRIVATE STOCKROOM · QUIET SAFE',0,3,-7.5,'#f2cc83');box(4,.8,-5.8,1.6,1.6,1.3,0x41565d,true);box(4,.8,-5.1,1.2,1.2,.05,0xbda46c);box(0,.035,-3.5,1.4,.05,.7,0x67bca2);for(const x of [-6,6])for(const z of [-3,0,3])box(x,.7,z,.8,1.4,.8,0x9b7d4e);}
   const life=createInteriorLife(scene,obstacles,INTERIORS.findIndex(b=>b.id===def.id)+2,def.id==='bank'||def.id==='riverboat',stockroom||def.id.startsWith('home-')?0:4);
   const avatar:Person=createPerson('player',5,appearance,customization);scene.add(avatar.root);
-  return {scene,avatar,obstacles,life,dispose(){disposeDressing();life.dispose();floorTexture.dispose();wallTexture.dispose();this.avatar.dispose();geometries.forEach(g=>g.dispose());materials.forEach(m=>{if(m instanceof THREE.MeshBasicMaterial)m.map?.dispose();m.dispose();});}};
+  return {scene,avatar,obstacles,life,dispose(){disposeLighting();disposeDressing();life.dispose();floorTexture.dispose();wallTexture.dispose();this.avatar.dispose();geometries.forEach(g=>g.dispose());materials.forEach(m=>{if(m instanceof THREE.MeshBasicMaterial)m.map?.dispose();m.dispose();});}};
 }

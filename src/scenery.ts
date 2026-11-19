@@ -1678,7 +1678,7 @@ export function createScenery(scene: THREE.Scene): Scenery {
   riverGeo.rotateX(-Math.PI / 2);
   riverGeo.translate(0, -0.5, (LAND_Z + FAR_BANK) / 2);
   const riverBase = Float32Array.from(riverGeo.attributes.position!.array as ArrayLike<number>);
-  const riverMat = trackM(new THREE.MeshPhongMaterial({ color: 0x8c8450, map: waterTex, specular: 0xffc890, shininess: 55, flatShading: true }));
+  const riverMat = trackM(new THREE.MeshStandardMaterial({ color: 0x7b8975, map: waterTex, bumpMap: waterTex, bumpScale: .12, roughness: .24, metalness: .12 }));
   const river = new THREE.Mesh(riverGeo, riverMat);
   river.receiveShadow = true;
   river.frustumCulled = false;
@@ -2033,6 +2033,7 @@ export function createScenery(scene: THREE.Scene): Scenery {
       arr[i * 3 + 1] = -0.5 + 0.16 * Math.sin(x * 0.05 + time * 0.8) + 0.11 * Math.sin(z * 0.09 + time * 1.1) + 0.07 * Math.sin((x + z) * 0.13 - time * 1.6);
     }
     water.needsUpdate = true;
+    riverGeo.computeVertexNormals();
     waterTex.offset.set(time * 0.004, time * 0.012);
     }
 

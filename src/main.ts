@@ -28,7 +28,7 @@ import {exitBeforeActivity,vehicleExit} from './interaction-policy.ts';
 import {applyLicensePlate} from './vehicle-plates.ts';
 import {venturePoint,ventureInteract,tickKingpin,guardsRequired,vehicleRecord,plateLabel,reportTheft,impoundVehicle,useDistraction,canTakedown,injureCompanion,retireVentureActors} from './kingpin.ts';
 import {tickAtmosphere} from './city-atmosphere.ts';
-import {newFrameBudget,sampleFrame,renderBudget,type Quality} from './performance.ts';
+import {initialQuality,newFrameBudget,sampleFrame,renderBudget,type Quality} from './performance.ts';
 import {createCityNavigator,routeAgent,type RouteAgent} from './city-navigation.ts';
 import {createCoverPlanner,coverPhase,type CoverChoice} from './tactics.ts';
 import {damagePassenger,updateBoarding,passengerTrafficImpact} from './rescue.ts';
@@ -40,6 +40,8 @@ import {sphereHit,actorHit,damageFalloff,spreadMultiplier} from './gunplay.ts';
 // Crescent City Kingpin: standalone single-player game. Plain three.js, no engine, no server.
 import * as THREE from "three";
 import { createSkyEnvironment, createFilmGrade } from "./cinematic.ts";
+import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
+import { FXAAShader } from "three/addons/shaders/FXAAShader.js";
 import { SSAOPass } from "three/addons/postprocessing/SSAOPass.js";
 import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
@@ -122,13 +124,17 @@ const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.in
 composer.addPass(bloom);
 composer.addPass(createFilmGrade());
 composer.addPass(new OutputPass());
+const edgeAA = new ShaderPass(FXAAShader);
+composer.addPass(edgeAA);
 const quality = $<HTMLSelectElement>("quality");
 const frameBudget=newFrameBudget();
-try{const saved=localStorage.getItem('cck.quality');if(saved&&['auto','performance','balanced','cinematic'].includes(saved))quality.value=saved;else if(matchMedia('(pointer: coarse)').matches)quality.value='auto';}catch{}
+let savedQuality: string | null = null;
+try{savedQuality=localStorage.getItem('cck.quality');}catch{}
+quality.value=initialQuality(savedQuality,matchMedia('(pointer: coarse)').matches);
 let graphics=renderBudget(quality.value as Quality,frameBudget,devicePixelRatio);
 function applyGraphics(){
   graphics=renderBudget(quality.value as Quality,frameBudget,devicePixelRatio);
-  renderer.setPixelRatio(graphics.pixelRatio);renderer.shadowMap.enabled=graphics.shadows;bloom.enabled=graphics.bloom;contactShadows.enabled=graphics.contactShadows;resize();
+  renderer.setPixelRatio(graphics.pixelRatio);renderer.shadowMap.enabled=graphics.shadows;bloom.enabled=graphics.bloom;contactShadows.enabled=graphics.contactShadows;edgeAA.enabled=graphics.bloom;resize();
 }
 quality.addEventListener('change',()=>{frameBudget.scale=1;frameBudget.slow=frameBudget.fast=0;try{localStorage.setItem('cck.quality',quality.value);}catch{}applyGraphics();});
 const resize = () => {
@@ -137,6 +143,7 @@ const resize = () => {
   composer.setSize(window.innerWidth, window.innerHeight);
   // Contact shadows are deliberately half-resolution and cinematic-only.
   contactShadows.setSize(Math.max(1, Math.round(window.innerWidth * graphics.pixelRatio * .5)), Math.max(1, Math.round(window.innerHeight * graphics.pixelRatio * .5)));
+  edgeAA.uniforms.resolution.value.set(1 / (window.innerWidth * graphics.pixelRatio), 1 / (window.innerHeight * graphics.pixelRatio));
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
 };
@@ -1659,6 +1666,12 @@ saveGame(); // Claim offline earnings immediately so a reload cannot award them 
 function dressIndoorAvatar(avatar:Person){
  const dispose=avatar.dispose,trim=applyWardrobe(avatar.root,C.kingpin.disguise>0?'':C.pursuits.wearing);avatar.dispose=()=>{trim();dispose();};return avatar;
 }
+function lightInterior(room: ReturnType<typeof createInterior>) {
+  // Borrow the outdoor PMREM; rooms do not own or dispose this shared texture.
+  room.scene.environment=scene.environment;
+  room.scene.environmentIntensity=.4;
+  return room;
+}
 function enterInterior(def:InteriorDefinition){
   Object.assign(actionMotion,newActionMotion());
   if(businessClosed(C,def.id)){feed('Business temporarily closed after a robbery. Check the phone for repair status.');return;}
@@ -1666,7 +1679,7 @@ function enterInterior(def:InteriorDefinition){
   // Match the visible facade threshold, not a wide street-centre trigger.
   if(!atPoint(P.x,P.z,def,3)){target={...approach(def),name:`Entrance: ${def.name}`};feed('Travel to the building entrance first.');return;}
   balcony=false;$("hud").style.display="";
-  inside={room:createInterior(def,playerAppearance(),C.lifestyle,C.expansion.furniture,C.pursuits.decor[def.id]??0),def,arrival:selectedLocation,x:0,z:5.8};
+  inside={room:lightInterior(createInterior(def,playerAppearance(),C.lifestyle,C.expansion.furniture,C.pursuits.decor[def.id]??0)),def,arrival:selectedLocation,x:0,z:5.8};
   dressIndoorAvatar(inside.room.avatar);
   joystick.reset();keys.clear();mouseDown=aimHeld=false;walkVelocity.set(0,0);sound.engine(null);sound.siren(false);
   target=null;selectedLocation=null;$('exitInterior').hidden=false;$('insideLabel').textContent=def.name;
@@ -1679,7 +1692,7 @@ $('stockroomKey').onclick=()=>{if(!inside||!playing||managing||inside.backroom||
 $('stockroomDoor').onclick=()=>{
  if(!inside||!playing||managing||C.pursuits.active||Math.hypot(inside.x,inside.z-2)>1.8)return;
  if(!C.pursuits.memory.keys.includes(inside.def.id)){feed('Ask for stockroom access at the counter first ($75).');return;}
- const old=inside,backroom=!old.backroom;old.room.dispose();inside={...old,backroom,room:createInterior(old.def,playerAppearance(),C.lifestyle,C.expansion.furniture,0,backroom),x:0,z:2};dressIndoorAvatar(inside.room.avatar);$('insideLabel').textContent=`${old.def.name}${backroom?' · Stockroom':''}`;feed(backroom?'Stockroom entered. Rear safe: approach the brass marker, choose QUIET SAFE, then hold Interact.':'Returned to the public shop.');
+ const old=inside,backroom=!old.backroom;old.room.dispose();inside={...old,backroom,room:lightInterior(createInterior(old.def,playerAppearance(),C.lifestyle,C.expansion.furniture,0,backroom)),x:0,z:2};dressIndoorAvatar(inside.room.avatar);$('insideLabel').textContent=`${old.def.name}${backroom?' · Stockroom':''}`;feed(backroom?'Stockroom entered. Rear safe: approach the brass marker, choose QUIET SAFE, then hold Interact.':'Returned to the public shop.');
 };
 $('holdUp').onclick=()=>{
  if(!inside||!playing||managing||shopOpen||P.deadT>0)return;
