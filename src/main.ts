@@ -130,7 +130,7 @@ const quality = $<HTMLSelectElement>("quality");
 const frameBudget=newFrameBudget();
 let savedQuality: string | null = null;
 try{savedQuality=localStorage.getItem('cck.quality');}catch{}
-quality.value=initialQuality(savedQuality,matchMedia('(pointer: coarse)').matches);
+quality.value=initialQuality(savedQuality);
 let graphics=renderBudget(quality.value as Quality,frameBudget,devicePixelRatio);
 function applyGraphics(){
   graphics=renderBudget(quality.value as Quality,frameBudget,devicePixelRatio);

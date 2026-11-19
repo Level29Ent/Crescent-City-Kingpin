@@ -8,10 +8,10 @@ import {createImpacts} from '../src/effects.ts';
 import {createInterior, INTERIORS} from '../src/interiors.ts';
 import {newCampaign} from '../src/campaign.ts';
 
-test('desktop starts cinematic, mobile stays auto, valid saved preferences always win',()=>{
- assert.equal(initialQuality(null,false),'cinematic');assert.equal(initialQuality(null,true),'auto');
- for(const saved of ['auto','performance','balanced','cinematic'])for(const mobile of [true,false])assert.equal(initialQuality(saved,mobile),saved);
- assert.equal(initialQuality('unknown',false),'cinematic');assert.equal(initialQuality('',true),'auto');
+test('new sessions stay adaptive and valid saved preferences always win',()=>{
+ assert.equal(initialQuality(null),'auto');
+ for(const saved of ['auto','performance','balanced','cinematic'])assert.equal(initialQuality(saved),saved);
+ assert.equal(initialQuality('unknown'),'auto');assert.equal(initialQuality(''),'auto');
 });
 test('skin, cloth, leather, metal and clearcoat paint have isolated physical responses',()=>{
  const weave=fabricWeave();const mats=['skin','fabric','leather','metal','paint'].map(k=>finishMaterial(0x336699,k,weave));
@@ -25,11 +25,11 @@ test('all actor kinds use fabric and skin finishes and cast/receive light shadow
  for(const kind of ['player','civilian','gangster','cop','boss']){
   const person=createPerson(kind,5);const names=new Set();let bevel=0,shadow=0;
   person.root.traverse(o=>{if(o.isMesh){names.add(o.material.name);if(o.geometry.type==='RoundedBoxGeometry')bevel++;if(o.castShadow&&o.receiveShadow)shadow++;}});
-  assert.ok(names.has('finish:fabric'),kind);assert.ok(names.has('finish:skin'),kind);assert.ok(bevel>=5,kind);assert.ok(shadow>10,kind);
+  assert.ok(names.has('finish:fabric'),kind);assert.ok(names.has('finish:skin'),kind);assert.ok(bevel>=5,kind);assert.ok(shadow>=4,kind);
   person.pose('walk',2,1,0,.016);person.dispose();
  }
  for(const style of [0,2,3,6,8,9,13]){
-  const car=createCar(style,0x336699);let paint=0;car.root.traverse(o=>{if(o.isMesh&&o.material.name==='finish:paint')paint++;});assert.ok(paint>0,`style ${style}`);car.dispose();
+  const car=createCar(style,0x336699);let paint=0;car.root.traverse(o=>{if(o.isMesh&&o.material.name==='finish:paint')paint++;});assert.ok(paint>0,`style ${style}`);let glassShadow=0;car.root.traverse(o=>{if(o.isMesh&&o.material.transparent&&o.castShadow)glassShadow++;});assert.equal(glassShadow,0);car.dispose();
  }
 });
 test('radial particles have transparent corners and opaque cores; fixed pool disposes cleanly',()=>{

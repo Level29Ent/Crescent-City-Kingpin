@@ -15,12 +15,12 @@ Checks: `npm test`, `npm run typecheck`, `npm run build`. The graphics tests cov
 
 ## Whole-game pass
 
-Cinematic is now the default for a new fine-pointer/desktop session. A saved graphics preference is never overwritten; coarse-pointer/mobile sessions still start in Auto. Pick another mode on the opening screen if needed.
+New sessions retain Auto so cinematic materials and postprocessing can adapt to the device. Saved graphics preferences are never overwritten. Select Cinematic on the opening screen for the maximum contact-shadow preset.
 
 The visual treatment now extends beyond the outdoor facades:
 
 - All five procedural character kinds use distinct skin, woven fabric and leather finishes. Shared beveled torso/limb geometry and smoother heads soften silhouettes; NPCs now have facial landmarks too. Animation pivots, hit volumes and gameplay dimensions are unchanged.
-- The procedural fleet (including motorcycles) uses clearcoat paint. Car bodies and roofs get shared beveled geometry. Procedural actor/vehicle parts now cast and receive the existing scene shadows when the quality budget allows shadows.
+- The procedural fleet (including motorcycles) uses clearcoat paint. Car bodies and roofs get shared beveled geometry. Body-scale opaque actor/vehicle forms cast silhouette shadows; tiny trim/eyes and transparent glass skip shadow-map draws. Parts receive scene shadows when the quality budget allows shadows.
 - Every enterable room uses a bounded 1024px directional shadow rig, cool ambient fill and warm/themed practical lights. Floors and walls get bump detail; finished floors are more reflective than warehouse floors. Main rooms and stockrooms borrow the shared prefiltered environment (never dispose it on exit).
 - The river uses a physically based roughness/bump material with smooth normals recalculated at the existing quality-dependent wave interval. Reflections still sample the sky, not nearby moving objects.
 - Impact sparks and tire smoke use soft radial particle textures instead of square point sprites. Both pools remain capped at 128 particles.

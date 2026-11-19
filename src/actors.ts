@@ -71,7 +71,10 @@ function emi(c: number, i: number): THREE.MeshStandardMaterial {
 }
 function part(g: THREE.BufferGeometry, m: THREE.Material, sx: number, sy: number, sz: number, x = 0, y = 0, z = 0, parent?: THREE.Object3D): THREE.Mesh {
   const me = new THREE.Mesh(g, m);
-  me.castShadow = true; me.receiveShadow = true;
+  // Body-scale opaque forms cast the silhouette; eyes, trim and transparent glass do not
+  // each need a separate shadow-map draw call across the entire traffic/NPC population.
+  me.castShadow = sx * sy * sz >= .02 && !(m as THREE.MeshStandardMaterial).transparent;
+  me.receiveShadow = true;
   me.scale.set(sx, sy, sz);
   me.position.set(x, y, z);
   if (parent) parent.add(me);
