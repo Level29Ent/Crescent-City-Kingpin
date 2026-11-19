@@ -1,3 +1,4 @@
+import {particleSprite} from "./material-finish.ts";
 import * as THREE from "three";
 
 // A fixed-size impact pool: sustained firefights never grow scene objects or buffers.
@@ -8,12 +9,14 @@ export function createImpacts(scene: THREE.Scene, smoke = false) {
   const life = new Float32Array(count);
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3).setUsage(THREE.DynamicDrawUsage));
-  const material = new THREE.PointsMaterial({ color: smoke ? 0xaebfc5 : 0xffcc77, size: smoke ? .7 : .14, transparent: true, opacity: 0.9, depthWrite: false, blending: smoke ? THREE.NormalBlending : THREE.AdditiveBlending });
+  const sprite = particleSprite();
+  const material = new THREE.PointsMaterial({map: sprite, color: smoke ? 0xaebfc5 : 0xffcc77, size: smoke ? .7 : .14, transparent: true, opacity: smoke ? .38 : .9, depthWrite: false, blending: smoke ? THREE.NormalBlending : THREE.AdditiveBlending });
   const points = new THREE.Points(geometry, material);
   points.frustumCulled = false;
   scene.add(points);
   let cursor = 0;
   return {
+    dispose() { points.removeFromParent(); geometry.dispose(); material.dispose(); sprite.dispose(); },
     burst(x: number, y: number, z: number) {
       for (let n = 0; n < 8; n++) {
         const i = cursor++ % count;

@@ -1,3 +1,5 @@
+import {finishMaterial, fabricWeave, type Finish} from "./material-finish.ts";
+import {RoundedBoxGeometry} from "three/addons/geometries/RoundedBoxGeometry.js";
 import {vehicleFeedback} from './vehicle-feedback.ts';
 import {addVehicleCabin} from './vehicle-cabin.ts';
 import * as THREE from "three";
@@ -38,7 +40,15 @@ function geo(key: string, make: () => THREE.BufferGeometry): THREE.BufferGeometr
 }
 const box = () => geo("box", () => new THREE.BoxGeometry(1, 1, 1));
 const cyl = () => geo("cyl", () => new THREE.CylinderGeometry(0.5, 0.5, 1, 12));
-const sph = () => geo("sph", () => new THREE.SphereGeometry(0.5, 10, 8));
+const sph = () => geo("sph", () => new THREE.SphereGeometry(0.5, 16, 12));
+const softBox = () => geo("soft-box", () => new RoundedBoxGeometry(1, 1, 1, 1, .055));
+let weave: THREE.Texture | undefined;
+function finish(c: number, kind: Finish) {
+  const key = `finish:${kind}:${c}`;
+  let m = mats.get(key) as THREE.MeshStandardMaterial | undefined;
+  if (!m) { m = finishMaterial(c, kind, kind === 'fabric' ? (weave ??= fabricWeave()) : undefined); mats.set(key, m); }
+  return m;
+}
 const cone = () => geo("cone", () => { const g = new THREE.ConeGeometry(0.5, 1, 6); g.rotateX(Math.PI / 2); g.translate(0, 0, 0.5); return g; });
 function lam(c: number): THREE.MeshStandardMaterial {
   const k = "l" + c;
@@ -61,6 +71,7 @@ function emi(c: number, i: number): THREE.MeshStandardMaterial {
 }
 function part(g: THREE.BufferGeometry, m: THREE.Material, sx: number, sy: number, sz: number, x = 0, y = 0, z = 0, parent?: THREE.Object3D): THREE.Mesh {
   const me = new THREE.Mesh(g, m);
+  me.castShadow = true; me.receiveShadow = true;
   me.scale.set(sx, sy, sz);
   me.position.set(x, y, z);
   if (parent) parent.add(me);
@@ -69,6 +80,7 @@ function part(g: THREE.BufferGeometry, m: THREE.Material, sx: number, sy: number
 export function disposeShared(): void {
   for (const g of geos.values()) g.dispose();
   for (const m of mats.values()) {if(m instanceof THREE.MeshStandardMaterial)m.map?.dispose();m.dispose();}
+  weave?.dispose(); weave = undefined;
   geos.clear(); mats.clear();
 }
 
@@ -97,7 +109,7 @@ function policeLabel(text:string):THREE.MeshStandardMaterial{
 function buildGun(w: number): Gun {
   const g = new THREE.Group();
   g.name=`weapon-${w}`;
-  const metal = lam(0x25262b), wood = lam(0x7a4a24);
+  const metal = finish(0x25262b, 'metal'), wood = finish(0x7a4a24, 'leather');
   const tip = new THREE.Object3D();
   let len = 0.3;
   if (w === 0) {
@@ -129,14 +141,14 @@ export function createPerson(kind: PersonKind, look: number, appearance?: Appear
   const inner = new THREE.Group();
   root.add(inner);
   inner.scale.setScalar(sc);
-  const skin = lam(appearance ? SKIN[appearance.skin]! : pick(r, SKIN));
+  const skin = finish(appearance ? SKIN[appearance.skin]! : pick(r, SKIN), 'skin');
   let hair = lam(pick(r, HAIR));
   let top = lam(pick(r, GANG)), sleeve = top, pants = lam(0x2b3a55), shoe = lam(0x202020);
   let shortSleeve = false;
   type Extra = (hip: number) => void;
   const extras: Extra[] = [];
   const hipY = 0.88, shY = 1.45;
-  const torso = part(box(), top, 0.5, 0.62, 0.28, 0, 1.14, 0, inner);
+  const torso = part(softBox(), top, 0.5, 0.62, 0.28, 0, 1.14, 0, inner);
   const head = new THREE.Group(); head.position.set(0, 1.58, 0); inner.add(head);
   const headM = part(sph(), skin, 0.28, 0.32, 0.29, 0, 0.1, 0, head);
 
@@ -215,6 +227,12 @@ export function createPerson(kind: PersonKind, look: number, appearance?: Appear
       break;
     }
   }
+  const clothing = new Map<THREE.Material, THREE.Material>();
+  for (const m of [top, pants, sleeve]) if (m !== skin && !clothing.has(m)) clothing.set(m, finish((m as THREE.MeshStandardMaterial).color.getHex(), 'fabric'));
+  top = clothing.get(top) as THREE.MeshStandardMaterial ?? top;
+  pants = clothing.get(pants) as THREE.MeshStandardMaterial ?? pants;
+  sleeve = clothing.get(sleeve) as THREE.MeshStandardMaterial ?? sleeve;
+  shoe = finish(shoe.color.getHex(), 'leather');
   torso.material = top;
   if(kind==='player'){
     part(cyl(),skin,.13,.2,.13,0,1.5,0,inner);
@@ -241,13 +259,21 @@ export function createPerson(kind: PersonKind, look: number, appearance?: Appear
   part(box(), hair, 0.3, 0.2, 0.08, 0, 0.1, -0.13, head);
   void headM;
   if (appearance?.gender === 'Woman') part(box(), hair, .32, .32, .09, 0, -.04, -.13, head);
-  // Non-player faces retain the inexpensive base geometry.
+  if(kind!=='player') {
+    // Faces share cached geometry/materials; no per-NPC textures or extra lights.
+    for(const side of [-1,1]) {
+      part(sph(),lam(0xeee6d8),.045,.028,.025,side*.065,.13,.134,head);
+      part(sph(),lam(0x20272c),.018,.02,.012,side*.065,.13,.15,head);
+    }
+    part(sph(),skin,.05,.065,.055,0,.085,.148,head);
+    part(box(),lam(0x714637),.065,.012,.018,0,.035,.142,head);
+  }
   for (const e of extras) e(0);
 
   const armLen = 0.58, legLen = 0.88;
   const mkLimb = (x: number, y: number, len: number, w: number, m: THREE.Material, m2: THREE.Material | null) => {
     const p = new THREE.Group(); p.position.set(x, y, 0); inner.add(p);
-    part(box(), m, w, len, w, 0, -len / 2, 0, p);
+    part(softBox(), m, w, len, w, 0, -len / 2, 0, p);
     if (m2) part(box(), m2, w * 1.02, len * 0.35, w * 1.02, 0, -len * 0.85, 0, p);
     return p;
   };
@@ -381,14 +407,14 @@ export function createCar(style: number, color: number): Car {
   const police = style === 3, sports = style === 2 || roadster;
   const root = new THREE.Group();
   const body = new THREE.Group(); root.add(body);
-  const paint = vehicleFinish(police ? 0x14161b : color,.35,.32);
+  const paint = finish(police ? 0x14161b : color, 'paint');
   const glass=vehicleFinish(0x526e7c,.1,.2);
   glass.transparent=true;glass.opacity=.24;glass.depthWrite=false;
   const white = lam(0xf2f2f2), dark = lam(0x1a1a1a), chrome = vehicleFinish(0xc8ccd2,.8,.24);
   const van = style === 4, truck = style === 1 || offroad, suv = style === 5 || estate, muscle = style === 7, freight = style === 8, bus = style === 9, taxi = style === 10;
   const len = estate ? 5.6 : offroad ? 5.4 : freight ? 7.2 : bus ? 6.7 : van ? 5.5 : muscle ? 5.1 : sports ? 4.4 : 4.6, w = freight || bus || van ? 2.4 : suv ? 2.2 : 2;
   const h0 = sports ? 0.38 : 0.45, ch = van || suv || freight || bus ? .85 : sports ? .42 : .55;
-  part(box(), paint, w, ch, len, 0, h0 + ch / 2, 0, body); // chassis
+  part(softBox(), paint, w, ch, len, 0, h0 + ch / 2, 0, body); // chassis
   const cabH = freight || bus ? 1.1 : estate ? .7 : suv ? .85 : sports ? .5 : .62, cabLen = bus ? 4.9 : suv ? 3 : sports ? 1.9 : 2.3;
   const cabZ = freight ? 2.1 : truck ? 1 : sports ? -.25 : -.2;
   if (!roadster) part(box(), glass, w - 0.2, cabH, cabLen, 0, h0 + ch + cabH / 2, cabZ, body);
@@ -401,7 +427,7 @@ export function createCar(style: number, color: number): Car {
       part(box(),chrome,.08,.5,.08,x,h0+ch+.5,-.85,body);
     }
   }
-  if (!roadster) part(box(), police ? white : paint, w - 0.1, 0.07, cabLen - 0.5, 0, h0 + ch + cabH + 0.03, cabZ, body); // roof
+  if (!roadster) part(softBox(), police ? white : paint, w - 0.1, 0.07, cabLen - 0.5, 0, h0 + ch + cabH + 0.03, cabZ, body); // roof
   // Readable panels, window pillars, mirrors and lamps on the entire procedural fleet.
   for (const side of [-1,1]) {
     if (!roadster) for (const z of [cabZ-cabLen/2+.08,cabZ,cabZ+cabLen/2-.08])
@@ -588,7 +614,7 @@ export function createCar(style: number, color: number): Car {
 // Narrow two-wheel chassis with its own steering, wheel spin and cornering lean.
 function createMotorcycle(color: number): Car {
   const root=new THREE.Group(), body=new THREE.Group();root.add(body);
-  const paint=vehicleFinish(color,.35,.32),dark=lam(0x171b20),metal=vehicleFinish(0x9da7ac,.8,.24),rubber=lam(0x101215);
+  const paint=finish(color,'paint'),dark=lam(0x171b20),metal=vehicleFinish(0x9da7ac,.8,.24),rubber=lam(0x101215);
   for(const side of [-1,1]){
     part(box(),metal,.06,.3,.06,side*.4,1.48,.73,body);
     part(box(),dark,.21,.13,.09,side*.4,1.65,.73,body).name='side-mirror';
