@@ -1,3 +1,4 @@
+import {steerResponse} from './action-controls.ts';
 export type DriveState={speed:number;steer:number;h:number;gripHeading:number;condition:number;impactCooldown:number};
 export function handlingProfile(style:number){
  const bike=style===6,heavy=[4,8,9].includes(style),sport=[2,7,11].includes(style),offroad=[5,13].includes(style);
@@ -12,7 +13,7 @@ export function driveStep(c:DriveState,style:number,dt:number,throttle:number,st
  const stopping=(brake?p.brake*(1+tires*.12):0)+(handbrake?18:0);
  c.speed-=Math.sign(c.speed)*Math.min(Math.abs(c.speed),stopping*dt);
  c.speed=Math.max(-9,Math.min(p.max*performance*health*(boost?1.35:1),c.speed));
- c.steer+=(steer-c.steer)*(1-Math.exp(-8*dt));
+ const target=steerResponse(steer,c.speed);c.steer+=(target-c.steer)*(1-Math.exp(-(steer?10:14)*dt));
  c.h+=c.steer*p.turn*Math.max(-1,Math.min(1,c.speed/7))*(1-Math.min(.65,Math.abs(c.speed)/75))*(handbrake?1.55:1)*dt;
  const delta=Math.atan2(Math.sin(c.h-c.gripHeading),Math.cos(c.h-c.gripHeading));
  c.gripHeading+=delta*(1-Math.exp(-(handbrake?1.8:p.grip+tires*2)*dt));

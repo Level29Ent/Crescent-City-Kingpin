@@ -1,4 +1,4 @@
-export const BINDINGS={KeyW:'Move forward / accelerate',KeyS:'Move back / reverse',KeyA:'Move left / steer left',KeyD:'Move right / steer right',ShiftLeft:'Sprint / nitro',Space:'Brake',KeyB:'Handbrake',KeyE:'Interact / vehicle',KeyR:'Reload',KeyC:'Crouch / cover',KeyH:'Medkit',KeyT:'Nonlethal takedown',KeyG:'Distraction',KeyL:'Hold lockpick',KeyM:'Empire menu',KeyV:'Driver camera'} as const;
+export const BINDINGS={KeyW:'Move forward / accelerate',KeyS:'Move back / reverse',KeyA:'Move left / steer left',KeyD:'Move right / steer right',ShiftLeft:'Sprint / nitro',Space:'Jump on foot / brake driving',KeyB:'Handbrake',KeyE:'Interact / vehicle',KeyR:'Reload',KeyC:'Crouch / cover',KeyH:'Medkit',KeyT:'Nonlethal takedown',KeyG:'Distraction',KeyL:'Hold lockpick',KeyM:'Empire menu',KeyV:'Driver camera',KeyQ:'Weapon wheel',KeyZ:'Dodge',KeyX:'Swap aiming shoulder',KeyF:'Enter / exit nearest vehicle'} as const;
 export type ActionKey=keyof typeof BINDINGS;
 export type Accessibility={textScale:number;shake:number;palette:'standard'|'accessible';bindings:Record<ActionKey,string>};
 export function newAccessibility():Accessibility{return {textScale:1,shake:1,palette:'standard',bindings:Object.fromEntries(Object.keys(BINDINGS).map(k=>[k,k])) as Record<ActionKey,string>};}
@@ -7,8 +7,9 @@ export function restoreAccessibility(v:any):Accessibility{
  const a=newAccessibility();if(!v||typeof v!=='object')return a;
  if(Number.isFinite(v.textScale))a.textScale=Math.max(1,Math.min(1.5,v.textScale));if(Number.isFinite(v.shake))a.shake=Math.max(0,Math.min(1,v.shake));a.palette=v.palette==='accessible'?'accessible':'standard';
  const proposed=Object.fromEntries(Object.keys(BINDINGS).map(k=>[k,allowedKey(v.bindings?.[k])?v.bindings[k]:k]));
- // Older saves may already use V for another action; allocate the new camera action a free key.
- if(!v.bindings?.KeyV&&Object.entries(proposed).some(([action,key])=>action!=='KeyV'&&key===proposed.KeyV)){const used=new Set(Object.entries(proposed).filter(([action])=>action!=='KeyV').map(([,key])=>key));proposed.KeyV=Object.keys(BINDINGS).find(key=>!used.has(key))??'KeyV';}
+ // Preserve old custom bindings while allocating newly introduced actions a free physical key.
+ const used=new Set<string>();for(const action of Object.keys(BINDINGS)){if(v.bindings?.[action])used.add(proposed[action]!);}
+ for(const action of Object.keys(BINDINGS))if(!v.bindings?.[action]){let key=action;if(used.has(key))key=[...Object.keys(BINDINGS),...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(c=>`Key${c}`)].find(k=>!used.has(k))??action;proposed[action]=key;used.add(key);}
  if(new Set(Object.values(proposed)).size===Object.keys(BINDINGS).length)a.bindings=proposed as Record<ActionKey,string>;return a;
 }
 /** Swap existing assignments rather than silently breaking another action. */

@@ -1,3 +1,4 @@
+import {actionStage} from './action-campaign.ts';
 import {pursuitObjective} from './pursuits.ts';
 import type {Campaign} from './campaign.ts';
 import {operationObjective} from './living-city.ts';
@@ -5,7 +6,7 @@ import {venturePoint} from './kingpin.ts';
 import {atPoint} from './navigation.ts';
 /** E always allows leaving a car unless it can actually advance a driving objective here. */
 export function exitBeforeActivity(c:Campaign,x:number,z:number,car:{recovery:boolean;condition:number;passengerBoarded:boolean;taxi?:boolean;vehicleKey?:string}){
- const job=c.pursuits.active;if(job){const p=pursuitObjective(c);return !(p&&job.kind==='taxi'&&car.taxi&&(job.step===0||job.boarded&&job.vehicleKey===car.vehicleKey)&&atPoint(x,z,p,6)||p&&job.kind==='race'&&(!job.vehicleKey||job.vehicleKey===car.vehicleKey)&&Math.hypot(x-p.x,z-p.z)<7);}
+ const job=c.pursuits.active;if(job?.kind==='campaign'){const s=actionStage(c);return !(s?.type==='drive'&&atPoint(x,z,s,7));}if(job){const p=pursuitObjective(c);return !(p&&job.kind==='taxi'&&car.taxi&&(job.step===0||job.boarded&&job.vehicleKey===car.vehicleKey)&&atPoint(x,z,p,6)||p&&job.kind==='race'&&(!job.vehicleKey||job.vehicleKey===car.vehicleKey)&&Math.hypot(x-p.x,z-p.z)<7);}
  const venture=c.kingpin.active;
  if(venture){const point=venturePoint(c);return !(venture.kind==='shipment'&&venture.step===1&&venture.cargo>0&&point&&atPoint(x,z,point,8));}
  const operation=c.living.active;if(!operation)return false;

@@ -1,3 +1,4 @@
+import {ACTION_CAMPAIGN,startActionChapter} from './action-campaign.ts';
 import {STREET_HEISTS,startRaid} from './street-heists.ts';
 import {startStreetEvent} from './city-atmosphere.ts';
 import {facadeDoor} from './doorways.ts';
@@ -33,6 +34,7 @@ function placed(p:Point,room:string|null=roomAt(p)){
 export function worldActivities(c:Campaign):WorldActivity[]{
  const rows:WorldActivity[]=[];
  const add=(id:string,name:string,speaker:string,description:string,p:Point,start:WorldActivity['start'],opts:ContactChoice[]=accept,room:string|null=roomAt(p),methods?:readonly Approach[])=>rows.push({id,name,speaker,description,...placed(p,room),start,choices:opts,methods});
+ for(const [i,ch]of ACTION_CAMPAIGN.entries())if(!c.pursuits.actionDone.includes(ch.id)&&(i===0||c.pursuits.actionDone.includes(ACTION_CAMPAIGN[i-1]!.id)))add(`campaign:${ch.id}`,ch.name,ch.speaker,`${ch.dialogue} ${ch.stages.length} stages · $${ch.pay} clean on completion. Each stage has a 10-minute limit and a $50 retry checkpoint.`,{x:30,z:4},c=>startActionChapter(c,ch.id));
  for(const job of STREET_HEISTS)if(!c.pursuits.raidWins.includes(job.id))add(`raid:${job.id}`,job.name,'Mama Nola',`$${job.fee} setup · $${job.pay} dirty loot. Enter ${INTERIORS.find(r=>r.id===job.interior)!.name}, disable security or force the vault, crack it and carry the bag out. Use a getaway car, lose police and return the loot here. ${job.disguise?'Equip a Riverboat evening coat at the tailor or purchase a disguise first.':''}`,{x:30,z:4},c=>startRaid(c,job.id));
  for(const w of WORK)add(`work:${w.id}`,w.name,'Local dispatcher',`${w.description} $${w.pay} · ${w.duration}s. Collect here, deliver to the marked address.`,w,c=>startWork(c,w.id));
  for(const m of MISSIONS)add(`mission:${m.id}`,m.name,m.id==='parade'?'Parade marshal':'Local contact',`${m.desc} $${m.pay} dirty base · ${m.duration}s.`,m.steps[0],c=>startMission(c,m.id));

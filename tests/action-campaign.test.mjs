@@ -1,0 +1,64 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {newCampaign,restoreCampaign,resetAfterDeath} from '../src/campaign.ts';
+import {ACTION_CAMPAIGN,actionStage,actionObjective,startActionChapter,actionInteract,tickActionChapter,retryActionChapter,checkpointAction,failAction} from '../src/action-campaign.ts';
+import {startPursuit,pursuitObjective,pursuitInteract,tickPursuits} from '../src/pursuits.ts';
+import {startStory} from '../src/city-stories.ts';
+import {startWork} from '../src/lifestyle.ts';
+import {worldActivities,startContact,canStartContact} from '../src/world-activities.ts';
+import {missionCard,missionProof} from '../src/mission-presentation.ts';
+import {missionGuidance} from '../src/mission-guide.ts';
+import {prepareReplay,replayChoices,replayActive,replayCompleted} from '../src/mission-replay.ts';
+import {approach,mapLocations} from '../src/navigation.ts';
+import {newActionMotion,startJump,startDodge,tickActionMotion,movementHeading,steerResponse,nextOwnedWeapon} from '../src/action-controls.ts';
+import {newAccessibility,restoreAccessibility,canonicalKey,rebind,BINDINGS} from '../src/polish.ts';
+import {driveStep} from '../src/driving.ts';
+import {exitBeforeActivity} from '../src/interaction-policy.ts';
+const ready=()=>{const c=newCampaign();c.legacy.tutorial=3;c.clean=20000;return c;};
+function ctx(c,extra={}){const stage=actionStage(c);return {...approach(stage),driving:stage.type==='drive',speed:0,guards:0,fired:false,holding:true,inside:false,...extra};}
+function complete(c){for(let n=0;n<12&&c.pursuits.active;n++){const s=actionStage(c);c.heat=0;if(s.type==='hold'||s.type==='quiet')tickActionChapter(c,s.seconds,ctx(c));else{if(s.type==='fight')c.pursuits.active.spawned=true;if(s.type==='finale')c.pursuits.actionChoice||='publish';assert.ok(actionInteract(c,ctx(c)));}}assert.equal(c.pursuits.active,null);}
+test('Meridian chapters are sequential, on-site offers that share all existing activity gates',()=>{
+ const c=ready();assert.equal(startActionChapter(c,'bad'),false);assert.equal(startActionChapter(c,'dead-frequency'),false);c.legacy.tutorial=0;assert.equal(startActionChapter(c,'last-fare'),false);c.legacy.tutorial=3;
+ const offer=worldActivities(c).find(a=>a.id==='campaign:last-fare');assert.equal(offer.room,'hq');const original=c.clean;assert.ok(canStartContact(c,offer));assert.equal(c.clean,original);assert.equal(startContact(c,offer.id,{...offer,room:null,atDesk:false,driving:false,blocked:false},'accept'),false);
+ assert.equal(startContact(c,offer.id,{...offer,room:'hq',atDesk:true,driving:false,blocked:false},'accept'),true);assert.equal(startPursuit(c,'race','canal'),false);assert.equal(startStory(c,'brass','quiet'),false);assert.equal(startWork(c,'medical'),false);assert.match(missionCard(c).key,/campaign:last-fare/);assert.ok(pursuitObjective(c));
+});
+test('all six chapters complete through every stage and pay only once, with safe physical routes and mission cards',()=>{
+ const c=ready();for(const chapter of ACTION_CAMPAIGN){c.pursuits.cooldown=0;assert.ok(startActionChapter(c,chapter.id));for(const s of chapter.stages){const p=approach(s);assert.ok(Number.isFinite(p.x)&&Number.isFinite(p.z));}const before=c.clean;complete(c);assert.ok(c.pursuits.actionDone.includes(chapter.id));assert.equal(c.clean,before+chapter.pay);assert.equal(c.pursuits.actionCheckpoint,null);assert.equal(missionProof(c,`pursuit:campaign:${chapter.id}`),1);c.pursuits.cooldown=0;assert.equal(startActionChapter(c,chapter.id),false);}
+ assert.equal(c.pursuits.actionDone.length,6);assert.equal(c.pursuits.actionChoice,'publish');assert.ok(c.living.reputation.every(n=>n>=15));
+});
+test('held objectives require exact stage, foot travel, no gunfire, low heat for quiet route and uninterrupted presence',()=>{
+ const c=ready();startActionChapter(c,'last-fare');c.pursuits.active.step=2;tickActionChapter(c,2,ctx(c));assert.equal(c.pursuits.active.cast,2);tickActionChapter(c,1,ctx(c,{holding:false}));assert.equal(c.pursuits.active.cast,0);tickActionChapter(c,4,ctx(c,{driving:true}));assert.equal(c.pursuits.active.step,2);tickActionChapter(c,4,ctx(c,{x:235,z:230}));assert.equal(c.pursuits.active.step,2);tickActionChapter(c,4,ctx(c,{fired:true}));assert.equal(c.pursuits.active.step,2);tickActionChapter(c,4,ctx(c));assert.equal(c.pursuits.active.step,3);assert.equal(c.pursuits.actionCheckpoint.step,3);
+ const q=ready();q.pursuits.actionDone=['last-fare'];startActionChapter(q,'dead-frequency');q.pursuits.active.step=1;q.heat=35;tickActionChapter(q,8,ctx(q));assert.equal(q.pursuits.active.cast,0);q.heat=0;tickActionChapter(q,8,ctx(q));assert.equal(q.pursuits.active.step,2);
+});
+test('driving, fights, escape and finale recheck conditions on interaction instead of relying on HUD',()=>{
+ const c=ready();c.pursuits.actionDone=ACTION_CAMPAIGN.slice(0,5).map(m=>m.id);startActionChapter(c,'city-we-keep');assert.equal(actionInteract(c,ctx(c,{inside:true})),null);assert.equal(actionInteract(c,ctx(c,{x:230,z:230})),null);c.pursuits.active.step=1;assert.match(actionInteract(c,ctx(c)),/marked Meridian/);c.pursuits.active.spawned=true;assert.match(actionInteract(c,ctx(c,{guards:1})),/marked Meridian/);assert.match(actionInteract(c,ctx(c,{driving:true})),/Park/);
+ c.pursuits.active.step=3;c.heat=60;assert.match(actionInteract(c,ctx(c)),/line of sight/);c.heat=0;assert.ok(actionInteract(c,ctx(c)));assert.equal(c.pursuits.active.step,4);assert.match(actionInteract(c,ctx(c)),/choose Publish/);c.pursuits.actionChoice='keep';c.crew=[{id:'muscle',loyalty:80,owed:0}];const money=c.clean;assert.match(actionInteract(c,ctx(c)),/CAMPAIGN COMPLETE/);assert.equal(c.clean,money+8000);assert.equal(c.crew[0].loyalty,70);assert.ok(c.heat>0);
+ const d=ready();startActionChapter(d,'last-fare');d.pursuits.active.step=1;assert.match(actionInteract(d,ctx(d,{driving:false})),/road vehicle/);assert.match(actionInteract(d,ctx(d,{speed:5})),/stop/);assert.equal(exitBeforeActivity(d,ctx(d).x,ctx(d).z,{condition:100,recovery:false,passengerBoarded:false}),false);
+});
+test('timeout/death/reload keep only the stage checkpoint; retry charges without refund or duplicated progression',()=>{
+ const c=ready();startActionChapter(c,'last-fare');c.pursuits.active.step=2;checkpointAction(c);const before=c.clean;c.pursuits.active.remaining=.01;assert.match(tickActionChapter(c,.02,ctx(c)),/timed out/);assert.equal(c.clean,before);assert.equal(c.pursuits.active,null);assert.ok(retryActionChapter(c));assert.equal(c.clean,before-50);assert.equal(c.pursuits.active.step,2);assert.equal(c.pursuits.active.cast,0);assert.equal(c.pursuits.active.remaining,600);
+ const saved=restoreCampaign(JSON.parse(JSON.stringify(c)));assert.equal(saved.pursuits.active,null);assert.equal(saved.pursuits.actionCheckpoint.step,2);assert.ok(retryActionChapter(saved));assert.equal(saved.clean,before-100);checkpointAction(saved);resetAfterDeath(saved);assert.ok(saved.pursuits.actionCheckpoint);saved.clean=49;assert.equal(retryActionChapter(saved),false);saved.clean=500;saved.pursuits.cooldown=0;assert.ok(startPursuit(saved,'fishing','river'));assert.equal(retryActionChapter(saved),false);
+ const old=restoreCampaign({clean:100});assert.deepEqual(old.pursuits.actionDone,[]);assert.equal(old.pursuits.actionCheckpoint,null);const malformed=restoreCampaign({pursuits:{actionDone:['x','last-fare','last-fare'],actionCheckpoint:{id:'city-we-keep',step:99}}});assert.deepEqual(malformed.pursuits.actionDone,['last-fare']);assert.equal(malformed.pursuits.actionCheckpoint,null);
+});
+test('completed Meridian missions replay in isolation without rewriting the original run',()=>{
+ const c=ready();startActionChapter(c,'last-fare');complete(c);const before=JSON.stringify(c);assert.ok(replayChoices(c).some(m=>m.key==='campaign:last-fare'));const r=prepareReplay(c,'campaign:last-fare');assert.ok(r);assert.ok(replayActive(r.sandbox,r.choice));complete(r.sandbox);assert.ok(replayCompleted(r.sandbox,r.choice));assert.equal(JSON.stringify(c),before);
+});
+test('jump and dodge enforce stamina/cooldown, finish at floor and never imply invulnerability',()=>{
+ const m=newActionMotion();assert.equal(startJump(m,9),false);assert.equal(startJump(m,10),true);assert.equal(startJump(m,100),false);tickActionMotion(m,.05);assert.ok(m.height>0);assert.equal(startDodge(m,100,1,0),false);for(let i=0;i<30;i++)tickActionMotion(m,.05);assert.equal(m.height,0);assert.equal(m.vertical,0);assert.equal(startDodge(m,17,1,0),false);assert.ok(startDodge(m,18,1,1));let distance=0;for(let i=0;i<10;i++){const d=tickActionMotion(m,.05);distance+=Math.hypot(d.x,d.z);}assert.ok(Math.abs(distance-2.88)<1e-8);assert.equal(startDodge(m,100,1,0),false);for(let i=0;i<30;i++)tickActionMotion(m,.05);assert.ok(startDodge(m,100,0,1));
+ assert.ok(Math.abs(Math.hypot(...Object.values(movementHeading(1,1,1)))-1)<1e-8);assert.equal(nextOwnedWeapon([true,false,true],0,1),2);assert.equal(nextOwnedWeapon([true,false,true],0,-1),2);assert.ok(steerResponse(1,38)<steerResponse(1,5));
+});
+test('new keyboard defaults migrate without losing previous remaps and swap bindings consistently',()=>{
+ const a=newAccessibility();for(const key of ['KeyQ','KeyZ','KeyX','KeyF','Space'])assert.equal(canonicalKey(a,key),key);const old={bindings:Object.fromEntries(Object.keys(BINDINGS).filter(k=>!['KeyQ','KeyZ','KeyX','KeyF'].includes(k)).map(k=>[k,k]))};old.bindings.KeyG='KeyQ';const restored=restoreAccessibility(old);assert.equal(restored.bindings.KeyG,'KeyQ');assert.notEqual(restored.bindings.KeyQ,'KeyQ');assert.equal(new Set(Object.values(restored.bindings)).size,Object.keys(BINDINGS).length);rebind(restored,'KeyZ','KeyF');assert.equal(canonicalKey(restored,'KeyF'),'KeyZ');
+});
+test('mission guidance covers all older activity families without changing their rewards or state',()=>{
+ const c=ready();const offers=[['race','canal'],['taxi','jazz'],['fishing','river'],['bounty','lark']];for(const [kind,id]of offers){c.pursuits.active=null;c.pursuits.cooldown=0;startPursuit(c,kind,id);const before=JSON.stringify(c);assert.ok(missionGuidance(c,false,false).length>15);assert.equal(JSON.stringify(c),before);}c.pursuits.active=null;assert.match(missionGuidance(c,false,false),/FREE ROAM/);c.legacy.daily={finished:false};assert.match(missionGuidance(c,false,false),/DAILY/);
+});
+test('live action handlers pause the selector, reject locked guns and restrict jump/dodge/vehicle actions by context',async()=>{
+ const fs=await import('node:fs'),vm=await import('node:vm'),ts=await import('typescript');const source=fs.readFileSync(new URL('../src/main.ts',import.meta.url),'utf8'),body=source.slice(source.indexOf('function equipActionWeapon('),source.indexOf('// ───────── interaction ─────────'));
+ class Element{constructor(){this.children=[];this.hidden=true;this.textContent='';this.attrs={};}replaceChildren(...els){this.children=els;}append(...els){this.children.push(...els);}setAttribute(k,v){this.attrs[k]=v;}focus(){this.focused=true;}addEventListener(){}setPointerCapture(){}}
+ const elements=new Map(),get=id=>{if(!elements.has(id))elements.set(id,new Element());return elements.get(id);};const c=ready();const p={owned:[true,false,true],weapon:0,deadT:0,stamina:{value:100},car:null,x:0,z:0};let boarded=null,exits=0;const car={x:1,z:0,speed:0};
+ const env={P:p,C:c,playing:true,managing:false,shopOpen:false,inside:null,weaponWheelOpen:false,reloading:2,mouseDown:true,aimHeld:true,locked:true,shoulder:1,actionHeld:false,actionMotion:newActionMotion(),keys:new Set(['KeyW']),joystick:{value:{x:0,y:0},reset(){}},sound:{engine(){},siren(){},world(){}},document:{createElement:()=>new Element(),exitPointerLock(){}},window:{addEventListener(){}},WEAPONS:[{name:'pistol'},{name:'SMG'},{name:'shotgun'}],ammo:[12,0,6],MAGAZINES:[12,30,6],$:get,sfx(){},feed(){},startPlaying(){env.playing=true;env.weaponWheelOpen=false;},newActionMotion,startJump,startDodge,movementHeading,vehicles:[car],roadblock:null,boardCityVehicle:v=>boarded=v,exitCar:()=>exits++,dist2:(x,z,a,b)=>Math.hypot(x-a,z-b)};
+ vm.createContext(env);vm.runInContext(ts.transpileModule(body,{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText,env);
+ env.openWeaponWheel();assert.equal(env.playing,false);assert.equal(env.weaponWheelOpen,true);assert.equal(env.keys.size,0);const buttons=get('weaponChoices').children;assert.equal(buttons[1].disabled,true);assert.equal(buttons[0].attrs['aria-pressed'],'true');env.equipActionWeapon(1);assert.equal(p.weapon,0);buttons[2].onclick();assert.equal(p.weapon,2);assert.equal(env.playing,true);assert.equal(env.reloading,0);
+ env.inside={};env.jumpAction();assert.equal(env.actionMotion.vertical,0);env.inside=null;env.jumpAction();assert.ok(env.actionMotion.vertical>0);assert.equal(p.stamina.value,90);env.vehicleAction();assert.equal(boarded,car);p.car=car;env.vehicleAction();assert.equal(exits,1);
+});

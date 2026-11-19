@@ -34,7 +34,7 @@ test('replay persistence guard rejects practice writes and challenge verdicts us
 });
 test('rebind swaps conflicts, leaves fixed controls available, suppresses unassigned former bindings, and survives saves',()=>{
  const c=ready(),a=c.accessibility;assert.ok(rebind(a,'KeyW','KeyE'));assert.equal(a.bindings.KeyW,'KeyE');assert.equal(a.bindings.KeyE,'KeyW');assert.equal(canonicalKey(a,'KeyE'),'KeyW');assert.equal(canonicalKey(a,'KeyW'),'KeyE');
- rebind(a,'KeyR','KeyQ');assert.equal(canonicalKey(a,'KeyR'),null);assert.equal(canonicalKey(a,'KeyQ'),'KeyR');assert.equal(canonicalKey(a,'Escape'),'Escape');assert.equal(canonicalKey(a,'Digit1'),'Digit1');assert.equal(rebind(a,'KeyW','Escape'),false);assert.equal(rebind(a,'KeyW','Digit2'),false);
+ rebind(a,'KeyR','KeyY');assert.equal(canonicalKey(a,'KeyR'),null);assert.equal(canonicalKey(a,'KeyY'),'KeyR');assert.equal(canonicalKey(a,'Escape'),'Escape');assert.equal(canonicalKey(a,'Digit1'),'Digit1');assert.equal(rebind(a,'KeyW','Escape'),false);assert.equal(rebind(a,'KeyW','Digit2'),false);
  assert.deepEqual(restoreCampaign(JSON.parse(JSON.stringify(c))).accessibility,a);assert.equal(keyLabel('KeyQ'),'Q');assert.equal(new Set(Object.values(a.bindings)).size,Object.keys(BINDINGS).length);
 });
 test('older and malformed preferences get safe defaults and no duplicate action keys',()=>{
