@@ -189,8 +189,8 @@ export function pokerRank(cards: number[]) {
   const straight = new Set(ranks).size === 5 && (ranks[4]!-ranks[0] === 4 || ranks.join(',') === '0,9,10,11,12');
   return flush && straight ? 1000 : groups[0]===4 ? 400 : groups[0]===3 && groups[1]===2 ? 200 : flush ? 150 : straight ? 100 : groups[0]===3 ? 75 : groups[0]===2 && groups[1]===2 ? 50 : groups[0]===2 ? 25 : 0;
 }
-export function playPoker(c: Campaign, random = Math.random) {
-  if (!furnished(c,'poker')) return false;
+export function playPoker(c: Campaign, random = Math.random, venue:'safehouse'|'riverboat'='safehouse') {
+  if (venue==='riverboat'?c.pursuits.active?.kind==='raid':!furnished(c,'poker')) return false;
   const e = c.expansion;
   const draw = (existing: number[]) => { let n; do { n = Math.floor(random()*52); } while (existing.includes(n)); return n; };
   if (!e.poker) { if (c.clean < 25) return false; c.clean -= 25; const cards: number[] = []; for(let i=0;i<5;i++) cards.push(draw(cards)); e.poker = {cards,held:[]}; }

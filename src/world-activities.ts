@@ -1,3 +1,4 @@
+import {STREET_HEISTS,startRaid} from './street-heists.ts';
 import {startStreetEvent} from './city-atmosphere.ts';
 import {facadeDoor} from './doorways.ts';
 import type {Campaign} from './campaign.ts';
@@ -32,12 +33,13 @@ function placed(p:Point,room:string|null=roomAt(p)){
 export function worldActivities(c:Campaign):WorldActivity[]{
  const rows:WorldActivity[]=[];
  const add=(id:string,name:string,speaker:string,description:string,p:Point,start:WorldActivity['start'],opts:ContactChoice[]=accept,room:string|null=roomAt(p),methods?:readonly Approach[])=>rows.push({id,name,speaker,description,...placed(p,room),start,choices:opts,methods});
+ for(const job of STREET_HEISTS)if(!c.pursuits.raidWins.includes(job.id))add(`raid:${job.id}`,job.name,'Mama Nola',`$${job.fee} setup · $${job.pay} dirty loot. Enter ${INTERIORS.find(r=>r.id===job.interior)!.name}, disable security or force the vault, crack it and carry the bag out. Use a getaway car, lose police and return the loot here. ${job.disguise?'Equip a Riverboat evening coat at the tailor or purchase a disguise first.':''}`,{x:30,z:4},c=>startRaid(c,job.id));
  for(const w of WORK)add(`work:${w.id}`,w.name,'Local dispatcher',`${w.description} $${w.pay} · ${w.duration}s. Collect here, deliver to the marked address.`,w,c=>startWork(c,w.id));
  for(const m of MISSIONS)add(`mission:${m.id}`,m.name,m.id==='parade'?'Parade marshal':'Local contact',`${m.desc} $${m.pay} dirty base · ${m.duration}s.`,m.steps[0],c=>startMission(c,m.id));
  for(const [i,m]of STORIES.entries())if(!c.cityStories.completed.includes(m.id))add(`story:${m.id}`,m.title,m.speaker,`${m.dialogue} $${m.pay} dirty base.${i?' Complete the previous story first.':''}`,m,(c,choice)=>startStory(c,m.id,choice),choices(['quiet','Protect the neighborhood'],['bold','Take the high-risk payout']));
  for(const m of OPERATIONS)if(!c.living.completed.includes(m.id))add(`operation:${m.id}`,m.name,'Neighborhood contact',`${m.desc} $${m.pay} clean · ${m.duration}s. Requires ${m.unlock} completed operations.`,m.id==='recovery'?{x:-60,z:0}:m.stages[0],(c,choice)=>startOperation(c,m.id,choice==='quiet'?'quiet':'loud'),m.id==='heist'?choices(['quiet','Quiet · requires paid smuggler / heat below 30'],['loud','Loud · armed guards']):accept);
  for(const ch of CHAPTERS)if(!c.kingpin.chapters[ch.id])add(`chapter:${ch.id}`,ch.name,ch.speaker,`${ch.dialogue} $${ch.pay} clean base. Requires the original story finale and preceding chapter.`,ch,(c,choice,method)=>startChapter(c,ch.id,choice==='profit'?'profit':'protect',method),choices(['protect',ch.protect],['profit',ch.profit]),roomAt(ch),['assault','bribe','lockpick','disguise']);
- for(const race of RACES)add(`race:${race.id}`,race.name,'Race marshal',`$${race.fee} entry · $${race.pay} win. Beat ${race.par}s. Use the same vehicle through all checkpoints.`,race.points[0],c=>startPursuit(c,'race',race.id),accept,null);
+ for(const race of RACES)add(`race:${race.id}`,race.name,'Race marshal',`$${race.fee} entry · $${race.pay} win. Beat two driving opponents (traffic and contact affect their finish). Use the same vehicle through all checkpoints.`,race.points[0],c=>startPursuit(c,'race',race.id),accept,null);
  for(const fare of FARES)add(`taxi:${fare.id}`,fare.name,'Waiting passenger',`Up to $${fare.pay} clean. Bring an actual taxi, stop to board, then drive carefully.`,fare,c=>startPursuit(c,'taxi',fare.id),accept,null);
  for(const b of BOUNTIES)if(!c.pursuits.bounties.includes(b.id))add(`bounty:${b.id}`,b.name,'Precinct investigator',`$${b.pay} clean once. Defeat or subdue the marked target and guards, then return proof to Mama Nola.`,{x:-60,z:-60},c=>startPursuit(c,'bounty',b.id));
  add('fishing:river','Levee fishing pier','Pier attendant','$15 tackle. Interact to cast, then react during the bite window. No catch means no payout.',FISHING_SPOT,c=>startPursuit(c,'fishing','river'),accept,null);

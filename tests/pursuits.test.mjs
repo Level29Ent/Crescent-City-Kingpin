@@ -31,7 +31,7 @@ test('races enforce sequential raw street checkpoints, same vehicle and single s
  }
 });
 test('slow race finish earns only 40%, expiry pays nothing and entry fee is not refunded',()=>{
- const c=ready();startPursuit(c,'race','canal');const before=c.clean;c.pursuits.active.elapsed=100;for(let i=0;i<5;i++)pursuitInteract(c,ctx(c,{driving:true}));assert.equal(c.clean,before+240);assert.ok(!c.pursuits.wins.includes('canal'));
+ const c=ready();startPursuit(c,'race','canal');const before=c.clean;for(let i=0;i<5;i++){c.pursuits.active.elapsed=100;pursuitInteract(c,ctx(c,{driving:true}));}assert.equal(c.clean,before+240);assert.ok(!c.pursuits.wins.includes('canal'));
  const d=ready();startPursuit(d,'race','canal');assert.match(tickPursuits(d,131,idle),/failed/);assert.equal(d.clean,19925);assert.equal(d.pursuits.active,null);
 });
 test('taxi needs the actual model and stopped assigned vehicle; leaving returns passenger without resetting timer',()=>{
@@ -132,7 +132,7 @@ test('finishing the final race checkpoint clears the live HUD/waypoint before sa
  const source=fs.readFileSync(new URL('../src/main.ts',import.meta.url),'utf8');
  const body=source.slice(source.indexOf('function updateCityPursuits('),source.indexOf('function syncDisguiseAppearance('));
  const c=ready();startPursuit(c,'race','canal');c.pursuits.active.step=4;c.pursuits.active.vehicleKey='car-1';const position=ctx(c,{driving:true});const status={hidden:false,textContent:''},snapshots=[];
- const env={C:c,P:{},time:0,RACES,THREE:{Vector3:class{}},tickPursuits,pursuitObjective,pursuitInteract,cityPursuitContext:()=>position,paceRival:{root:{position:{set(){}},rotation:{}},motion(){},detail(){}},feed(){},$:()=>status,target:{name:'old'},selectedLocation:{},missionCompletionKey:null,cleanupCityPursuitActors(){status.hidden=true;},saveGame(){snapshots.push(env.target);}};
+ const env={raceDrivers:[{state:{finished:false,x:0,z:0,heading:0,speed:0},update(){}}],racingCars:[{root:{position:{set(){}},rotation:{}},motion(){},detail(){}}],streetLife:{positions:()=>[]},vehicles:[],dist2:()=>100,C:c,P:{},time:0,RACES,THREE:{Vector3:class{}},tickPursuits,pursuitObjective,pursuitInteract,cityPursuitContext:()=>position,feed(){},$:()=>status,target:{name:'old'},selectedLocation:{},missionCompletionKey:null,cleanupCityPursuitActors(){status.hidden=true;},saveGame(){snapshots.push(env.target);}};
  vm.createContext(env);vm.runInContext(ts.transpileModule(body+'\nupdateCityPursuits(.01);',{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText,env);
  assert.equal(c.pursuits.active,null);assert.equal(env.missionCompletionKey,'pursuit:race:canal');assert.equal(env.target,null);assert.equal(status.hidden,true);assert.equal(snapshots.at(-1),null);
 });

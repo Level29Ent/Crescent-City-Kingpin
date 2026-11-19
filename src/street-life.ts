@@ -113,5 +113,6 @@ export function createStreetLife(scene:THREE.Scene){
   }
  },observers(){return cars.filter(c=>c.police&&c.rig.root.visible).map(c=>({x:c.x,z:c.z}));},
  state(){return cars.map(c=>({x:c.x,z:c.z,heading:c.heading,speed:c.speed,police:c.police,node:c.node,waitingFor:c.waitingFor}));},
+ positions(){return cars.filter(c=>c.rig.root.visible).map(c=>({x:c.x,z:c.z}));},
  sirenNear(x:number,z:number){return cars.some(c=>c.police&&c.rig.root.visible&&Math.hypot(c.x-x,c.z-z)<25);},near(x:number,z:number){return cars.some(c=>c.rig.root.visible&&Math.hypot(c.x-x,c.z-z)<2.3);},dispose(){cars.forEach(c=>c.rig.dispose());signalRoot.removeFromParent();housings.dispose();signals.forEach(s=>s.dispose());housingGeometry.dispose();lampGeometry.dispose();housingMaterial.dispose();lamps.forEach(m=>m.dispose());}};
 }
