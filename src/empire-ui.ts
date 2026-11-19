@@ -1,3 +1,5 @@
+import {ACTION_CAMPAIGN,actionStage} from './action-campaign.ts';
+import {missionGuidance} from './mission-guide.ts';
 import {worldActivities,atContact,startContact,canStartContact,contactBlockReason,type ContactPosition} from './world-activities.ts';
 import {siteTabs,siteServices} from './site-services.ts';
 import {INTERIORS} from './interiors.ts';
@@ -13,7 +15,7 @@ import { renderExpansion } from './expansion-ui.ts';
 import { ACHIEVEMENTS, BLOCKS, EVENTS, GOODS, SPECIALISTS, bonus, heist, hire, launder, layLow, price, salePrice, revenuePerMinute, settleWages, trade, type Campaign } from './campaign.ts';
 export type EmpireHooks = {
   contactPosition():ContactPosition;creatingCharacter():boolean;
-  retryCheckpoint():void;replay(key:string,challenge:'finish'|'quiet'|'speed'):void;stopReplay():void;replaying():boolean;garage():boolean;room():string|null;service(action:'meal'|'treatment'|'repair'):void; trackLocation(p:MapLocation):void; retire():void;travel(x:number,z:number):void;repair():void; milestone():void; missionStarted():void; characterConfirmed():void; backRoom():void; buildings(): readonly {id:string;name:string;x:number;z:number}[]; enterBuilding(id:string):void; campaign: Campaign; pause(open: boolean): void; changed(): void; notice(text: string): void;
+  retryCheckpoint():void;retryAction():void;replay(key:string,challenge:'finish'|'quiet'|'speed'):void;stopReplay():void;replaying():boolean;garage():boolean;room():string|null;service(action:'meal'|'treatment'|'repair'):void; trackLocation(p:MapLocation):void; retire():void;travel(x:number,z:number):void;repair():void; milestone():void; missionStarted():void; characterConfirmed():void; backRoom():void; buildings(): readonly {id:string;name:string;x:number;z:number}[]; enterBuilding(id:string):void; campaign: Campaign; pause(open: boolean): void; changed(): void; notice(text: string): void;
   location(): { x: number; z: number; district: number }; attack(id: string): void; waypoint(x: number, z: number, name: string): void;
   deploy(index: number): void; armory(weapon: number): void; gearOwned(weapon: number): boolean; appearance(): void; save(): void; reset(): Promise<void>; audio(): void;
 };
@@ -69,6 +71,9 @@ export function createEmpireUI(h: EmpireHooks) {
     if(selected==='Objective'){
       const active=missionCard(c);
       card(active?active.title:'Your next step',active?`Step ${active.step}/${active.total} · ${active.objective}`:openingAdvice(c));
+      card('Mission assistance',missionGuidance(c,!!h.room(),false));
+      if(actionStage(c)?.type==='finale'){const box=card('The ledger decision','Publish: +15 neighborhood trust. Keep: +$2,000 but +25 heat and -10 crew loyalty at the finale. Your choice applies only when you report.');for(const [value,label]of [['publish','Publish the ledger'],['keep','Keep the leverage']] as const)button(box,`${label}${c.pursuits.actionChoice===value?' · SELECTED':''}`,()=>{c.pursuits.actionChoice=value;});}
+      if(c.pursuits.actionCheckpoint&&!active&&!c.pursuits.actionDone.includes(c.pursuits.actionCheckpoint.id)){const cp=c.pursuits.actionCheckpoint,box=card('Campaign stage retry',`${ACTION_CAMPAIGN.find(m=>m.id===cp.id)?.name} · stage ${cp.step+1}. $50 clean, no refunds or restored earnings.`);button(box,'Retry campaign stage · $50',h.retryAction,c.clean<50);}
       card('Travel, then interact','Use City Map to set a route. Cyan doors lead to walkable rooms; gold rings mark street contacts. Enter on foot, walk to the desk, then Interact. Offers never start from the map.');
       if(active){const box=card('Leave this activity','Abandoning gives no payout and does not refund setup costs or entry fees.');button(box,'Abandon current activity · no refund',()=>{
         if(c.expansion.mission)c.crew.forEach(m=>m.loyalty=Math.max(0,m.loyalty-12));
@@ -80,6 +85,7 @@ export function createEmpireUI(h: EmpireHooks) {
     }
     else if(selected==='Progress'){
       card('Your city',`${c.stats.captured} corners captured · $${Math.floor(c.stats.cleaned).toLocaleString()} laundered · ${c.lifestyle.workCompleted} work orders completed`);
+      card('Meridian campaign',`${c.pursuits.actionDone.length}/${ACTION_CAMPAIGN.length} chapters completed. Visit Mama Nola’s Contact desk for the next chapter. ${c.pursuits.actionDone.includes('city-we-keep')?c.pursuits.actionChoice==='publish'?'Ending: The city owns the truth.':'Ending: You hold the leverage.':''}`);
       card('Stories',`${c.cityStories.completed.length}/3 original stories · ${Object.keys(c.kingpin.chapters).length}/3 new chapters · ${c.living.completed.length}/5 neighborhood operations`);
       const achievements=document.createElement('details');achievements.append(el('summary','Achievements'));for(const a of ACHIEVEMENTS)achievements.append(el('p',`${c.achievements.includes(a.id)?'✓':'○'} ${a.name} · ${a.description}`));content.append(achievements);button(content,'Optional community leaderboard',()=>{selected='Leaderboard';});
     }
@@ -216,6 +222,7 @@ export function createEmpireUI(h: EmpireHooks) {
         ['opacity','Control opacity',.35,1,.05,c.living.controls.opacity,(n:number)=>c.living.controls.opacity=n],
       ] as const){const field=el('label',label,'field'),input=document.createElement('input');input.type='range';input.min=String(min);input.max=String(max);input.step=String(step);input.value=String(value);input.setAttribute('aria-label',label);input.oninput=()=>{apply(Number(input.value));h.changed();};field.append(input);content.append(field);}
       for(const [key,label]of [['leftHanded','Left-handed layout'],['aimAssist','Touch aim assistance']] as const){const field=el('label',label,'field'),input=document.createElement('input');input.type='checkbox';input.checked=c.living.controls[key];input.onchange=()=>{c.living.controls[key]=input.checked;h.changed();};field.append(input);content.append(field);}
+      card('Action controls','Space: jump on foot / brake driving · Z: dodge · Q: weapon wheel · X: swap aiming shoulder · F: vehicle entry/exit · E: mission interaction · mouse wheel: cycle weapons (aiming) or camera distance. Dodge uses stamina and is not invulnerability. All keyboard actions can be rebound below.');
       if(c.legacy.tutorial<3)button(content,'Skip opening tutorial',()=>{c.legacy.tutorial=3;});
       const accessibility=document.createElement('details');accessibility.append(el('summary','Accessibility & keyboard bindings'));const inputs=el('div');accessibility.append(inputs);content.append(accessibility);
       polishPanel(c,inputs,{changed:h.changed,notice:h.notice,replay:()=>{},stopReplay:()=>{},replaying:h.replaying,track:()=>{}},'settings');

@@ -6,7 +6,7 @@ import { GLTFLoader, type GLTF } from "three/addons/loaders/GLTFLoader.js";
 import { clone as cloneModel } from "three/addons/utils/SkeletonUtils.js";
 
 export type PersonKind = "player" | "gangster" | "civilian" | "cop" | "boss";
-export type PersonMode = "idle" | "walk" | "run" | "aim" | "ride" | "seated" | "surrender" | "down";
+export type PersonMode = "idle" | "walk" | "run" | "aim" | "ride" | "seated" | "surrender" | "down" | "jump" | "dodge";
 export type Person = {
   root: THREE.Group;
   pose(mode: PersonMode, speed: number, time: number, weapon: number, dt: number): void;
@@ -303,7 +303,7 @@ export function createPerson(kind: PersonKind, look: number, appearance?: Appear
       const holdGun = guns.length > 0;
       if (holdGun) setW(Math.max(0, Math.min(2, weapon | 0)));
       const w = curW < 0 ? 0 : curW;
-      guns.forEach((g,i)=>g.g.visible=mode!=="ride" && mode!=="seated" && mode!=="surrender" && i===w);
+      guns.forEach((g,i)=>g.g.visible=mode!=="ride" && mode!=="seated" && mode!=="surrender" && mode!=="jump" && mode!=="dodge" && i===w);
       const spread = mode === "aim" ? 0.12 : 0;
       legL.rotation.set(s * (1 - blend * 0.6), 0, -spread);
       legR.rotation.set(-s * (1 - blend * 0.6), 0, spread);
@@ -327,6 +327,8 @@ export function createPerson(kind: PersonKind, look: number, appearance?: Appear
         armL.rotation.set(-1.15,0,.08);armR.rotation.set(-1.15,0,-.08);
         legL.rotation.set(-.9,0,.25);legR.rotation.set(-.9,0,-.25);
       }
+      if(mode==='jump'){legL.rotation.set(-.6,0,.05);legR.rotation.set(.25,0,-.05);armL.rotation.set(-.3,0,.45);armR.rotation.set(-.3,0,-.45);}
+      if(mode==='dodge'){legL.rotation.set(-1,0,.1);legR.rotation.set(.4,0,-.1);armL.rotation.set(-.6,0,.2);armR.rotation.set(-.6,0,-.2);}
       if(mode==='surrender'){armL.rotation.set(0,0,2.6);armR.rotation.set(0,0,-2.6);legL.rotation.set(0,0,0);legR.rotation.set(0,0,0);}
       if(mode==='seated'){armL.rotation.set(-.4,0,.08);armR.rotation.set(-.4,0,-.08);legL.rotation.set(-1.45,0,.05);legR.rotation.set(-1.45,0,-.05);}
       // down: lie on back
