@@ -272,3 +272,6 @@ body[data-map-palette="accessible"] #objectiveArrow {border-bottom-color:#fff17c
   #mini { width:64px; height:64px; }
   .hud-bottom { grid-template-columns:minmax(0,1fr) 64px; }
 }
+
+#holdUp{background:#793939;color:#fff0c8;border:2px solid #e3b266;}
+#raidInteract{touch-action:none;background:#e3bb66;color:#152734;font-weight:900;user-select:none;}

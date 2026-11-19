@@ -1,3 +1,4 @@
+import {raidPoint,tickRaid,settleRaid,type RaidProgress,ROBBABLE} from './street-heists.ts';
 import type {Campaign} from './campaign.ts';
 import {SPECIALISTS,activeCrew} from './campaign.ts';
 import {owns,PROPERTIES} from './expansion.ts';
@@ -12,9 +13,9 @@ export const FISHING_SPOT={x:35,z:196};
 export const OUTFITS=[{id:'river',name:'Riverboat evening coat',cost:250,outfit:3,hair:4,accent:0xd9bb73},{id:'racer',name:'Canal racing jacket',cost:350,outfit:0,hair:0,accent:0xe8e5cf},{id:'dock',name:'Dockworker field jacket',cost:200,outfit:4,hair:1,accent:0xe5b456}] as const;
 export const APARTMENTS=[{id:'home-quarter',name:'French Quarter Courtyard Home',cost:1800},{id:'home-uptown',name:'Uptown Shotgun Home',cost:2200},{id:'home-bywater',name:'Bywater Artist Loft',cost:2600}] as const;
 export const LIVERIES=['none','rally','checker','sunset'] as const;
-export type PursuitJob={kind:'race'|'taxi'|'bounty'|'fishing'|'rival';id:string;step:number;remaining:number;elapsed:number;condition:number;spawned:boolean;resolved:boolean;boarded:boolean;cast:number;window:number;vehicleKey:string};
-export type Pursuits={active:PursuitJob|null;cooldown:number;wins:string[];bounties:string[];fish:number;best:Record<string,number>;wardrobe:string[];wearing:string;apartments:string[];decor:Record<string,number>;liveries:Record<string,string>;bond:Record<string,number>;bondCooldown:number;rivalry:Record<string,number>;rivalClock:number;report:string};
-export function newPursuits():Pursuits{return {active:null,cooldown:0,wins:[],bounties:[],fish:0,best:{},wardrobe:[],wearing:'',apartments:[],decor:{},liveries:{},bond:{},bondCooldown:0,rivalry:{},rivalClock:0,report:''};}
+export type PursuitJob={kind:'race'|'taxi'|'bounty'|'fishing'|'rival'|'raid';raid?:RaidProgress;opponentRacing?:boolean;opponentTime?:number;id:string;step:number;remaining:number;elapsed:number;condition:number;spawned:boolean;resolved:boolean;boarded:boolean;cast:number;window:number;vehicleKey:string};
+export type Pursuits={active:PursuitJob|null;raidWins:string[];raided:Record<string,number>;cooldown:number;wins:string[];bounties:string[];fish:number;best:Record<string,number>;wardrobe:string[];wearing:string;apartments:string[];decor:Record<string,number>;liveries:Record<string,string>;bond:Record<string,number>;bondCooldown:number;rivalry:Record<string,number>;rivalClock:number;report:string};
+export function newPursuits():Pursuits{return {active:null,raidWins:[],raided:{},cooldown:0,wins:[],bounties:[],fish:0,best:{},wardrobe:[],wearing:'',apartments:[],decor:{},liveries:{},bond:{},bondCooldown:0,rivalry:{},rivalClock:0,report:''};}
 const n=(v:unknown,f=0,max=1e9)=>typeof v==='number'&&Number.isFinite(v)?Math.max(0,Math.min(max,v)):f;
 export function restorePursuits(v:any):Pursuits{
  const s=newPursuits();if(!v||typeof v!=='object')return s;
@@ -24,6 +25,9 @@ export function restorePursuits(v:any):Pursuits{
  for(const race of RACES)if(v.best?.[race.id]!==undefined)s.best[race.id]=n(v.best[race.id],0,3600);
  for(const id of s.apartments)s.decor[id]=Math.floor(n(v.decor?.[id],0,2));for(let i=0;i<8;i++)if(LIVERIES.includes(v.liveries?.[i]))s.liveries[i]=v.liveries[i];
  for(const m of SPECIALISTS)if(v.bond?.[m.id]!==undefined)s.bond[m.id]=Math.floor(n(v.bond?.[m.id],0,100));for(const p of PROPERTIES)if(v.rivalry?.[p.id]!==undefined)s.rivalry[p.id]=n(v.rivalry?.[p.id],0,100);
+ s.raidWins=['bank-job','riverboat-job'].filter(id=>Array.isArray(v.raidWins)&&v.raidWins.includes(id));
+ for(const id of ['bank-job','riverboat-job',...ROBBABLE])if(v.raided?.[id]!==undefined)s.raided[id]=n(v.raided[id],0,300);
+ if(v.active?.kind==='raid'){s.cooldown=Math.max(s.cooldown,45);s.report='Interrupted robbery/heist cancelled on reload. Unsettled loot lost, no fee refund. Site cooldown retained.';}
  const a=v.active;const valid=a&&(a.kind==='race'?RACES.some(m=>m.id===a.id):a.kind==='taxi'?FARES.some(m=>m.id===a.id):a.kind==='bounty'?BOUNTIES.some(m=>m.id===a.id)&&!s.bounties.includes(a.id):a.kind==='fishing'?a.id==='river':a.kind==='rival'?PROPERTIES.some(p=>p.id===a.id):false);
  if(valid&&a.kind==='race'){s.report='Interrupted street race cancelled on reload. Entry fee was not refunded; no result or payout was granted.';s.cooldown=Math.max(20,s.cooldown);}
  if(valid&&a.kind!=='race'){const max=a.kind==='race'?RACES.find(m=>m.id===a.id)!.points.length-1:a.kind==='fishing'?0:1;s.active={kind:a.kind,id:a.id,step:Math.floor(n(a.step,0,max)),remaining:n(a.remaining,180,300),elapsed:n(a.elapsed,0,300),condition:n(a.condition,100,100),spawned:a.spawned===true,resolved:a.resolved===true,boarded:false,cast:0,window:0,vehicleKey:''};}
@@ -42,6 +46,7 @@ export function startPursuit(c:Campaign,kind:PursuitJob['kind'],id:string){
  if(c.clean<fee)return false;c.clean-=fee;c.pursuits.active={kind,id,step:0,remaining:duration,elapsed:0,condition:100,spawned:false,resolved:false,boarded:false,cast:0,window:0,vehicleKey:''};return true;
 }
 export function pursuitObjective(c:Campaign){const a=c.pursuits.active;if(!a)return null;
+ if(a.kind==='raid')return raidPoint(c);
  if(a.kind==='race'){const m=RACES.find(m=>m.id===a.id)!;return {...m.points[a.step]!,name:`${m.name} · checkpoint ${a.step+1}/${m.points.length} · ${Math.ceil(a.remaining)}s`};}
  if(a.kind==='taxi'){const m=FARES.find(m=>m.id===a.id)!;return {x:a.step?m.dropX:m.x,z:a.step?m.dropZ:m.z,name:`Taxi · ${m.name} · ${a.step?'passenger on board: stop and Interact to deliver':'stop a taxi and Interact to pick up'} · fare care ${Math.ceil(a.condition)}%`};}
  if(a.kind==='bounty'){const m=BOUNTIES.find(m=>m.id===a.id)!;return {x:a.step?30:m.x,z:a.step?4:m.z,name:`Bounty · ${m.name} · ${a.step?'return proof to Mama Nola':'locate target, defeat/subdue then Interact'}`};}
@@ -53,11 +58,12 @@ export function pursuitInteract(c:Campaign,ctx:PursuitContext){
  const a=c.pursuits.active,p=pursuitObjective(c);if(!a||!p)return null;const radius=a.kind==='race'?7:6;
  const near=a.kind==='race'||a.kind==='fishing'?Math.hypot(ctx.x-p.x,ctx.z-p.z)<=radius:atPoint(ctx.x,ctx.z,p,radius);if(!near)return null;
  if(a.remaining<=0||a.condition<=0||(a.kind==='taxi'&&ctx.fired&&a.condition<=25)||((a.kind==='race'||a.kind==='taxi')&&ctx.driving&&(!a.vehicleKey||ctx.vehicleKey===a.vehicleKey)&&ctx.condition<=0)){c.pursuits.active=null;c.pursuits.cooldown=30;return 'City activity failed. No payout; entry fees are not refunded.';}
+ if(a.kind==='raid')return settleRaid(c,ctx.x,ctx.z,ctx.driving);
  if(a.kind==='race'){
   if(!ctx.driving)return 'Enter a road vehicle before taking the checkpoint.';
   if(!a.vehicleKey)a.vehicleKey=ctx.vehicleKey;if(a.vehicleKey!==ctx.vehicleKey)return 'Finish the circuit in the vehicle you started in.';
-  const m=RACES.find(m=>m.id===a.id)!;if(a.step<m.points.length-1){a.step++;return 'Race checkpoint cleared.';}
-  const win=a.elapsed<=m.par;if(!c.pursuits.wins.includes(m.id)&&win)c.pursuits.wins.push(m.id);c.pursuits.best[m.id]=Math.min(c.pursuits.best[m.id]??Infinity,a.elapsed);const pay=win?m.pay:Math.round(m.pay*.4);c.clean+=pay;c.pursuits.active=null;c.pursuits.cooldown=60;return `${win?'RACE WON':'RACE FINISHED'} · ${a.elapsed.toFixed(1)}s vs ${m.par}s rival pace · +$${pay} clean.`;
+  const m=RACES.find(m=>m.id===a.id)!;if(a.step<m.points.length-1){if(a.step===0)a.elapsed=0;a.step++;return 'Race checkpoint cleared.';}
+  const win=a.opponentRacing?a.opponentTime===undefined:a.elapsed<=m.par;if(!c.pursuits.wins.includes(m.id)&&win)c.pursuits.wins.push(m.id);c.pursuits.best[m.id]=Math.min(c.pursuits.best[m.id]??Infinity,a.elapsed);const pay=win?m.pay:Math.round(m.pay*.4);c.clean+=pay;c.pursuits.active=null;c.pursuits.cooldown=60;return `${win?'RACE WON':'RACE FINISHED'} · ${a.elapsed.toFixed(1)}s · rival ${a.opponentRacing?(a.opponentTime===undefined?'still racing':`${a.opponentTime.toFixed(1)}s`):`${m.par}s`} · +$${pay} clean.`;
  }
  if(a.kind==='taxi'){
   if(!ctx.driving||!ctx.taxi)return 'Use a Crescent City Taxi, not another vehicle.';if(Math.abs(ctx.speed)>1.5)return 'Stop the taxi for pickup or drop-off.';
@@ -79,7 +85,8 @@ export function pursuitInteract(c:Campaign,ctx:PursuitContext){
 export function tickPursuits(c:Campaign,dt:number,ctx:PursuitContext){
  const s=c.pursuits;s.cooldown=Math.max(0,s.cooldown-dt);s.bondCooldown=Math.max(0,s.bondCooldown-dt);s.rivalClock+=dt;
  if(s.rivalClock>=120){s.rivalClock%=120;for(const p of PROPERTIES)if(owns(c,p.id))s.rivalry[p.id]=Math.min(100,(s.rivalry[p.id]??0)+10);}
- const a=s.active;if(!a)return null;a.elapsed+=dt;a.remaining-=dt;
+ for(const id of Object.keys(s.raided))s.raided[id]=Math.max(0,s.raided[id]!-dt);
+ const a=s.active;if(!a)return null;if(a.kind==='raid')return tickRaid(c,dt,{interior:null,x:ctx.x,z:ctx.z,interact:false,driving:ctx.driving,dead:false});a.elapsed+=dt;a.remaining-=dt;
  if(ctx.fired&&(a.kind==='taxi'||a.kind==='race'))a.condition=Math.max(0,a.condition-25);
  if(a.remaining<=0||a.condition<=0||((a.kind==='race'||a.kind==='taxi')&&ctx.driving&&(!a.vehicleKey||ctx.vehicleKey===a.vehicleKey)&&ctx.condition<=0)){s.active=null;s.cooldown=30;return 'City activity failed. No payout; entry fees are not refunded.';}
  if(a.kind==='taxi'&&a.step===1&&(!ctx.driving||ctx.vehicleKey!==a.vehicleKey)){a.boarded=false;a.step=0;a.vehicleKey='';return 'Fare paused: passenger returned to pickup after you left the assigned taxi. Collect them again; timer continues.';}

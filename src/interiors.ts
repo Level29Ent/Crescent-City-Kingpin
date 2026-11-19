@@ -1,3 +1,5 @@
+import {ROBBABLE} from './street-heists.ts';
+import {createInteriorLife} from './interior-life.ts';
 import {dressAnnex} from './pursuits-art.ts';
 import {furnishKarma} from './karma-interior.ts';
 import {surfaceTexture,furnishDetails} from './interior-decor.ts';
@@ -7,6 +9,14 @@ import { createPerson, type Person } from './actors.ts';
 import type {Lifestyle} from './lifestyle.ts';
 import type { Appearance } from './campaign.ts';
 export const INTERIORS = [
+  {id:'corner-store',name:'Rampart Corner Market',x:30,z:-180,tab:'City Pursuits',theme:'warehouse',color:0x658567},
+  {id:'jeweler',name:'Royal Crown Jewelers',x:90,z:-180,tab:'City Pursuits',theme:'antique',color:0x94764c},
+  {id:'liquor',name:'Basin Bottle Shop',x:-90,z:-180,tab:'City Pursuits',theme:'warehouse',color:0x784b51},
+  {id:'pharmacy',name:'Canal Pharmacy',x:-150,z:-180,tab:'City Pursuits',theme:'cafe',color:0x648c88},
+  {id:'electronics',name:'Bywater Electronics',x:150,z:60,tab:'City Pursuits',theme:'warehouse',color:0x536f8c},
+  {id:'boutique',name:'Marigny Evening Boutique',x:90,z:60,tab:'City Pursuits',theme:'hq',color:0x8d5c7c},
+  {id:'pawn-east',name:'Eastbank Gold & Pawn',x:150,z:120,tab:'City Pursuits',theme:'antique',color:0x8d8059},
+  {id:'riverboat',name:'River Queen Casino · Moored Riverboat',x:90,z:180,tab:'City Pursuits',theme:'casino',color:0x755278},
   {id:'roof-royal',name:'Royal Quarter Rooftop',x:0,z:-210,tab:'City Pursuits',theme:'cafe',color:0x8f7d68},
   {id:'roof-treme',name:'Tremé Sky Garden',x:-60,z:-210,tab:'City Pursuits',theme:'antique',color:0x668167},
   {id:'levee-pavilion',name:'Levee Waterfront Pavilion',x:180,z:180,tab:'City Pursuits',theme:'cafe',color:0x607f8b},
@@ -181,7 +191,23 @@ export function createInterior(def:InteriorDefinition,appearance:Appearance,cust
   }
   dressAnnex(def.id,scene,box,apartmentDecor);
   if(def.id.startsWith('roof-')){for(const wall of walls){wall.scale.y=.25;wall.position.y=.5;}sign('ROOFTOP ACCESS · PUBLIC VISIT',0,1.5,-7.6);}
-  const attendant=createPerson('civilian',2);attendant.root.position.set(-2.8,0,-6.5);scene.add(attendant.root);
+  if(ROBBABLE.includes(def.id)){box(1.2,1.55,-5.3,.5,.35,.45,0x2b3d43);box(1.2,1.8,-5.12,.35,.18,.04,0x89d7b7);box(0,.035,-3.5,1.4,.05,.7,0xd7b568);sign('REGISTER · CASHIER',0,2.7,-7.6,'#ffd686').scale.setScalar(.6);}
+  if(def.id==='bank'||def.id==='riverboat'){
+    sign(def.id==='bank'?'BRASS VAULT · SECURITY ACTIVE':'RIVER QUEEN · CASINO DECK',0,3,-7.6,'#ffd686');
+    box(5,1.2,-5.8,1.6,2.4,1.1,0x42545b,true);box(5,1.2,-5.2,1.2,1.8,.08,0xb6a16e);
+    for(const z of [0,3.4]){box(1.1,.7,z,.5,1.4,.5,0x42545b);box(.83,1.25,z,.04,.3,.3,z===0?0xe3bb66:0x56dfad);}
+    box(-5,2.8,-5.6,.3,.25,.5,0x263844);box(-5,2.8,-5.3,.12,.1,.08,0xff5b52);
+    for(const [z,color,label] of [[3.4,0x56dfad,'ALARM · HOLD INTERACT'],[0,0xe3bb66,'VAULT · HOLD INTERACT'],[-3.5,0xe3bb66,'LOOT · HOLD INTERACT']] as const){
+      box(0,.035,z,1.5,.05,.7,color);sign(label,0,.55,z-.45).scale.setScalar(.22);
+    }
+  }
+  if(def.id==='riverboat'){
+    for(const x of [-6.85,6.85])for(const z of [-3,0,3]){box(x,2,z,.08,1.4,1.4,0x203f5b);box(x,1.35,z,.1,.08,1.5,0xd8bd78);}
+    for(const side of [-1,1])for(const z of [-3,0,3]){const g=new THREE.TorusGeometry(.62,.08,6,16);geometries.push(g);const rim=new THREE.Mesh(g,mat(0xd8bd78));rim.rotation.y=Math.PI/2;rim.position.set(side*6.77,2,z);scene.add(rim);}
+    for(const x of [-5.8,5.8]){box(x,1,5.5,.15,1.6,3,0xd8bd78);box(x,1.8,5.5,.2,.12,3.2,0x8d5142);}
+    sign('MISSISSIPPI RIVER · MOORED AT EASTBANK',0,2.65,7.7,'#8bdde9').scale.setScalar(.7);
+  }
+  const life=createInteriorLife(scene,obstacles,INTERIORS.findIndex(b=>b.id===def.id)+2,def.id==='bank'||def.id==='riverboat',def.id.startsWith('home-')?0:4);
   const avatar:Person=createPerson('player',5,appearance,customization);scene.add(avatar.root);
-  return {scene,avatar,obstacles,dispose(){disposeDressing();attendant.dispose();floorTexture.dispose();wallTexture.dispose();this.avatar.dispose();geometries.forEach(g=>g.dispose());materials.forEach(m=>{if(m instanceof THREE.MeshBasicMaterial)m.map?.dispose();m.dispose();});}};
+  return {scene,avatar,obstacles,life,dispose(){disposeDressing();life.dispose();floorTexture.dispose();wallTexture.dispose();this.avatar.dispose();geometries.forEach(g=>g.dispose());materials.forEach(m=>{if(m instanceof THREE.MeshBasicMaterial)m.map?.dispose();m.dispose();});}};
 }

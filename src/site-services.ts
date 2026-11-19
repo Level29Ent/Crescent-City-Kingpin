@@ -3,7 +3,7 @@ import type {Campaign} from './campaign.ts';
 import {SPECIALISTS,activeCrew,BLOCKS} from './campaign.ts';
 import {INTERIORS} from './interiors.ts';
 import {businessHours,upgradeTires,trainCrew,upgradeBusiness} from './living-city.ts';
-import {PROPERTIES,VEHICLES,owns,upgradeDistrict} from './expansion.ts';
+import {PROPERTIES,VEHICLES,owns,upgradeDistrict,playPoker} from './expansion.ts';
 import {OUTFITS,APARTMENTS,LIVERIES,buyOutfit,equipOutfit,buyApartment,decorateApartment,buyLivery,bondConversation} from './pursuits.ts';
 import {buyDisguise,callCompanion,commandCompanion,insureVehicle,recoverVehicle,replateVehicle,vehicleRecord,plateLabel} from './kingpin.ts';
 import {buyDecor,styleCar} from './lifestyle.ts';
@@ -13,7 +13,7 @@ export function siteTabs(room:string|null){
  const tabs=['Services','Contact'];
  if(room==='garage')tabs.push('Garage');
  if(PROPERTIES.some(p=>propertyRoom(p.id)===room))tabs.push('Properties');
- if(['bank','mint','port','casino'].includes(room))tabs.push('Heists');
+ if(['bank','mint','port','casino','riverboat'].includes(room))tabs.push('Heists');
  if(room==='hq')tabs.push('Safehouse','Interior','Polish & Replays');
  if(['hq','music','cafe'].includes(room))tabs.push('Crew');
  if(['pawn','karma','freight','rail-exchange','herbalist','seafood'].includes(room))tabs.push('Market');
@@ -29,10 +29,16 @@ export function siteServices(c:Campaign,root:HTMLElement,h:SiteHooks){
  const card=(title:string,body:string)=>{const box=el('article','');box.className='empire-card';box.append(el('h3',title),el('p',body));root.append(box);return box;};
  const button=(box:HTMLElement,label:string,fn:()=>void,disabled=false)=>{const b=el('button',label) as HTMLButtonElement;b.disabled=disabled;b.onclick=()=>{if(h.room()!==id)return;fn();h.changed();if(h.refresh)h.refresh();else{root.replaceChildren();siteServices(c,root,h);}};box.append(b);};
  const open=businessHours(room.id,c.clock),desk=card(room.name,`${open?'Service desk open':'Timed food/medical/repair services closed'} · Interact with contacts here for local work. Use the exit to return to the street.`);
- if(room.theme==='cafe')button(desk,'Meal · $25 base / restore stamina',()=>h.service('meal'),!open||c.living.serviceCooldown>0);
+ if(room.theme==='cafe'&&room.id!=='pharmacy')button(desk,'Meal · $25 base / restore stamina',()=>h.service('meal'),!open||c.living.serviceCooldown>0);
  if(room.id==='clinic')button(desk,'Treatment · $80 base / restore health',()=>h.service('treatment'),!open||c.living.serviceCooldown>0);
  if(room.theme==='garage')button(desk,'Repair last driven vehicle · $100 base',()=>h.service('repair'),!open||c.living.serviceCooldown>0);
+ if(room.id==='riverboat'){
+  const poker=card('River Queen · five-card draw','$25 clean buy-in. Hold cards, then draw once. Pair $25; two pairs $50; trips $75; straight $100; flush $150; full house $200; quads $400; straight flush $1,000. Table closes during a heist. Fictional in-game currency only.');
+  c.expansion.poker?.cards.forEach((n,i)=>{const label=['A','2','3','4','5','6','7','8','9','10','J','Q','K'][n%13]+['♠','♥','♦','♣'][Math.floor(n/13)]!;button(poker,`${label}${c.expansion.poker!.held.includes(i)?' HELD':''}`,()=>{const held=c.expansion.poker!.held;c.expansion.poker!.held=held.includes(i)?held.filter(j=>j!==i):[...held,i];});});
+  button(poker,c.expansion.poker?'Draw & settle':'Deal · $25',()=>{playPoker(c,Math.random,'riverboat');},c.pursuits.active?.kind==='raid'||!c.expansion.poker&&c.clean<25);if(c.expansion.report)poker.append(el('p',c.expansion.report));
+ }
  if(room.id==='hq'){
+  card('Playable heists','Talk to Mama Nola in Contact for The Brass Vault and River Queen Casino Heist. Crew in Follow can ride in a stopped car nearby; taxi/rescue passengers have seat priority.');
   button(desk,'Gear & import dispatch',()=>{h.close();h.backRoom();});
   const decor=card('Your back room','Purchased decor appears on your next visit.');
   for(const key of ['rug','art'] as const)button(decor,`${key} · $100`,()=>{buyDecor(c,key);},c.lifestyle[key]||c.clean<100);
