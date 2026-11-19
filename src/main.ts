@@ -35,6 +35,8 @@ import {resetAfterDeath} from './campaign.ts';
 import {actorHit,damageFalloff,spreadMultiplier} from './gunplay.ts';
 // Crescent City Kingpin: standalone single-player game. Plain three.js, no engine, no server.
 import * as THREE from "three";
+import { createSkyEnvironment, createFilmGrade } from "./cinematic.ts";
+import { SSAOPass } from "three/addons/postprocessing/SSAOPass.js";
 import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
@@ -103,11 +105,18 @@ $("app").appendChild(renderer.domElement);
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(62, 1, 0.2, 1400);
 scene.add(camera);
+createSkyEnvironment(renderer, scene);
 const composer = new EffectComposer(renderer);
 const renderPass = new RenderPass(scene, camera);
 composer.addPass(renderPass);
-const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.35, 0.45, 0.9);
+const contactShadows = new SSAOPass(scene, camera, window.innerWidth, window.innerHeight, 16);
+contactShadows.kernelRadius = 5;
+contactShadows.minDistance = .0002;
+contactShadows.maxDistance = .012;
+composer.addPass(contactShadows);
+const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.28, 0.55, 1.0);
 composer.addPass(bloom);
+composer.addPass(createFilmGrade());
 composer.addPass(new OutputPass());
 const quality = $<HTMLSelectElement>("quality");
 const frameBudget=newFrameBudget();
@@ -115,13 +124,15 @@ try{const saved=localStorage.getItem('cck.quality');if(saved&&['auto','performan
 let graphics=renderBudget(quality.value as Quality,frameBudget,devicePixelRatio);
 function applyGraphics(){
   graphics=renderBudget(quality.value as Quality,frameBudget,devicePixelRatio);
-  renderer.setPixelRatio(graphics.pixelRatio);renderer.shadowMap.enabled=graphics.shadows;bloom.enabled=graphics.bloom;resize();
+  renderer.setPixelRatio(graphics.pixelRatio);renderer.shadowMap.enabled=graphics.shadows;bloom.enabled=graphics.bloom;contactShadows.enabled=graphics.contactShadows;resize();
 }
 quality.addEventListener('change',()=>{frameBudget.scale=1;frameBudget.slow=frameBudget.fast=0;try{localStorage.setItem('cck.quality',quality.value);}catch{}applyGraphics();});
 const resize = () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
   composer.setPixelRatio(renderer.getPixelRatio());
   composer.setSize(window.innerWidth, window.innerHeight);
+  // Contact shadows are deliberately half-resolution and cinematic-only.
+  contactShadows.setSize(Math.max(1, Math.round(window.innerWidth * graphics.pixelRatio * .5)), Math.max(1, Math.round(window.innerHeight * graphics.pixelRatio * .5)));
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
 };
@@ -2078,8 +2089,9 @@ function frame() {
   updateCamera(dt);
   if(shake>0&&C.accessibility.shake>0&&!matchMedia('(prefers-reduced-motion: reduce)').matches){shake=Math.max(0,shake-dt*2);camera.position.x+=(Math.random()-.5)*shake*.2*C.accessibility.shake;camera.position.y+=(Math.random()-.5)*shake*.1*C.accessibility.shake;}
   lootBag.visible=!inside&&!P.car&&!!C.pursuits.active?.raid?.bag;lootBag.position.set(P.x+Math.cos(P.heading)*.45,.7,P.z-Math.sin(P.heading)*.45);lootBag.rotation.y=P.heading;
-  if(inside){renderPass.scene=inside.room.scene;if(graphics.bloom)composer.render();else renderer.render(inside.room.scene,camera);return;}
-  renderPass.scene=scene;
+  if(inside){renderPass.scene=inside.room.scene;contactShadows.scene=inside.room.scene;if(graphics.bloom)composer.render();else renderer.render(inside.room.scene,camera);return;}
+  renderPass.scene=scene;contactShadows.scene=scene;
+  scenery.setWetness(conditions(C.clock).weather==='Rainstorm'?1:0);
   scenery.update(C.clock, P.x, P.z,graphics.waterInterval);
   const weatherState=weather.update(C.clock,playing&&!managing&&!shopOpen?dt:0,P.x,P.z,graphics.weatherParticles);
   const parade=C.expansion.mission?.id==='parade';

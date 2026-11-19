@@ -12,5 +12,5 @@ export function sampleFrame(b:FrameBudget,dt:number,active:boolean){
 }
 export function renderBudget(quality:Quality,b:FrameBudget,dpr:number){
  const low=quality==='performance'||quality==='auto'&&b.scale<=.8;
- return {pixelRatio:Math.min(dpr,quality==='cinematic'?1.5:quality==='performance'?.8:quality==='auto'?b.scale:1),shadows:!low,bloom:!low,weatherParticles:low?300:1000,waterInterval:low?.1:0,pathBudget:low?1:2,actorRange:low?110:180};
+ return {pixelRatio:Math.min(dpr,quality==='cinematic'?1.5:quality==='performance'?.8:quality==='auto'?b.scale:1),shadows:!low,bloom:!low,contactShadows:quality==='cinematic',weatherParticles:low?300:1000,waterInterval:low?.1:0,pathBudget:low?1:2,actorRange:low?110:180};
 }

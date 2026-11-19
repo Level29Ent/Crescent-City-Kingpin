@@ -1,3 +1,4 @@
+import { surfaceTexture, surfaceUVs } from "./cinematic.ts";
 import { cityClock } from "./dynamics.ts";
 // Crescent City Kingpin: the drawn world. Stylized low-poly golden-hour New Orleans.
 // Everything static is merged into per-chunk vertex-coloured meshes; repeated organic bits are instanced.
@@ -22,7 +23,7 @@ import {
   type Prop,
 } from "./world.ts";
 
-export type Scenery = { update(time: number, focusX: number, focusZ: number,waterInterval?:number): void; dispose(): void };
+export type Scenery = { update(time: number, focusX: number, focusZ: number,waterInterval?:number): void; setWetness(value: number): void; dispose(): void };
 
 // ───────────────────────── helpers ─────────────────────────
 const TAU = Math.PI * 2;
@@ -1941,8 +1942,11 @@ export function createScenery(scene: THREE.Scene): Scenery {
   }
 
   // ── build chunked meshes ──
-  const matSolid = trackM(new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true }));
-  const matGround = trackM(new THREE.MeshStandardMaterial({ vertexColors: true }));
+  const plaster = trackT(surfaceTexture('plaster'));
+  const street = trackT(surfaceTexture('street'));
+  // Linear greys are intentional: the vertex palette still owns the facade/street colour.
+  const matSolid = trackM(new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, map: plaster, bumpMap: plaster, bumpScale: .055, roughness: .86 }));
+  const matGround = trackM(new THREE.MeshStandardMaterial({ vertexColors: true, map: street, bumpMap: street, bumpScale: .035, roughnessMap: street, roughness: .88 }));
   const matGlow = trackM(new THREE.MeshBasicMaterial({ vertexColors: true }));
   const matNeonA = trackM(new THREE.MeshBasicMaterial({ vertexColors: true }));
   const matNeonB = trackM(new THREE.MeshBasicMaterial({ vertexColors: true }));
@@ -1953,7 +1957,10 @@ export function createScenery(scene: THREE.Scene): Scenery {
       if (!m.pos.length) continue;
       const g = new THREE.BufferGeometry();
       g.setAttribute("position", new THREE.Float32BufferAttribute(m.pos, 3));
-      if (lit) g.setAttribute("normal", new THREE.Float32BufferAttribute(m.nor, 3));
+      if (lit) {
+        g.setAttribute("normal", new THREE.Float32BufferAttribute(m.nor, 3));
+        g.setAttribute("uv", new THREE.BufferAttribute(surfaceUVs(m.pos, m.nor), 2));
+      }
       g.setAttribute("color", new THREE.Float32BufferAttribute(m.col, 3));
       g.computeBoundingSphere();
       geos.push(g);
@@ -1980,6 +1987,7 @@ export function createScenery(scene: THREE.Scene): Scenery {
   const uVec = new THREE.Vector3();
   const tmpV = new THREE.Vector3();
   const TEX = 140 / 2048;
+  let wetness = 0;
 
   const nightSky = new THREE.Color(0x263956);
   const daySky = new THREE.Color(0xffffff);
@@ -1988,13 +1996,17 @@ export function createScenery(scene: THREE.Scene): Scenery {
   const dayFog = new THREE.Color(0xcdd7da);
   const duskFog = new THREE.Color(0xa87672);
   const moonColor = new THREE.Color(0x98bbff);
-  const sunColor = new THREE.Color(0xffe2b8);
+  const sunColor = new THREE.Color(0xffcf97);
   let lastWater=-Infinity;
   const update = (time: number, focusX: number, focusZ: number,waterInterval=0) => {
     const { daylight, dusk } = cityClock(time);
+    matGround.roughness = .88 - wetness * .5;
     skyMat.color.copy(nightSky).lerp(daySky, daylight).lerp(duskSky, dusk * 0.65);
     (scene.fog as THREE.Fog).color.copy(nightFog).lerp(dayFog, daylight).lerp(duskFog, dusk * 0.6);
-    hemi.intensity = 0.65 + daylight * 0.65;
+    // Cool ambient fill against a warm key retains facade depth at golden hour.
+    hemi.intensity = 0.48 + daylight * 0.55;
+    hemi.color.setHex(0x9ebde0);
+    scene.environmentIntensity = .28 + daylight * .4 + dusk * .2;
     sun.intensity = 0.45 + daylight * 2.75 + dusk * 0.6;
     sun.color.copy(moonColor).lerp(sunColor, Math.max(daylight, dusk));
     sunDisc.material.opacity = Math.max(daylight, dusk);
@@ -2063,5 +2075,5 @@ export function createScenery(scene: THREE.Scene): Scenery {
     scene.background = prevBg;
   };
 
-  return { update, dispose };
+  return { update, dispose, setWetness(value: number) { wetness = Math.max(0, Math.min(1, value)); } };
 }
