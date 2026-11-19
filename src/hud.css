@@ -1,8 +1,8 @@
 /* Flow-based HUD lanes: panels grow without covering neighboring information. */
-:root { --hud-gap: 12px; --hud-edge: max(12px, env(safe-area-inset-left)); --toolbar-height: 42px; --touch-height: 0px; }
-#hud { display: flex; flex-direction: column; justify-content: space-between; padding: max(12px, env(safe-area-inset-top)) var(--hud-edge) 0; box-sizing: border-box; gap: var(--hud-gap); }
+:root { --hud-gap: 12px; --hud-edge: max(12px, env(safe-area-inset-left)); --hud-right: max(12px, env(safe-area-inset-right)); --toolbar-height: 42px; --touch-height: 0px; }
+#hud { display: flex; flex-direction: column; justify-content: space-between; padding: max(12px, env(safe-area-inset-top)) var(--hud-right) 0 var(--hud-edge); box-sizing: border-box; gap: var(--hud-gap); }
 #hud > .hud-top, #hud > .hud-bottom { position: relative; flex: 0 1 auto; min-height: 0; }
-.hud-top { display: grid; grid-template-columns: minmax(0, 260px) minmax(0, 1fr) minmax(0, 260px); grid-template-areas: "stats objective city"; gap: var(--hud-gap); align-items: start; }
+.hud-top { display: grid; grid-template-columns: minmax(0, 260px) minmax(0, 1fr) minmax(0, 260px); grid-template-areas: "stats objective city" "details details details" "notices notices notices"; gap: var(--hud-gap); align-items: start; }
 #stats, #city, #obj, #feed, #mini, #speed, #prompt { position: static; inset: auto; transform: none; min-width: 0; box-sizing: border-box; max-width: 100%; overflow-wrap: anywhere; }
 #stats { grid-area: stats; padding: 12px; }
 #city { grid-area: city; text-align: right; }
@@ -20,7 +20,7 @@
 /* Center targeting and damage are independent overlays, not layout content. */
 #hud > #cross, #hud > #hurt { position: absolute; }
 @media (max-width: 1000px) {
-  .hud-top { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "stats city" "objective objective"; }
+  .hud-top { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "stats city" "objective objective" "details details" "notices notices"; }
   #obj { font-size: 12px; padding: 6px 10px; }
   .hud-bottom { grid-template-columns: minmax(0, 1fr) 100px; grid-template-areas: "prompt prompt" "feed speed" "feed mini"; }
   #mini { width: 100px; height: 100px; }
@@ -50,7 +50,7 @@
 }
 @media (pointer: coarse) {
   :root { --touch-height: 194px; }
-  #touchControls { top: auto; height: var(--touch-height); bottom: calc(var(--toolbar-height) + max(16px, env(safe-area-inset-bottom))); left: var(--hud-edge); right: var(--hud-edge); }
+  #touchControls { top: auto; height: var(--touch-height); bottom: calc(var(--toolbar-height) + max(16px, env(safe-area-inset-bottom))); left: var(--hud-edge); right: var(--hud-right); }
   .touchMove { left: 0; bottom: 0; width: 40%; max-width: 180px; }
   .touchMove > button { width: 33.333%; }
   .touchMove div { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -60,7 +60,7 @@
 /* Landscape phones and small windows: reserve play space rather than tall cards. */
 @media (max-height: 550px) {
   #hud { padding-top: 6px; }
-  .hud-top { grid-template-columns: minmax(0, 190px) minmax(0, 1fr) minmax(0, 190px); grid-template-areas: "stats objective city"; }
+  .hud-top { grid-template-columns: minmax(0, 190px) minmax(0, 1fr) minmax(0, 190px); grid-template-areas: "stats objective city" "details details details" "notices notices notices"; }
   #stats, #city { padding: 6px 8px; font-size: 10px; }
   #cash { font-size: 15px; } #dirty { font-size: 11px; }
   #goal, #streak, #demand { display: none; }
@@ -109,7 +109,7 @@
 #insideLabel { color: #ffe2a0; font-size: 12px; margin-bottom: 5px; }
 body:not(.touch-enabled) #touchControls { display: none; }
 body.touch-enabled { --touch-height: 194px; }
-body.touch-enabled #touchControls { display: block; top: auto; height: var(--touch-height); bottom: calc(var(--toolbar-height) + max(16px, env(safe-area-inset-bottom))); left: var(--hud-edge); right: var(--hud-edge); }
+body.touch-enabled #touchControls { display: block; top: auto; height: var(--touch-height); bottom: calc(var(--toolbar-height) + max(16px, env(safe-area-inset-bottom))); left: var(--hud-edge); right: var(--hud-right); }
 body.touch-enabled .touchMove { left: 0; bottom: 0; width: 40%; max-width: 180px; }
 body.touch-enabled .touchActions { right: 0; bottom: 0; width: 48%; max-width: 240px; grid-template-columns: repeat(2,minmax(0,1fr)); }
 body.touch-enabled #touchControls button { min-width: 0; padding: 8px 3px; font-size: 10px; min-height: 42px; overflow-wrap: anywhere; }
@@ -144,7 +144,7 @@ body:not(.touch-enabled) { --touch-height: 0px; }
 @keyframes cash-fly {0%{opacity:0;transform:translateY(30px) scale(.6);}20%{opacity:1;}100%{opacity:0;transform:translateY(-140px) rotate(-15deg) scale(1.3);}}
 #touchControls button {border:2px solid #caf9f2!important;background:#153f50ed!important;color:white!important;font-weight:800;box-shadow:0 3px 10px #0008;}
 @media(max-width:1000px){.quest-card{grid-column:1/-1;font-size:10px;padding:6px 10px;}}
-@media(max-height:740px){.quest-card{display:none;}#pauseMenu {justify-content:flex-start;}#pauseMenu h1{font-size:23px;}#pauseMenu button{font-size:11px;padding:7px 12px;}}
+@media(max-height:740px){#pauseMenu {justify-content:flex-start;}#pauseMenu h1{font-size:23px;}#pauseMenu button{font-size:11px;padding:7px 12px;}}
 @media(prefers-reduced-motion:reduce){#cashBurst.animate{animation:none;}}
 
 body[data-tutorial="0"] #touchControls [data-control="fire"], body[data-tutorial="0"] #touchControls [data-control="aim"], body[data-tutorial="0"] #touchControls [data-control="weapon"], body[data-tutorial="0"] #touchControls [data-control="reload"], body[data-tutorial="0"] #touchControls [data-control="Space"], body[data-tutorial="0"] #touchControls [data-control="ShiftLeft"] {display:none;}
@@ -203,7 +203,7 @@ body.touch-enabled #touchControls button { line-height:1.15; }
 .minimap-card { grid-area:mini;justify-self:end;max-width:210px; }
 .minimap-card #mini { display:block; }
 #miniLegend { display:block;max-width:190px;font-size:calc(9px * var(--game-text-scale));color:#def1ef;background:#102331dc;padding:4px;line-height:1.35; }
-#missionPanel { position:absolute;left:50%;top:27%;transform:translateX(-50%);display:flex;gap:10px;width:min(620px,76vw);padding:12px;background:#102635f2;border:2px solid #bca46e;border-radius:12px;box-sizing:border-box;pointer-events:auto;z-index:4;max-height:32vh;overflow:auto; }
+#missionPanel { display:flex; gap:10px; padding:12px; background:#102635f2; border:2px solid #bca46e; border-radius:12px; box-sizing:border-box; }
 #missionPanel h2 { margin:4px 0;font-size:calc(17px * var(--game-text-scale));color:#ffdf9a; }
 #missionPanel p { margin:4px 0;font-size:calc(12px * var(--game-text-scale));line-height:1.4; }
 #missionPanel small {color:#9ee5db;}
@@ -213,25 +213,62 @@ body.touch-enabled #touchControls button { line-height:1.15; }
 #missionPanel[data-kind="failure"] {border-color:#ffbf74;}
 #damageDirection {position:absolute;left:50%;top:50%;width:120px;height:120px;text-align:center;color:#ffca70;font-size:24px;text-shadow:0 2px 4px #000;pointer-events:none;}
 #interactionGlow {position:absolute;left:50%;bottom:calc(var(--toolbar-height) + var(--touch-height) + 18px);transform:translateX(-50%);max-width:72vw;padding:6px 12px;border:2px solid #fff1a7;background:#183d46ed;border-radius:8px;color:#fff4be;font-size:calc(12px * var(--game-text-scale));}
-#vehicleWarning {position:absolute;right:12px;top:42%;padding:8px;background:#562b1cef;border:2px solid #ffd095;color:#fff0c9;font-weight:800;font-size:calc(12px * var(--game-text-scale));}
-#neighborhoodIntro {position:absolute;left:50%;top:18%;transform:translateX(-50%);display:flex;flex-direction:column;text-align:center;background:#102735d9;border-bottom:3px solid #dfbf79;padding:8px 20px;max-width:72vw;}
+#vehicleWarning {padding:8px;background:#562b1cef;border:2px solid #ffd095;color:#fff0c9;font-weight:800;font-size:calc(12px * var(--game-text-scale));}
+#neighborhoodIntro { display:flex; flex-direction:column; text-align:center; background:#102735d9; border-bottom:3px solid #dfbf79; padding:8px 20px; }
 #neighborhoodName {font-size:calc(22px * var(--game-text-scale));color:#ffe7a7;}
 #neighborhoodTag {font-size:calc(12px * var(--game-text-scale));color:#deeeed;}
-#replayBanner {position:absolute;left:50%;top:0;transform:translateX(-50%);background:#694b22;color:white;padding:5px 14px;font-weight:bold;}
+#replayBanner { background:#694b22; color:white; padding:5px 14px; font-weight:bold; }
 #replayResult {z-index:40;padding:20px;box-sizing:border-box;}
 .binding-row {display:flex;justify-content:space-between;align-items:center;gap:12px;margin:6px 0;}
 body[data-map-palette="accessible"] #objectiveArrow {border-bottom-color:#fff17c;}
-@media(max-width:760px){#missionPanel{top:31%;width:94vw;max-height:27vh;padding:8px;}#missionPortrait{min-width:32px;height:38px;}#miniLegend{max-width:125px;font-size:9px;}#neighborhoodIntro{top:24%;}#neighborhoodName{font-size:18px;}}
-@media(max-height:550px){#missionPanel{top:25%;max-height:36vh;}#missionPanel #missionDialogue{max-height:60px;overflow:auto;}#miniLegend{display:none;}#neighborhoodIntro{top:18%;padding:4px 12px;}}
+@media(max-width:760px){#missionPanel{padding:8px;}#missionPortrait{min-width:32px;height:38px;}#neighborhoodName{font-size:18px;}}
+@media(max-height:550px){#neighborhoodIntro{padding:4px 12px;}}
 
 #missionPortrait { min-width:48px;height:auto;background:none; }
 #missionPortrait canvas { width:48px;height:56px;border-radius:8px; }
 #replayLoading {z-index:45;padding:20px;box-sizing:border-box;}
 .minimap-card #mini {max-width:100%;}
 
-#openingGuide {position:absolute;left:50%;top:18%;transform:translateX(-50%);max-width:min(550px,80vw);background:#152c39ed;border:1px solid #ffe0a1;padding:8px 12px;border-radius:8px;font-size:calc(12px * var(--game-text-scale));}
-#enemyReaction {position:absolute;left:50%;top:57%;transform:translateX(-50%);padding:7px 12px;background:#183e49ef;border:2px solid #d6edcc;color:#fff0bd;font-size:calc(12px * var(--game-text-scale));}
-@media(max-width:760px){#openingGuide{top:26%;font-size:11px;max-width:92vw;}}
+#openingGuide { margin:0; background:#152c39ed; border:1px solid #ffe0a1; padding:8px 12px; border-radius:8px; font-size:calc(12px * var(--game-text-scale)); }
+#enemyReaction {padding:7px 12px;background:#183e49ef;border:2px solid #d6edcc;color:#fff0bd;font-size:calc(12px * var(--game-text-scale));}
 
-#cityActivityStatus {position:absolute;left:50%;top:65%;transform:translateX(-50%);max-width:70vw;background:#1b3e4be8;color:#f8e5ad;border:1px solid #a2d7ce;padding:7px 12px;font-size:calc(12px * var(--game-text-scale));}
-#bossWarning {position:absolute;left:50%;top:48%;transform:translateX(-50%);max-width:76vw;background:#632b22ef;border:2px solid #ffd69e;color:#fff2cf;padding:8px 15px;font-weight:bold;}
+#cityActivityStatus {background:#1b3e4be8;color:#f8e5ad;border:1px solid #a2d7ce;padding:7px 12px;font-size:calc(12px * var(--game-text-scale));}
+#bossWarning {background:#632b22ef;border:2px solid #ffd69e;color:#fff2cf;padding:8px 15px;font-weight:bold;}
+
+/* Optional guidance never floats over the objective or the player's aim. */
+.hud-top { overflow-y:auto; pointer-events:auto; scrollbar-width:thin; }
+#hud > .hud-bottom { flex:0 0 auto; }
+#hudDetailsToggle { pointer-events:auto; min-height:32px; margin-top:6px; padding:5px 8px; font-size:10px; background:#142c39; color:#ffe0a1; border:1px solid #9ab9b5; }
+#hudDetails { grid-area:details; display:grid; gap:6px; max-height:160px; overflow:auto; pointer-events:auto; }
+#hudDetails > * { grid-area:auto; min-width:0; max-width:none; box-sizing:border-box; }
+#hudDetails #arrivalHelp { max-height:none; overflow:visible; }
+#hudDetails .quest-card { display:flex; }
+.hud-notices { grid-area:notices; display:grid; gap:6px; max-height:160px; overflow:auto; pointer-events:auto; }
+.hud-notices:empty, .hud-notices:not(:has(> :not([hidden]))) { display:none; }
+.hud-notices > * { min-width:0; margin:0; overflow-wrap:anywhere; }
+.hud-notices #missionPanel > div { min-width:0; }
+.minimap-card { min-width:0; }
+@media (max-width:760px) {
+  /* A single swipeable utility rail keeps wrapped buttons out of the play area. */
+  #toolbar { left:var(--hud-edge); right:var(--hud-right); transform:none; width:auto; max-width:none; justify-content:flex-start; flex-wrap:nowrap; overflow-x:auto; touch-action:pan-x; scrollbar-width:none; }
+  #toolbar button { flex:0 0 auto; min-height:44px; font-size:10px; padding:7px 10px; white-space:nowrap; }
+  #manage { order:-3; } #openCityMap { order:-2; } #pauseButton { order:-1; }
+  /* Reserve disjoint thumb zones even at the largest control scale. */
+  body.touch-enabled .touchActions { width:calc(56% / var(--control-scale, 1)); }
+  body.touch-enabled #moveJoystick { margin:0; width:min(112px, calc(32vw / var(--control-scale, 1))); height:auto; aspect-ratio:1; box-sizing:border-box; }
+  body.touch-enabled.left-handed #moveJoystick { margin-left:auto; }
+  #hudDetailsToggle { min-height:44px; }
+  #stats { padding:6px 8px; }
+  #goal, #streak, #reserveLabel { display:none; }
+  #dirty { font-size:11px; }
+  #heat, #weapon { font-size:calc(10px * var(--game-text-scale)); letter-spacing:0; line-height:1.25; }
+  #obj { font-size:calc(11px * var(--game-text-scale)); overflow:auto; }
+  #city { padding:6px 8px; }
+  #weather, #cityTime, #demand { font-size:calc(9px * var(--game-text-scale)); line-height:1.35; }
+  #hudDetails { max-height:120px; }
+  .hud-notices { max-height:110px; }
+  #missionPanel h2 { font-size:13px; }
+  #missionPanel p, #neighborhoodTag { font-size:11px; }
+  #mini { width:64px; height:64px; }
+  .hud-bottom { grid-template-columns:minmax(0,1fr) 64px; }
+}

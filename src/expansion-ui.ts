@@ -1,3 +1,4 @@
+import {propertyRoom} from './world-activities.ts';
 import {businessMultiplier} from './living-city.ts';
 import {atPoint,approach} from './navigation.ts';
 import { mountShowroom } from './showroom.ts';
@@ -6,7 +7,7 @@ import type { Campaign } from './campaign.ts';
 import { BLOCKS } from './campaign.ts';
 import { VEHICLES, FURNITURE, PROPERTIES, HEISTS, HEIST_CHOICES, MISSIONS, RIVALS, DISTRICT_NAMES, conditions, owns, furnished, loyal, plan, recon, assemble, execute, startMission, frontLaunder, buyProperty, buyVehicle, upgradeVehicle, startRun, upgradeDistrict, inventoryCap, playPoker } from './expansion.ts';
 export const EXPANSION_TABS = ['Missions','Garage','Heists','Properties','Interior','Rivals','Armory','Cash'];
-type Hooks = { location():{x:number;z:number;district:number}; waypoint(x:number,z:number,name:string):void; close():void; notice(text:string):void;
+type Hooks = { room():string|null; location():{x:number;z:number;district:number}; waypoint(x:number,z:number,name:string):void; close():void; notice(text:string):void;
   missionStarted():void; deploy(index:number):void; armory(weapon:number):void; gearOwned(weapon:number):boolean; reload():void; };
 export function renderExpansion(tab:string,c:Campaign,container:HTMLElement,h:Hooks):boolean {
   if(!EXPANSION_TABS.includes(tab))return false;
@@ -48,7 +49,7 @@ export function renderExpansion(tab:string,c:Campaign,container:HTMLElement,h:Ho
     container.append(text('p','Cash comes from missions, recovered stashes and owned revenue assets. There is no free standing payout. The displayed bundle is illustrative; the ledger above is your spendable balance.'));
   }else if(tab==='Heists'){
     container.append(text('p','Every major heist has three phases: visit the landmark for Recon → assign paid, loyal specialists → make three tactical Execution choices. Clean planning fees are charged once, and every attempt has a 10-minute cooldown. Quiet choices improve—not guarantee—success. The Mint requires front-business level 3.'));
-    for(const target of HEISTS){const p=plan(c,target.id);const loc=h.location();const near=atPoint(loc.x,loc.z,target,10);
+    for(const target of HEISTS.filter(t=>(t.id==='shipment'?'port':t.id)===h.room())){const p=plan(c,target.id);const loc=h.location();const near=atPoint(loc.x,loc.z,target,10);
       const item=card(target.name,`$${target.payout.toLocaleString()} dirty · $${target.fee} clean fee · specialists ${target.roles.join(', ')} · legendary ${target.gear}. Phase ${['Recon','Crew Assembly','Execution'][p.phase]}${p.cooldown?` · cooldown ${Math.ceil(p.cooldown)}s`:''}`);
       if(p.phase===0)button(item,near?'Gather intel on-site':'Track recon · E on arrival',()=>{if(near){recon(c,target.id,loc.x,loc.z);}else mark(target.x,target.z,`${target.name} recon`);},p.cooldown>0);
       if(p.phase===1){item.append(text('p',target.roles.map(r=>`${r}: ${loyal(c,r).length?'ready':'hire / pay / restore loyalty'}`).join(' · ')));button(item,'Assign crew & fund plan',()=>{assemble(c,target.id);},target.roles.some(r=>!loyal(c,r).length)||c.clean<target.fee||(target.id==='mint'&&c.upgrades<3));}
@@ -57,7 +58,7 @@ export function renderExpansion(tab:string,c:Campaign,container:HTMLElement,h:Ho
     if(e.gear.length)card('Legendary locker',e.gear.join(' · '));
   }else if(tab==='Properties'){
     container.append(text('p',`Owned fronts/rackets have daily upkeep; unpaid businesses are disabled until their bill is paid. Laundering capacity resets each simulation minute. Rackets require at least one paid, loyal crew member. Inventory ${c.inventory.reduce((a,b)=>a+b,0)}/${inventoryCap(c)}. The Mint is on the Heists board.`));
-    for(const p of PROPERTIES){const owned=e.properties.includes(p.id);const enabled=owns(c,p.id);const item=card(p.name,`${p.kind.toUpperCase()} · buy $${p.cost.toLocaleString()} · daily upkeep $${p.upkeep} · ${p.rate?`$${p.rate}/min ${p.id==='cafe'?'clean':'dirty'} · `:''}${p.heat>=0?'+':''}${p.heat} heat/min. ${p.effect}${owned?enabled?' · OPERATING':' · UPKEEP MISSED':''}`);
+    for(const p of PROPERTIES.filter(p=>propertyRoom(p.id)===h.room())){const owned=e.properties.includes(p.id);const enabled=owns(c,p.id);const item=card(p.name,`${p.kind.toUpperCase()} · buy $${p.cost.toLocaleString()} · daily upkeep $${p.upkeep} · ${p.rate?`$${p.rate}/min ${p.id==='cafe'?'clean':'dirty'} · `:''}${p.heat>=0?'+':''}${p.heat} heat/min. ${p.effect}${owned?enabled?' · OPERATING':' · UPKEEP MISSED':''}`);
       if(!owned)button(item,'Buy property',()=>{buyProperty(c,p.id);},c.clean<p.cost);
       else if(!enabled)button(item,`Pay daily bill · $${p.upkeep}`,()=>{c.clean-=p.upkeep;e.disabled=e.disabled.filter(id=>id!==p.id);},c.clean<p.upkeep);
       button(item,'Mark location',()=>mark(p.x,p.z,p.name));

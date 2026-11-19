@@ -8,13 +8,15 @@ export const RADIO_NEWS=[
 const CONVERSATIONS=[['“Keep the music on Frenchmen Street.”','“Did you hear who owns the club now?”'],['“The neighborhood remembers who helps.”','“Watch the corner. The Crown is back.”'],['“Those cars look expensive to repair.”','“Garden District shops close at ten.”'],['“Manifest checked? Then load the truck.”','“Crane’s buyers are paying for silence.”'],['“Another shipment before sunrise.”','“A clean river doesn’t mean clean money.”']];
 export function atmosphereLine(c:Campaign,district:number){const lines=CONVERSATIONS[Math.max(0,Math.min(4,district))]!;return c.kingpin.radio==='news'?RADIO_NEWS[Math.floor(c.clock/24)%RADIO_NEWS.length]!:lines[Math.floor(c.clock/24)%lines.length]!;}
 export function tickAtmosphere(c:Campaign,dt:number,district:number){
- const s=c.kingpin;s.ambienceClock+=dt;s.eventClock+=dt;const messages:string[]=[];
+ const s=c.kingpin,previousEvent=s.eventClock;s.ambienceClock+=dt;s.eventClock=Math.min(150,s.eventClock+dt);const messages:string[]=[];
  if(s.ambienceClock>=24){s.ambienceClock%=24;messages.push(atmosphereLine(c,district));}
- if(s.eventClock>=150&&!c.defense&&c.legacy.tutorial>=3&&!ventureBusy(c)){
-  s.eventClock=0;const id=Math.floor(c.clock/150)%2?'witness':'relief';
-  s.active={kind:'event',id,step:0,remaining:120,choice:'protect',method:'assault',spawned:false,resolved:false,progress:0,cargo:100};
-  messages.push(id==='relief'?'STREET EVENT: clinic relief collection. Visit or abandon in Kingpin Stories.':'STREET EVENT: a witness needs help near the newsroom. Visit or abandon in Kingpin Stories.');
+ if(previousEvent<150&&s.eventClock>=150&&!c.defense&&c.legacy.tutorial>=3&&!ventureBusy(c)){
+  messages.push('NEIGHBORHOOD CONTACTS: clinic relief and a threatened witness near the newsroom need help. Visit them to volunteer; no activity has been accepted.');
  }return messages;
+}
+export function startStreetEvent(c:Campaign,id:'relief'|'witness'){
+ const s=c.kingpin;if(!['relief','witness'].includes(id)||s.eventClock<150||c.defense||c.legacy.tutorial<3||ventureBusy(c))return false;
+ s.eventClock=0;s.active={kind:'event',id,step:0,remaining:120,choice:'protect',method:'assault',spawned:false,resolved:false,progress:0,cargo:100};return true;
 }
 export function radioPattern(station:'jazz'|'bounce'|'news'|'off',beat:number){
  if(station==='off'||station==='news')return [];

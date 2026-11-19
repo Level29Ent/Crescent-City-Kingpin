@@ -44,6 +44,6 @@ export function workInteract(c:Campaign,x:number,z:number){
  c.lifestyle.work=null;c.lifestyle.workCooldown=45;c.lifestyle.workCompleted++;
  return `${w.name} complete: +$${w.pay} ${w.id==='fence'?'dirty':'clean'}${bonus?` + $${bonus} early bonus`:''}${w.id==='salvage'?' + 2 parts':''}`;
 }
-export function tickWork(c:Campaign,dt:number){c.lifestyle.workCooldown=Math.max(0,c.lifestyle.workCooldown-dt);if(c.lifestyle.work){c.lifestyle.work.t-=dt;if(c.lifestyle.work.t<=0){c.lifestyle.work=null;c.lifestyle.workCooldown=30;return 'Work order expired. No payout; try again at the Jobs board.';}}return null;}
+export function tickWork(c:Campaign,dt:number){c.lifestyle.workCooldown=Math.max(0,c.lifestyle.workCooldown-dt);if(c.lifestyle.work){c.lifestyle.work.t-=dt;if(c.lifestyle.work.t<=0){c.lifestyle.work=null;c.lifestyle.workCooldown=30;return 'Work order expired. No payout; return to its pickup location to ask for another job.';}}return null;}
 export function buyDecor(c:Campaign,key:'rug'|'art'){if(c.lifestyle[key]||c.clean<100)return false;c.clean-=100;c.lifestyle[key]=true;return true;}
 export function styleCar(c:Campaign,index:number,key:'spoiler'|'stripe'){if(!c.expansion.cars[index]||c.clean<200)return false;const style=c.lifestyle.carStyle[index]??={spoiler:false,stripe:false,glowColor:0,rimColor:0};if(style[key])return false;c.clean-=200;style[key]=true;return true;}
