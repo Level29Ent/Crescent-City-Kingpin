@@ -9,7 +9,7 @@ export function addEntranceArt(scene:THREE.Scene){
  const brass=new THREE.MeshStandardMaterial({color:0xe7c879,metalness:.5,roughness:.4});
  const glow=new THREE.MeshBasicMaterial({color:0x82e6d1});
  const closedGlow=new THREE.MeshBasicMaterial({color:0x66503a});
- const updates:((clock:number)=>void)[]=[];
+ const updates:((clock:number,closed:(id:string)=>boolean)=>void)[]=[];
  const box=new THREE.BoxGeometry(1,1,1);
  const ring=new THREE.RingGeometry(.5,.7,24);
  for(const entry of INTERIORS){
@@ -23,14 +23,14 @@ export function addEntranceArt(scene:THREE.Scene){
   ctx.fillStyle='#f8e9b4';ctx.textAlign='center';ctx.font='bold 42px sans-serif';ctx.fillText(entry.name,512,66,985);
   ctx.fillStyle='#82e6d1';ctx.font='bold 30px sans-serif';ctx.fillText('ENTER · E / INTERACT',512,123);
   const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;
-  let lastOpen:boolean|undefined;
-  updates.push(clock=>{const open=businessHours(entry.id,clock);if(open===lastOpen)return;lastOpen=open;
+  let lastOpen:string|undefined;
+  updates.push((clock,closed)=>{const repairing=closed(entry.id),open=businessHours(entry.id,clock)&&!repairing,key=`${open}:${repairing}`;if(key===lastOpen)return;lastOpen=key;
     window.material=open?glow:closedGlow;
     ctx.fillStyle='#10292c';ctx.fillRect(8,82,1008,70);ctx.fillStyle=open?'#82e6d1':'#e5ac73';ctx.font='bold 25px sans-serif';
-    ctx.fillText(open?'DESK OPEN · ENTER E / INTERACT':'DESK CLOSED · PUBLIC ROOM OPEN',512,123);texture.needsUpdate=true;
+    ctx.fillText(repairing?'CLOSED · REPAIRS AFTER ROBBERY':open?'DESK OPEN · ENTER E / INTERACT':'DESK CLOSED · PUBLIC ROOM OPEN',512,123);texture.needsUpdate=true;
   });
   const sign=new THREE.Mesh(new THREE.PlaneGeometry(5.5,.86),new THREE.MeshBasicMaterial({map:texture,side:THREE.DoubleSide}));sign.position.set(0,3.85,.26);root.add(sign);
   const marker=new THREE.Mesh(ring,glow);marker.rotation.x=-Math.PI/2;marker.position.set(0,.085,2);root.add(marker);
  }
- return {update(clock:number){updates.forEach(update=>update(clock));}};
+ return {update(clock:number,closed:(id:string)=>boolean=()=>false){updates.forEach(update=>update(clock,closed));}};
 }

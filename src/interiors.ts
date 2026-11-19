@@ -85,7 +85,7 @@ export function indoorMove(x:number,z:number,dx:number,dz:number,obstacles:Obsta
 export function nearestEntrance(x:number,z:number,range=3):InteriorDefinition|undefined {
   return [...INTERIORS].sort((a,b)=>Math.hypot(x-approach(a).x,z-approach(a).z)-Math.hypot(x-approach(b).x,z-approach(b).z)).find(b=>atPoint(x,z,b,range));
 }
-export function createInterior(def:InteriorDefinition,appearance:Appearance,customization?:Lifestyle,furniture:readonly {id:string;slot:number}[]=[],apartmentDecor=0) {
+export function createInterior(def:InteriorDefinition,appearance:Appearance,customization?:Lifestyle,furniture:readonly {id:string;slot:number}[]=[],apartmentDecor=0,stockroom=false) {
   const scene=new THREE.Scene();scene.background=new THREE.Color(0x101a24);
   const geometries:THREE.BufferGeometry[]=[],materials:THREE.Material[]=[];
   const obstacles:Obstacle[]=[];
@@ -191,7 +191,7 @@ export function createInterior(def:InteriorDefinition,appearance:Appearance,cust
   }
   dressAnnex(def.id,scene,box,apartmentDecor);
   if(def.id.startsWith('roof-')){for(const wall of walls){wall.scale.y=.25;wall.position.y=.5;}sign('ROOFTOP ACCESS · PUBLIC VISIT',0,1.5,-7.6);}
-  if(ROBBABLE.includes(def.id)){box(1.2,1.55,-5.3,.5,.35,.45,0x2b3d43);box(1.2,1.8,-5.12,.35,.18,.04,0x89d7b7);box(0,.035,-3.5,1.4,.05,.7,0xd7b568);sign('REGISTER · CASHIER',0,2.7,-7.6,'#ffd686').scale.setScalar(.6);}
+  if(ROBBABLE.includes(def.id)){box(0,.035,2,1.2,.05,.55,0x679fbd);sign(stockroom?'RETURN TO SHOP · AISLE':'STOCKROOM · ACCESS AT COUNTER',0,.55,1.65,'#a8d9ef').scale.setScalar(.2);box(1.2,1.55,-5.3,.5,.35,.45,0x2b3d43);box(1.2,1.8,-5.12,.35,.18,.04,0x89d7b7);box(0,.035,-3.5,1.4,.05,.7,0xd7b568);sign('REGISTER · CASHIER',0,2.7,-7.6,'#ffd686').scale.setScalar(.6);}
   if(def.id==='bank'||def.id==='riverboat'){
     sign(def.id==='bank'?'BRASS VAULT · SECURITY ACTIVE':'RIVER QUEEN · CASINO DECK',0,3,-7.6,'#ffd686');
     box(5,1.2,-5.8,1.6,2.4,1.1,0x42545b,true);box(5,1.2,-5.2,1.2,1.8,.08,0xb6a16e);
@@ -207,7 +207,8 @@ export function createInterior(def:InteriorDefinition,appearance:Appearance,cust
     for(const x of [-5.8,5.8]){box(x,1,5.5,.15,1.6,3,0xd8bd78);box(x,1.8,5.5,.2,.12,3.2,0x8d5142);}
     sign('MISSISSIPPI RIVER · MOORED AT EASTBANK',0,2.65,7.7,'#8bdde9').scale.setScalar(.7);
   }
-  const life=createInteriorLife(scene,obstacles,INTERIORS.findIndex(b=>b.id===def.id)+2,def.id==='bank'||def.id==='riverboat',def.id.startsWith('home-')?0:4);
+  if(stockroom){sign('PRIVATE STOCKROOM · QUIET SAFE',0,3,-7.5,'#f2cc83');box(4,.8,-5.8,1.6,1.6,1.3,0x41565d,true);box(4,.8,-5.1,1.2,1.2,.05,0xbda46c);box(0,.035,-3.5,1.4,.05,.7,0x67bca2);for(const x of [-6,6])for(const z of [-3,0,3])box(x,.7,z,.8,1.4,.8,0x9b7d4e);}
+  const life=createInteriorLife(scene,obstacles,INTERIORS.findIndex(b=>b.id===def.id)+2,def.id==='bank'||def.id==='riverboat',stockroom||def.id.startsWith('home-')?0:4);
   const avatar:Person=createPerson('player',5,appearance,customization);scene.add(avatar.root);
   return {scene,avatar,obstacles,life,dispose(){disposeDressing();life.dispose();floorTexture.dispose();wallTexture.dispose();this.avatar.dispose();geometries.forEach(g=>g.dispose());materials.forEach(m=>{if(m instanceof THREE.MeshBasicMaterial)m.map?.dispose();m.dispose();});}};
 }

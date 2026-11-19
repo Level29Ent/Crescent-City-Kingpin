@@ -1,3 +1,4 @@
+import {businessClosed} from './city-memory.ts';
 import * as THREE from 'three';
 import type {Campaign} from './campaign.ts';
 import {BLOCKS} from './campaign.ts';
@@ -25,7 +26,7 @@ export function addEmpireLife(scene:THREE.Scene){
    const property=PROPERTIES.find(p=>p.id===row.id),open=!property||!c.expansion.properties.includes(property.id)||owns(c,property.id);
    const offset=Math.sin(time*.25+i)*1.1,x=row.door.x+row.door.nz*offset,z=row.door.z-row.door.nx*offset;
    if(cityClear(x,z,.5))row.person.root.position.set(x,0,z);
-   row.person.root.rotation.y=Math.atan2(-row.door.nx,-row.door.nz);row.person.root.visible=open&&Math.hypot(px-x,pz-z)<range;const pace=Math.abs(Math.cos(time*.25+i))*.275;row.person.pose(pace>.1?'walk':'idle',pace,time+i,0,dt);
+   row.person.root.rotation.y=Math.atan2(-row.door.nx,-row.door.nz);row.person.root.visible=open&&!businessClosed(c,row.id)&&Math.hypot(px-x,pz-z)<range;const pace=Math.abs(Math.cos(time*.25+i))*.275;row.person.pose(pace>.1?'walk':'idle',pace,time+i,0,dt);
   });
  },dispose(){corners.forEach(r=>r.sentry.dispose());customers.forEach(r=>r.person.dispose());root.removeFromParent();geo.dispose();resources.forEach(m=>m.dispose());}};
 }

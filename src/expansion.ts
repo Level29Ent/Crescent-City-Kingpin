@@ -1,3 +1,4 @@
+import {businessClosed} from './city-memory.ts';
 import {rivalryMultiplier} from './pursuits.ts';
 import {businessMultiplier} from './living-city.ts';
 import {atPoint} from './navigation.ts';
@@ -85,7 +86,7 @@ export function loyal(c: Campaign, id?: string) { return c.crew.filter(m => m.lo
 export function inventoryCap(c: Campaign) { return 20 + (owns(c,'dock') ? 40 : 0); }
 export function cashCap(c: Campaign) { return furnished(c, 'vault') ? 500000 : 100000; }
 export function propertyRevenue(c: Campaign) {
-  return PROPERTIES.filter(p => owns(c,p.id) && p.id !== 'cafe' && (p.kind !== 'racket' || loyal(c).length > 0)).reduce((n,p) => n + p.rate*businessMultiplier(c,p.id)*rivalryMultiplier(c,p.id), 0) * (c.achievements.includes('tycoon') ? 1.05 : 1);
+  return PROPERTIES.filter(p => owns(c,p.id) && !businessClosed(c,p.id) && p.id !== 'cafe' && (p.kind !== 'racket' || loyal(c).length > 0)).reduce((n,p) => n + p.rate*businessMultiplier(c,p.id)*rivalryMultiplier(c,p.id), 0) * (c.achievements.includes('tycoon') ? 1.05 : 1);
 }
 export function buyProperty(c: Campaign, id: string) {
   const p = PROPERTIES.find(p => p.id === id);
@@ -175,6 +176,7 @@ export function missionInteract(c: Campaign, x: number, z: number): string | nul
   c.expansion.mission = null; return `${m.name} COMPLETE! +$${pay} dirty${m.id === 'parade' ? ' + Krewe Captain Medallion (+5% mission rewards)' : ''}`;
 }
 export function frontLaunder(c: Campaign, id: string): number {
+  if(businessClosed(c,id))return 0;
   const p = PROPERTIES.find(p => p.id === id); if (!p || !p.capacity || !owns(c,id)) return 0;
   const used = c.expansion.frontsUsed[id] ?? 0; const amount = Math.min(c.dirty, p.capacity*businessMultiplier(c,p.id)*(loyal(c,'accountant').length?1.25:1)-used);
   if (amount < 1) return 0;
