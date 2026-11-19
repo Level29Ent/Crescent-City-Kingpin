@@ -1,3 +1,4 @@
+import {vehicleFeedback} from './vehicle-feedback.ts';
 import {addVehicleCabin} from './vehicle-cabin.ts';
 import * as THREE from "three";
 import type {Lifestyle} from './lifestyle.ts';
@@ -548,7 +549,7 @@ export function createCar(style: number, color: number): Car {
   const emergencyLights:THREE.PointLight[]=[];
   if(police){for(const [x,color]of [[-.4,0xff2233],[.4,0x3377ff]]){const light=new THREE.PointLight(color,0,9,2);light.position.set(x!,h0+ch+cabH+.3,0);root.add(light);emergencyLights.push(light);}}
   const cabin=addVehicleCabin(root,style,w,cabZ,h0,ch,cabH);
-  let last = -1, rot = 0;
+  let last = -1, rot = 0,previousSpeed=0;
   const car: Car = {
     cockpit:cabin.cockpit,openDoor:side=>cabin.openDoor(side),detail:visible=>cabin.detail(visible),
     damage(condition){const severity=1-Math.max(0,Math.min(100,condition))/100;damageMaterial.opacity=severity*.9;dent.rotation.x=severity*.22;dent.position.y=h0+ch+.025-severity*.08;},
@@ -564,8 +565,8 @@ export function createCar(style: number, color: number): Car {
         wh.spin.rotation.x = rot;
         wh.pivot.rotation.y = wh.front ? steer * 0.5 : 0;
       }
-      body.rotation.z = -steer * Math.min(1, Math.abs(speed) / 20) * 0.03 * Math.sign(speed || 1);
-      body.rotation.x = braking ? 0.015 : 0;
+      const feedback=vehicleFeedback(speed,previousSpeed,steer,braking,dt,time);previousSpeed=speed;
+      body.rotation.z+=(feedback.roll-body.rotation.z)*(1-Math.exp(-10*dt));body.rotation.x+=(feedback.pitch-body.rotation.x)*(1-Math.exp(-12*dt));body.position.y=feedback.bounce;
       tail.emissiveIntensity = braking ? 2.2 : 0.5;
       tail.color.setHex(braking ? 0xff3030 : 0x8a0a0a);
       if (barR && barB) {

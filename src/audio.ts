@@ -10,6 +10,8 @@ export class AudioController {
   private noise!: AudioBuffer;
   private engineOsc!: OscillatorNode;
   private engineGain!: GainNode;
+  private tireGain!:GainNode;
+  private impactAt=-10;
   private ambience!: BiquadFilterNode;
   private sirenWanted = false;
   private beat = 0;
@@ -41,6 +43,7 @@ export class AudioController {
     this.engineGain = c.createGain(); this.engineGain.gain.value = 0;
     const filter = c.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.value = 450;
     this.engineOsc.connect(filter).connect(this.engineGain).connect(this.buses.sfx); this.engineOsc.start();
+    const tire=c.createBufferSource();tire.buffer=this.noise;tire.loop=true;const tireFilter=c.createBiquadFilter();tireFilter.type='bandpass';tireFilter.frequency.value=1800;tireFilter.Q.value=1.8;this.tireGain=c.createGain();this.tireGain.gain.value=0;tire.connect(tireFilter).connect(this.tireGain).connect(this.buses.sfx);tire.start();
     // Sparse jazz-like bass and chord voicings; interval is disposed on page teardown.
     this.timer = setInterval(() => {
       if (!this.ctx || this.ctx.state !== 'running'||!this.worldPlaying) return;
@@ -66,7 +69,10 @@ export class AudioController {
     for (const key of ['music', 'ambient', 'sfx'] as const) this.buses[key].gain.setTargetAtTime(Math.max(0, Math.min(1, settings[key])), this.ctx.currentTime, .05);
   }
   environment(bayou: boolean, rain = false) { if (this.ctx && this.ambience) this.ambience.frequency.setTargetAtTime(rain ? 1800 : bayou ? 1000 : 450, this.ctx.currentTime, 1); }
+  tires(skid:boolean,speed=0){if(this.ctx&&this.tireGain)this.tireGain.gain.setTargetAtTime(skid?Math.min(.12,Math.abs(speed)*.003):0,this.ctx.currentTime,.07);}
+  collision(speed:number){if(!this.ctx||this.ctx.currentTime-this.impactAt<.4)return;this.impactAt=this.ctx.currentTime;this.sfx('bump',Math.min(1,Math.abs(speed)/20));this.tone(this.buses.sfx,70,28,.23,.2,'triangle');}
   engine(speed: number | null) {
+    if(speed===null)this.tires(false);
     if (!this.ctx) return;
     this.engineGain.gain.setTargetAtTime(speed === null ? 0 : .04 + Math.min(1, speed) * .1, this.ctx.currentTime, .12);
     this.engineOsc.frequency.setTargetAtTime(38 + (speed ?? 0) * 110, this.ctx.currentTime, .1);

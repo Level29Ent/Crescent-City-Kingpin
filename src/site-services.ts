@@ -1,3 +1,4 @@
+import {businessClosed} from './city-memory.ts';
 import {districtAt} from './world.ts';
 import type {Campaign} from './campaign.ts';
 import {SPECIALISTS,activeCrew,BLOCKS} from './campaign.ts';
@@ -28,6 +29,7 @@ export function siteServices(c:Campaign,root:HTMLElement,h:SiteHooks){
  const el=(tag:string,text:string)=>{const e=document.createElement(tag);e.textContent=text;return e;};
  const card=(title:string,body:string)=>{const box=el('article','');box.className='empire-card';box.append(el('h3',title),el('p',body));root.append(box);return box;};
  const button=(box:HTMLElement,label:string,fn:()=>void,disabled=false)=>{const b=el('button',label) as HTMLButtonElement;b.disabled=disabled;b.onclick=()=>{if(h.room()!==id)return;fn();h.changed();if(h.refresh)h.refresh();else{root.replaceChildren();siteServices(c,root,h);}};box.append(b);};
+ if(businessClosed(c,room.id)){card(room.name,'Closed for repairs after a robbery. No services or purchases until reopening.');return;}
  const open=businessHours(room.id,c.clock),desk=card(room.name,`${open?'Service desk open':'Timed food/medical/repair services closed'} · Interact with contacts here for local work. Use the exit to return to the street.`);
  if(room.theme==='cafe'&&room.id!=='pharmacy')button(desk,'Meal · $25 base / restore stamina',()=>h.service('meal'),!open||c.living.serviceCooldown>0);
  if(room.id==='clinic')button(desk,'Treatment · $80 base / restore health',()=>h.service('treatment'),!open||c.living.serviceCooldown>0);

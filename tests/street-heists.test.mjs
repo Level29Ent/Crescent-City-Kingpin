@@ -34,7 +34,7 @@ test('both heists require spatial held alarm/vault/loot actions and a real getaw
 });
 test('register robbery is local, changes heat/trust, needs held looting and retains cooldown across reload',()=>{
  const c=ready();assert.equal(startRaid(c,'pawn'),false);assert.equal(startRaid(c,'pawn','pawn',0,5.8),false);assert.equal(startRaid(c,'hq','hq',0,-3.5),false);assert.ok(startRaid(c,'pawn','pawn',0,-3.5));assert.ok(c.heat>0);assert.ok(c.pursuits.active.raid.alarmed);bag(c,'pawn');const saved=restoreCampaign(JSON.parse(JSON.stringify(c)));assert.equal(saved.pursuits.active,null);assert.equal(saved.dirty,0);assert.equal(saved.pursuits.raided.pawn,240);assert.ok(saved.pursuits.cooldown>=45);saved.pursuits.cooldown=0;assert.equal(startRaid(saved,'pawn','pawn',0,-3.5),false);
- tickPursuits(saved,241,outdoor);assert.equal(startRaid(saved,'pawn','pawn',0,-3.5),true);
+ tickPursuits(saved,241,outdoor);assert.equal(startRaid(saved,'pawn','pawn',0,-3.5),false,'repair closure outlasts robbery cooldown');tickPursuits(saved,60,outdoor);assert.equal(startRaid(saved,'pawn','pawn',0,-3.5),true);
 });
 test('camera trip is one-time heat, expiry/death lose bag, and old or malformed saves safely default',()=>{
  const c=ready();startRaid(c,'bank-job');tickRaid(c,25,context('bank',4,4,{interact:false}));assert.ok(c.pursuits.active.raid.alarmed);const heat=c.heat;raiseRaidAlarm(c);assert.equal(c.heat,heat);assert.match(raidInstruction(c),/alarm panel/);bag(c,'bank');c.pursuits.active.remaining=0;const p=approach({x:30,z:4});c.pursuits.active.raid.getaway=true;c.pursuits.active.raid.outside=true;c.heat=0;assert.match(settleRaid(c,p.x,p.z,false),/expired/);assert.equal(c.dirty,0);

@@ -1,3 +1,5 @@
+import {CITY_ADVENTURES,startAdventure} from './city-adventures.ts';
+import {businessClosed} from './city-memory.ts';
 import {ACTION_CAMPAIGN,startActionChapter} from './action-campaign.ts';
 import {STREET_HEISTS,startRaid} from './street-heists.ts';
 import {startStreetEvent} from './city-atmosphere.ts';
@@ -34,6 +36,7 @@ function placed(p:Point,room:string|null=roomAt(p)){
 export function worldActivities(c:Campaign):WorldActivity[]{
  const rows:WorldActivity[]=[];
  const add=(id:string,name:string,speaker:string,description:string,p:Point,start:WorldActivity['start'],opts:ContactChoice[]=accept,room:string|null=roomAt(p),methods?:readonly Approach[])=>rows.push({id,name,speaker,description,...placed(p,room),start,choices:opts,methods});
+ for(const m of CITY_ADVENTURES)if(!c.pursuits.adventureDone.includes(m.id))add(`adventure:${m.id}`,m.name,m.speaker,`${m.desc} $${m.pay} clean once · ${m.duration}s.`,{x:30,z:4},(c,choice)=>startAdventure(c,m.id,choice==='diversion'?'diversion':'quiet'),m.id==='crew-exit'?choices(['quiet','Quiet plan · less heat'],['diversion','Diversion plan · more heat']):accept);
  for(const [i,ch]of ACTION_CAMPAIGN.entries())if(!c.pursuits.actionDone.includes(ch.id)&&(i===0||c.pursuits.actionDone.includes(ACTION_CAMPAIGN[i-1]!.id)))add(`campaign:${ch.id}`,ch.name,ch.speaker,`${ch.dialogue} ${ch.stages.length} stages · $${ch.pay} clean on completion. Each stage has a 10-minute limit and a $50 retry checkpoint.`,{x:30,z:4},c=>startActionChapter(c,ch.id));
  for(const job of STREET_HEISTS)if(!c.pursuits.raidWins.includes(job.id))add(`raid:${job.id}`,job.name,'Mama Nola',`$${job.fee} setup · $${job.pay} dirty loot. Enter ${INTERIORS.find(r=>r.id===job.interior)!.name}, disable security or force the vault, crack it and carry the bag out. Use a getaway car, lose police and return the loot here. ${job.disguise?'Equip a Riverboat evening coat at the tailor or purchase a disguise first.':''}`,{x:30,z:4},c=>startRaid(c,job.id));
  for(const w of WORK)add(`work:${w.id}`,w.name,'Local dispatcher',`${w.description} $${w.pay} · ${w.duration}s. Collect here, deliver to the marked address.`,w,c=>startWork(c,w.id));
@@ -63,7 +66,7 @@ export function worldActivities(c:Campaign):WorldActivity[]{
 export function canStartContact(c:Campaign,contact:WorldActivity,choice?:string,method:Approach='assault'):boolean{
  if(choice===undefined)return contact.choices.some(v=>canStartContact(c,contact,v.id,method));
  // Probe existing domain gates without taking a fee, changing progress or consuming a cooldown.
- return contact.start(structuredClone(c),choice,method);
+ return !(contact.room&&businessClosed(c,contact.room))&&contact.start(structuredClone(c),choice,method);
 }
 export function atContact(contact:WorldActivity,position:ContactPosition){
  if(position.driving||position.blocked)return false;
@@ -72,6 +75,7 @@ export function atContact(contact:WorldActivity,position:ContactPosition){
 }
 export function startContact(c:Campaign,id:string,position:ContactPosition,choice:string,method:Approach='assault'){
  const contact=worldActivities(c).find(m=>m.id===id);
+ if(contact?.room&&businessClosed(c,contact.room))return false;
  if(!contact||!atContact(contact,position)||!contact.choices.some(v=>v.id===choice)||contact.methods&&!contact.methods.includes(method)||!contact.methods&&method!=='assault')return false;
  return contact.start(c,choice,method);
 }
